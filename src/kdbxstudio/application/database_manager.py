@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 from kdbxstudio.application.import_csv import ImportResult, import_entries_csv
@@ -255,7 +256,7 @@ class DatabaseManager:
         custom_properties: dict[str, str] | None = None,
         tags: list[str] | tuple[str, ...] | None = None,
         expires: bool | None = None,
-        expiry_time: object | None = None,
+        expiry_time: datetime | None = None,
         session_id: str | None = None,
     ) -> EntryView:
         entry = self._get(session_id).update_entry(
@@ -269,7 +270,7 @@ class DatabaseManager:
             custom_properties=custom_properties,
             tags=tags,
             expires=expires,
-            expiry_time=expiry_time,  # type: ignore[arg-type]
+            expiry_time=expiry_time,
         )
         self._invalidate(session_id or self._active_id)
         self._notify()

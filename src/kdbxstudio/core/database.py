@@ -434,6 +434,7 @@ class KdbxDatabase:
 
     def restore_history(self, entry_uuid: str, history_index: int) -> EntryView:
         """Restore a history revision (0 = most recent historical snapshot)."""
+        kp = self._require_kp()
         entry = self._find_entry(entry_uuid)
         history = list(entry.history or [])
         if not history:
@@ -450,15 +451,39 @@ class KdbxDatabase:
         entry.url = snapshot.url or ""
         entry.notes = snapshot.notes or ""
         entry.otp = snapshot.otp or ""
+        tags_raw = getattr(snapshot, "tags", None) or []
+        entry.tags = [str(t) for t in tags_raw]
+        entry.expires = bool(getattr(snapshot, "expires", False))
+        expiry_time = getattr(snapshot, "expiry_time", None)
+        if expiry_time is not None:
+            entry.expiry_time = expiry_time
+        snap_props = {
+            str(k): str(v)
+            for k, v in dict(getattr(snapshot, "custom_properties", None) or {}).items()
+        }
+        existing = dict(entry.custom_properties or {})
+        for key in list(existing):
+            if key not in snap_props:
+                entry.delete_custom_property(key)
+        for key, value in snap_props.items():
+            entry.set_custom_property(key, value)
+        for attachment in list(entry.attachments or []):
+            attachment.delete()
+        for attachment in list(getattr(snapshot, "attachments", None) or []):
+            data = bytes(attachment.binary or b"")
+            filename = Path(str(attachment.filename or "attachment")).name
+            if not filename or filename in {".", ".."}:
+                filename = "attachment"
+            binary_id = kp.add_binary(data)
+            entry.add_attachment(binary_id, filename)
         self._dirty = True
         return self._to_entry_view(entry)
 
     def database_info(self) -> DatabaseInfo:
         kp = self._require_kp()
-        recycle_count = 0
-        recycle = kp.recyclebin_group
-        if recycle is not None:
-            recycle_count = len(recycle.entries)
+        recycle_count = sum(
+            1 for entry in kp.entries if self._is_in_recycle_bin(entry)
+        )
         version = "unknown"
         try:
             version = f"{kp.version[0]}.{kp.version[1]}"
@@ -507,13 +532,16 @@ class KdbxDatabase:
     ) -> AttachmentView:
         kp = self._require_kp()
         entry = self._find_entry(entry_uuid)
+        safe_name = Path(filename).name
+        if not safe_name or safe_name in {".", ".."}:
+            raise DatabaseError("Invalid attachment filename")
         binary_id = kp.add_binary(data)
-        attachment = entry.add_attachment(binary_id, filename)
+        attachment = entry.add_attachment(binary_id, safe_name)
         self._dirty = True
         payload = bytes(attachment.binary or b"")
         return AttachmentView(
             id=int(attachment.id),
-            filename=str(attachment.filename or filename),
+            filename=str(attachment.filename or safe_name),
             size=len(payload),
             data=payload,
         )
@@ -545,15 +573,29 @@ class KdbxDatabase:
         self.trash_entry(entry_uuid)
 
     def empty_recycle_bin(self) -> int:
-        """Permanently delete all entries in the Recycle Bin. Returns count."""
+        """Permanently delete all entries and subgroups in the Recycle Bin.
+
+        Trashed groups land as subgroups under the bin, so deleting only
+        ``recycle.entries`` leaves nested secrets behind.
+        """
         kp = self._require_kp()
         recycle = kp.recyclebin_group
         if recycle is None:
             return 0
-        entries = list(recycle.entries)
+
+        def _collect_entries(group: Group) -> list[Any]:
+            found: list[Any] = list(group.entries or [])
+            for subgroup in list(group.subgroups or []):
+                found.extend(_collect_entries(subgroup))
+            return found
+
+        entries = _collect_entries(recycle)
+        subgroups = list(recycle.subgroups or [])
         for entry in entries:
             kp.delete_entry(entry)
-        if entries:
+        for subgroup in subgroups:
+            kp.delete_group(subgroup)
+        if entries or subgroups:
             self._dirty = True
         return len(entries)
 

@@ -113,8 +113,10 @@ def import_entries_csv(
             expiry_time: datetime | None = None
             if expiry_raw:
                 try:
-                    text = expiry_raw.replace("Z", "+00:00")
-                    expiry_time = datetime.fromisoformat(text[:19])
+                    text = expiry_raw.strip()
+                    if text.endswith("Z"):
+                        text = text[:-1] + "+00:00"
+                    expiry_time = datetime.fromisoformat(text)
                     expires = True
                 except ValueError:
                     expiry_time = None

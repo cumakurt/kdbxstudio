@@ -58,6 +58,7 @@ from kdbxstudio.core.database import (
     InvalidCredentialsError,
     KdbxDatabase,
 )
+from kdbxstudio.core.paths import resolve_regular_file
 from kdbxstudio.core.pem_inspector import inspect_pem_text
 from kdbxstudio.core.totp import current_totp
 from kdbxstudio.security.session import AutoLockController, ClipboardGuard
@@ -1336,6 +1337,32 @@ class MainWindow(QMainWindow):
         if group_uuid:
             self._entry_list.set_entries(self._dbm.list_entries(group_uuid))
 
+    def _attach_file(self, path: Path | str) -> str:
+        """Attach a regular file. Returns 'attached', 'skipped', or 'failed'."""
+        if not self._current_entry_uuid or self._dbm.active is None:
+            return "failed"
+        file_path = resolve_regular_file(path)
+        if file_path is None:
+            return "skipped"
+        max_bytes = 25 * 1024 * 1024
+        try:
+            size = file_path.stat().st_size
+            if size > max_bytes:
+                QMessageBox.warning(
+                    self,
+                    "Attachment too large",
+                    f"{file_path.name} exceeds the 25 MiB limit.",
+                )
+                return "skipped"
+            data = file_path.read_bytes()
+            self._dbm.add_attachment(
+                self._current_entry_uuid, file_path.name, data
+            )
+            return "attached"
+        except (OSError, DatabaseError) as exc:
+            QMessageBox.critical(self, "Attachment failed", str(exc))
+            return "failed"
+
     def _on_files_dropped(self, paths: object) -> None:
         if not self._ensure_writable():
             return
@@ -1343,28 +1370,12 @@ class MainWindow(QMainWindow):
             return
         if not isinstance(paths, list):
             return
-        max_bytes = 25 * 1024 * 1024
         attached = 0
         for item in paths:
-            file_path = Path(str(item)).resolve()
-            if not file_path.is_file() or file_path.is_symlink():
-                continue
-            try:
-                size = file_path.stat().st_size
-                if size > max_bytes:
-                    QMessageBox.warning(
-                        self,
-                        "Attachment too large",
-                        f"{file_path.name} exceeds the 25 MiB limit.",
-                    )
-                    continue
-                data = file_path.read_bytes()
-                self._dbm.add_attachment(
-                    self._current_entry_uuid, file_path.name, data
-                )
+            result = self._attach_file(str(item))
+            if result == "attached":
                 attached += 1
-            except (OSError, DatabaseError) as exc:
-                QMessageBox.critical(self, "Attachment failed", str(exc))
+            elif result == "failed":
                 break
         if attached and self._current_entry_uuid:
             self._show_entry(self._current_entry_uuid)
@@ -1381,14 +1392,9 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        file_path = Path(path)
-        try:
-            data = file_path.read_bytes()
-            self._dbm.add_attachment(self._current_entry_uuid, file_path.name, data)
+        if self._attach_file(path) == "attached":
             self._show_entry(self._current_entry_uuid)
-            self.statusBar().showMessage(f"Attached {file_path.name}", 3000)
-        except (OSError, DatabaseError) as exc:
-            QMessageBox.critical(self, "Attachment failed", str(exc))
+            self.statusBar().showMessage(f"Attached {Path(path).name}", 3000)
         self._auto_lock.activity()
 
     def _delete_attachment(self, attachment_id: int) -> None:
@@ -1413,8 +1419,28 @@ class MainWindow(QMainWindow):
 
     def _on_tab_close(self, index: int) -> None:
         session_id = self._db_tabs.tabToolTip(index)
-        if session_id:
-            self._dbm.close(session_id)
+        if not session_id:
+            return
+        if session_id in self._dbm.dirty_session_ids():
+            answer = QMessageBox.question(
+                self,
+                "Unsaved changes",
+                "Save this database before closing?",
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
+            )
+            if answer == QMessageBox.StandardButton.Cancel:
+                return
+            if answer == QMessageBox.StandardButton.Save:
+                try:
+                    self._dbm.save(session_id)
+                except DatabaseError as exc:
+                    QMessageBox.critical(self, "Save failed", str(exc))
+                    return
+        self._dbm.close(session_id)
+        if self._dbm.active is None:
+            self._clear_entry_panels()
 
     def _on_group_selected(self, group_uuid: str) -> None:
         if self._dbm.active is None:
@@ -1484,6 +1510,17 @@ class MainWindow(QMainWindow):
     def _on_auto_lock(self) -> None:
         if not self._dbm.session_ids():
             return
+        if self._dbm.dirty_session_ids():
+            try:
+                self._dbm.save_all()
+            except DatabaseError as exc:
+                QMessageBox.critical(
+                    self,
+                    "Auto-lock aborted",
+                    f"Could not save before locking:\n{exc}",
+                )
+                self._auto_lock.activity()
+                return
         paths = self._dbm.session_paths()
         if self._settings.clear_clipboard_on_lock:
             self._clipboard.cancel()
@@ -1497,17 +1534,18 @@ class MainWindow(QMainWindow):
             self.showMinimized()
             if self._tray is not None:
                 self.hide()
-        if paths:
-            dialog = UnlockDialog(self, path=paths[0], create_mode=False)
-            if dialog.exec() == UnlockDialog.DialogCode.Accepted:
-                try:
-                    self._dbm.open(
-                        dialog.database_path(),
-                        password=dialog.password(),
-                        keyfile=dialog.keyfile(),
-                    )
-                except (InvalidCredentialsError, DatabaseError) as exc:
-                    QMessageBox.critical(self, "Unlock failed", str(exc))
+        for path in paths:
+            dialog = UnlockDialog(self, path=path, create_mode=False)
+            if dialog.exec() != UnlockDialog.DialogCode.Accepted:
+                continue
+            try:
+                self._dbm.open(
+                    dialog.database_path(),
+                    password=dialog.password(),
+                    keyfile=dialog.keyfile(),
+                )
+            except (InvalidCredentialsError, DatabaseError) as exc:
+                QMessageBox.critical(self, "Unlock failed", str(exc))
         self._auto_lock.activity()
 
     def auto_type_selected(self) -> None:

@@ -132,8 +132,9 @@ class AttachmentPreviewWidget(QWidget):
         if row < 0 or row >= len(self._attachments):
             return
         item = self._attachments[row]
+        safe_name = Path(item.filename).name or "attachment"
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save attachment", item.filename
+            self, "Save attachment", safe_name
         )
         if not path:
             return

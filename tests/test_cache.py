@@ -18,3 +18,11 @@ def test_cache_ttl_expires() -> None:
     assert cache.get("x") == "y"
     time.sleep(0.08)
     assert cache.get("x") is None
+
+
+def test_cache_contains_with_none_value() -> None:
+    cache: Cache[str, str | None] = Cache()
+    cache.set("nil", None)
+    assert "nil" in cache
+    assert cache.get("nil") is None
+    assert "missing" not in cache

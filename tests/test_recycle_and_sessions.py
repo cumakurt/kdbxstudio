@@ -23,6 +23,17 @@ def test_trash_and_empty_recycle_bin(tmp_path: Path) -> None:
     assert db.get_entry(entry.uuid) is None
 
 
+def test_empty_recycle_bin_after_group_trash(tmp_path: Path) -> None:
+    path = tmp_path / "group-bin.kdbx"
+    db = KdbxDatabase()
+    db.create(path, password="secret")
+    group = db.add_group(db.root_group_uuid(), "Folder")
+    entry = db.add_entry(group.uuid, title="Nested", password="secret")
+    db.delete_group(group.uuid)
+    assert db.empty_recycle_bin() == 1
+    assert db.get_entry(entry.uuid) is None
+
+
 def test_multi_session_tabs(tmp_path: Path) -> None:
     mgr = DatabaseManager()
     a = mgr.create(tmp_path / "a.kdbx", password="a")

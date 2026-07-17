@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
+from kdbxstudio.application.expiry import parse_expiry
 from kdbxstudio.core.database import EntryView, KdbxDatabase
 
 
@@ -20,6 +22,19 @@ def _signature(entry: EntryView) -> tuple[str, str, str]:
         (entry.username or "").strip().lower(),
         (entry.url or "").strip().lower(),
     )
+
+
+def _sync_attachments(
+    destination: KdbxDatabase,
+    dest_uuid: str,
+    source: KdbxDatabase,
+    source_uuid: str,
+) -> None:
+    for attachment in destination.list_attachments(dest_uuid):
+        destination.delete_attachment(dest_uuid, attachment.id)
+    for attachment in source.list_attachments(source_uuid):
+        name = Path(attachment.filename).name or "attachment"
+        destination.add_attachment(dest_uuid, name, attachment.data)
 
 
 def merge_databases(
@@ -44,6 +59,7 @@ def merge_databases(
         if entry.in_recycle_bin:
             continue
         sig = _signature(entry)
+        expiry_time = parse_expiry(entry)
         if sig in existing:
             if not update_existing:
                 skipped += 1
@@ -56,10 +72,13 @@ def merge_databases(
                 password=entry.password,
                 url=entry.url,
                 notes=entry.notes,
-                otp=entry.otp or None,
+                otp=entry.otp,
                 custom_properties=dict(entry.custom_properties),
                 tags=list(entry.tags),
+                expires=entry.expires,
+                expiry_time=expiry_time,
             )
+            _sync_attachments(destination, updated_entry.uuid, source, entry.uuid)
             existing[sig] = updated_entry
             updated += 1
             continue
@@ -73,11 +92,14 @@ def merge_databases(
             notes=entry.notes,
             custom_properties=dict(entry.custom_properties) or None,
             tags=list(entry.tags) or None,
+            expires=entry.expires if entry.expires or expiry_time else None,
+            expiry_time=expiry_time,
         )
         if entry.otp:
             created = destination.update_entry(
                 created.uuid, otp=entry.otp, keep_history=False
             )
+        _sync_attachments(destination, created.uuid, source, entry.uuid)
         existing[sig] = created
         added += 1
     return MergeResult(added=added, skipped=skipped, updated=updated)

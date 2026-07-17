@@ -49,7 +49,13 @@ class Cache(Generic[K, V]):
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, Hashable):
             return False
-        return self.get(key) is not None  # type: ignore[arg-type]
+        entry = self._store.get(key)  # type: ignore[arg-type]
+        if entry is None:
+            return False
+        if entry.expires_at is not None and time.monotonic() >= entry.expires_at:
+            del self._store[key]  # type: ignore[arg-type]
+            return False
+        return True
 
     def __len__(self) -> int:
         self._purge_expired()

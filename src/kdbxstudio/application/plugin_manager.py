@@ -60,6 +60,9 @@ class PluginManager:
         try:
             item.plugin.deactivate(self._context)
         except Exception as exc:
+            # Always drop hooks so a failing plugin cannot leave stale callbacks.
+            self._context.clear_owner(name)
+            item.active = False
             raise PluginError(f"Failed to deactivate plugin '{name}': {exc}") from exc
         self._context.clear_owner(name)
         item.active = False
