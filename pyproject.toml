@@ -19,6 +19,7 @@ keywords = ["keepass", "kdbx", "password-manager", "qt6"]
 dependencies = [
   "pykeepass>=4.1.0",
   "PySide6>=6.6",
+  "pyotp>=2.9",
 ]
 
 [project.urls]

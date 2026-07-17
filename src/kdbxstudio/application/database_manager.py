@@ -229,6 +229,10 @@ class DatabaseManager:
         password: str = "",
         url: str = "",
         notes: str = "",
+        custom_properties: dict[str, str] | None = None,
+        tags: list[str] | tuple[str, ...] | None = None,
+        expires: bool | None = None,
+        expiry_time: datetime | None = None,
         session_id: str | None = None,
     ) -> EntryView:
         entry = self._get(session_id).add_entry(
@@ -238,6 +242,10 @@ class DatabaseManager:
             password=password,
             url=url,
             notes=notes,
+            custom_properties=custom_properties,
+            tags=tags,
+            expires=expires,
+            expiry_time=expiry_time,
         )
         self._invalidate(session_id or self._active_id)
         self._notify()
@@ -321,6 +329,7 @@ class DatabaseManager:
         attachment = self._get(session_id).add_attachment(
             entry_uuid, filename, data
         )
+        self._invalidate(session_id or self._active_id)
         self._notify()
         return attachment
 
@@ -331,6 +340,7 @@ class DatabaseManager:
         session_id: str | None = None,
     ) -> None:
         self._get(session_id).delete_attachment(entry_uuid, attachment_id)
+        self._invalidate(session_id or self._active_id)
         self._notify()
 
     def delete_entry(

@@ -162,27 +162,36 @@ class SearchEngine:
 
     def search(
         self,
-        query: str,
+        query: str | EntryFilter = "",
         *,
         session_id: str | None = None,
         limit: int = 200,
         entry_filter: EntryFilter | None = None,
     ) -> list[SearchHit]:
-        filt = entry_filter or EntryFilter(query=query)
-        if query and not filt.query:
-            filt = EntryFilter(
-                query=query,
-                group_path_contains=filt.group_path_contains,
-                tag_contains=filt.tag_contains,
-                has_url=filt.has_url,
-                has_otp_or_custom=filt.has_otp_or_custom,
-                in_recycle_bin=filt.in_recycle_bin,
-                weak_only=filt.weak_only,
-                empty_password=filt.empty_password,
-                duplicates_only=filt.duplicates_only,
-                expired_only=filt.expired_only,
-                min_password_length=filt.min_password_length,
-            )
+        if isinstance(query, EntryFilter):
+            if entry_filter is not None:
+                raise TypeError(
+                    "Pass EntryFilter as the first argument or entry_filter=, not both"
+                )
+            filt = query
+            query_text = filt.query
+        else:
+            query_text = query
+            filt = entry_filter or EntryFilter(query=query_text)
+            if query_text and not filt.query:
+                filt = EntryFilter(
+                    query=query_text,
+                    group_path_contains=filt.group_path_contains,
+                    tag_contains=filt.tag_contains,
+                    has_url=filt.has_url,
+                    has_otp_or_custom=filt.has_otp_or_custom,
+                    in_recycle_bin=filt.in_recycle_bin,
+                    weak_only=filt.weak_only,
+                    empty_password=filt.empty_password,
+                    duplicates_only=filt.duplicates_only,
+                    expired_only=filt.expired_only,
+                    min_password_length=filt.min_password_length,
+                )
 
         sid = session_id or self._dbm.active_id
         if sid is None:
