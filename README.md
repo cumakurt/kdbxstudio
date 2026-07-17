@@ -88,13 +88,14 @@ search, command palette, certificates tab, password generator, and a sample
 ### Entries & secrets
 
 - Title, username, password, URL, notes, custom fields, **tags**, **expiry**
+- **Password strength meter** — real-time visual feedback (Very Weak → Strong)
 - **Auto-Type** on Linux (`xdotool` / `ydotool` / `wtype`) with configurable sequence
-- **Move entry** between groups
+- **Move entry** between groups (drag & drop supported)
 - **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
 - Field-leading icons; action icons for Show / Copy / Generate / Save
 - **Markdown / JSON** notes preview (valid HTML with `<ul>` lists)
 - **Secret templates**: Login, API Key, SSH, Certificate, Secure Note, Bank Card
-- **Password generator** with entropy estimate and secure clipboard copy
+- **Password generator** with entropy estimate, secure clipboard copy, and presets (Strong, PIN, Memorable, Complex, Short)
 - **TOTP** live codes and countdown (6 and 8 digit support, timer only when active)
 - Entry **history** list, restore, and field diff (including tags, custom fields, expiry)
 - Attachments (add / delete / **save as** / **drag-and-drop**) with text / PDF preview
@@ -143,6 +144,9 @@ search, command palette, certificates tab, password generator, and a sample
 | Password health audit | ✓ (built-in) | ✓ | ✓ |
 | HIBP k-anonymity | ✓ | ✓ | ✓ |
 | TOTP live display | ✓ | ✓ | ✓ |
+| Quick copy shortcuts | ✓ (Ctrl+U/B/T) | ✓ | ✓ |
+| Password strength meter | ✓ (real-time) | ✓ | ✓ |
+| Password generator presets | ✓ | ✗ | ✓ |
 | Plugin system | ✓ | ✗ | ✓ (extensions) |
 | Command Palette | ✓ | ✗ | ✗ |
 | Emergency sheet | ✓ | ✗ | ✗ |
@@ -151,6 +155,9 @@ search, command palette, certificates tab, password generator, and a sample
 | Auto-Type (Linux) | ✓ | ✓ | ✗ |
 | System tray lock | ✓ | ✓ | ✓ |
 | Read-only mode | ✓ | ✗ | ✗ |
+| Database backup on save | ✓ | ✗ | ✗ |
+| Entry sorting | ✓ | ✓ | ✓ |
+| Drag & drop entries | ✓ | ✗ | ✗ |
 | Flatpak + AppImage | ✓ | ✓ | ✓ |
 | Open source | GPL-3.0 | GPL-2.0 | GPL-3.0 |
 
@@ -253,8 +260,12 @@ Demo file written to `artifacts/visual/sample.kdbx` (password: `demo-pass-123`).
 | `Ctrl+F` | Focus universal search |
 | `Ctrl+O` | Open database |
 | `Ctrl+N` | New database |
-| `Ctrl+S` | Save |
+| `Ctrl+S` | Save (with automatic backup) |
 | `Ctrl+L` | Lock all databases |
+| `Ctrl+U` | Quick copy username |
+| `Ctrl+B` | Quick copy password |
+| `Ctrl+Shift+U` | Quick copy URL |
+| `Ctrl+T` | Quick copy TOTP code |
 | `Ctrl+Shift+V` / `Ctrl+Alt+A` | Auto-Type selected entry |
 | `Shift+Delete` | Move selected entry to Recycle Bin |
 | `F2` | Rename selected group |
@@ -393,6 +404,7 @@ Tag a version (`v1.0.0`, …) to trigger GitHub Actions release artifacts.
 - Secrets remain **local**; there is no built-in cloud sync.
 - All clipboard operations use **ClipboardGuard** with auto-clear timeout.
 - **Atomic settings write** with `chmod 0600` prevents corruption and unauthorized access.
+- **Automatic database backup** before each save (`.kdbxstudio-backups/`, max 10 kept).
 - Clipboard and auto-lock reduce shoulder-surfing and idle exposure — tune timeouts to your threat model.
 - CSV export writes passwords and OTP material in **plain text**; treat export files as highly sensitive.
 - Master password handling uses best-effort memory wipe; Python runtimes cannot guarantee zero residual copies.

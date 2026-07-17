@@ -17,6 +17,65 @@ class GeneratorOptions:
     exclude_ambiguous: bool = True
 
 
+@dataclass(frozen=True)
+class PasswordPreset:
+    name: str
+    description: str
+    options: GeneratorOptions
+
+
+PRESETS: list[PasswordPreset] = [
+    PasswordPreset(
+        name="Strong",
+        description="20 chars, mixed case + digits + symbols",
+        options=GeneratorOptions(
+            length=20, uppercase=True, lowercase=True,
+            digits=True, symbols=True, exclude_ambiguous=True,
+        ),
+    ),
+    PasswordPreset(
+        name="PIN",
+        description="6-digit numeric PIN",
+        options=GeneratorOptions(
+            length=6, uppercase=False, lowercase=False,
+            digits=True, symbols=False, exclude_ambiguous=False,
+        ),
+    ),
+    PasswordPreset(
+        name="Memorable",
+        description="16 chars, letters + digits (no symbols)",
+        options=GeneratorOptions(
+            length=16, uppercase=True, lowercase=True,
+            digits=True, symbols=False, exclude_ambiguous=True,
+        ),
+    ),
+    PasswordPreset(
+        name="Complex",
+        description="24 chars, all character classes",
+        options=GeneratorOptions(
+            length=24, uppercase=True, lowercase=True,
+            digits=True, symbols=True, exclude_ambiguous=False,
+        ),
+    ),
+    PasswordPreset(
+        name="Passphrase-like",
+        description="32 chars, lowercase + digits only",
+        options=GeneratorOptions(
+            length=32, uppercase=False, lowercase=True,
+            digits=True, symbols=False, exclude_ambiguous=True,
+        ),
+    ),
+    PasswordPreset(
+        name="Short",
+        description="8 chars, mixed (quick password)",
+        options=GeneratorOptions(
+            length=8, uppercase=True, lowercase=True,
+            digits=True, symbols=False, exclude_ambiguous=True,
+        ),
+    ),
+]
+
+
 _AMBIGUOUS = set("O0Il1|`\"'")
 
 

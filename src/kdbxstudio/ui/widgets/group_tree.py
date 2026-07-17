@@ -17,6 +17,8 @@ class GroupTreeWidget(QTreeWidget):
         super().__init__(parent)
         self.setHeaderLabel("Groups")
         self.setUniformRowHeights(True)
+        self.setDragDropMode(QTreeWidget.DragDropMode.DragDrop)
+        self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.itemSelectionChanged.connect(self._on_selection)
 
     def set_groups(self, groups: list[GroupView], root_uuid: str) -> None:

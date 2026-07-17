@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.core.password_generator import (
+    PRESETS,
     GeneratorOptions,
     build_alphabet,
     estimate_entropy_bits,
@@ -35,7 +37,15 @@ class PasswordGeneratorDialog(QDialog):
         self._clipboard_guard = clipboard_guard
         self.setWindowTitle("Password Generator")
         self.setModal(True)
-        self.resize(420, 280)
+        self.resize(420, 320)
+
+        self._preset_combo = QComboBox()
+        self._preset_combo.setAccessibleName("Password preset")
+        for preset in PRESETS:
+            self._preset_combo.addItem(
+                f"{preset.name} — {preset.description}", preset.name
+            )
+        self._preset_combo.currentIndexChanged.connect(self._on_preset_changed)
 
         self._length = QSpinBox()
         self._length.setRange(4, 128)
@@ -67,6 +77,7 @@ class PasswordGeneratorDialog(QDialog):
         out_row.addWidget(copy_btn)
 
         form = QFormLayout()
+        form.addRow("Preset", self._preset_combo)
         form.addRow("Length", self._length)
         form.addRow("", self._upper)
         form.addRow("", self._lower)
@@ -103,6 +114,18 @@ class PasswordGeneratorDialog(QDialog):
     def password(self) -> str:
         return self._output.text()
 
+    def _on_preset_changed(self, index: int) -> None:
+        if index < 0 or index >= len(PRESETS):
+            return
+        preset = PRESETS[index]
+        opts = preset.options
+        self._length.setValue(opts.length)
+        self._upper.setChecked(opts.uppercase)
+        self._lower.setChecked(opts.lowercase)
+        self._digits.setChecked(opts.digits)
+        self._symbols.setChecked(opts.symbols)
+        self._ambiguous.setChecked(opts.exclude_ambiguous)
+
     def _options(self) -> GeneratorOptions:
         return GeneratorOptions(
             length=self._length.value(),
@@ -120,7 +143,9 @@ class PasswordGeneratorDialog(QDialog):
             alphabet = build_alphabet(opts)
             bits = estimate_entropy_bits(password, len(alphabet))
             self._output.setText(password)
-            self._entropy.setText(f"~{bits:.0f} bits ({len(alphabet)} symbol alphabet)")
+            self._entropy.setText(
+                f"~{bits:.0f} bits ({len(alphabet)} symbol alphabet)"
+            )
         except ValueError as exc:
             self._output.clear()
             self._entropy.setText(str(exc))

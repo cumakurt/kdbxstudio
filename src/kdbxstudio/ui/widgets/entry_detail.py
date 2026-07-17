@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+import re
+
 from PySide6.QtCore import QDate, QSize, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -12,6 +15,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -36,6 +40,64 @@ def _leading_icon(edit: QLineEdit, icon_kind: FieldKind) -> QAction:
     return action
 
 
+def _estimate_password_strength(password: str) -> tuple[int, str]:
+    """Return (score 0-100, label) for a password."""
+    if not password:
+        return 0, "Empty"
+    score = 0
+    length = len(password)
+    if length >= 8:
+        score += 20
+    elif length >= 6:
+        score += 10
+    if length >= 12:
+        score += 15
+    elif length >= 16:
+        score += 20
+    if re.search(r"[a-z]", password):
+        score += 10
+    if re.search(r"[A-Z]", password):
+        score += 10
+    if re.search(r"\d", password):
+        score += 10
+    if re.search(r"[^a-zA-Z0-9]", password):
+        score += 15
+    unique_chars = len(set(password))
+    if unique_chars >= 10:
+        score += 10
+    elif unique_chars >= 6:
+        score += 5
+    entropy = len(password) * math.log2(max(1, unique_chars))
+    if entropy >= 60:
+        score += 10
+    elif entropy >= 40:
+        score += 5
+    score = min(100, score)
+    if score >= 80:
+        label = "Strong"
+    elif score >= 60:
+        label = "Good"
+    elif score >= 40:
+        label = "Fair"
+    elif score >= 20:
+        label = "Weak"
+    else:
+        label = "Very Weak"
+    return score, label
+
+
+def _strength_color(score: int) -> str:
+    if score >= 80:
+        return "#22c55e"
+    elif score >= 60:
+        return "#84cc16"
+    elif score >= 40:
+        return "#eab308"
+    elif score >= 20:
+        return "#f97316"
+    return "#ef4444"
+
+
 class EntryDetailWidget(QWidget):
     """View / edit a single entry."""
 
@@ -56,6 +118,14 @@ class EntryDetailWidget(QWidget):
         self._username = QLineEdit()
         self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
+        self._strength_bar = QProgressBar()
+        self._strength_bar.setRange(0, 100)
+        self._strength_bar.setValue(0)
+        self._strength_bar.setTextVisible(True)
+        self._strength_bar.setMaximumHeight(16)
+        self._strength_bar.setFormat("")
+        self._strength_label = QLabel("")
+        self._strength_label.setStyleSheet("font-size: 11px;")
         self._url = QLineEdit()
         self._notes = NotesPreviewWidget()
         self._tags = QLineEdit()
@@ -80,6 +150,7 @@ class EntryDetailWidget(QWidget):
         self._title.textChanged.connect(self._refresh_field_icons)
         self._url.textChanged.connect(self._refresh_field_icons)
         self._username.textChanged.connect(self._refresh_field_icons)
+        self._password.textChanged.connect(self._update_strength)
 
         self._custom = QTableWidget(0, 2)
         self._custom.setHorizontalHeaderLabels(["Key", "Value"])
@@ -112,6 +183,10 @@ class EntryDetailWidget(QWidget):
         pwd_row.addWidget(copy_btn)
         pwd_row.addWidget(gen_btn)
 
+        strength_row = QHBoxLayout()
+        strength_row.addWidget(self._strength_bar, stretch=1)
+        strength_row.addWidget(self._strength_label)
+
         title_row = QHBoxLayout()
         title_row.setSpacing(6)
         title_row.addWidget(self._kind_badge)
@@ -133,6 +208,7 @@ class EntryDetailWidget(QWidget):
         form.addRow("Title", title_row)
         form.addRow("Username", self._username)
         form.addRow("Password", pwd_row)
+        form.addRow("Strength", strength_row)
         form.addRow("URL", self._url)
         form.addRow("Tags", self._tags)
         form.addRow("Expiry", expiry_row)
@@ -293,6 +369,19 @@ class EntryDetailWidget(QWidget):
             QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         )
         self._show_btn.setText("Hide" if checked else "Show")
+
+    def _update_strength(self) -> None:
+        password = self._password.text()
+        score, label = _estimate_password_strength(password)
+        color = _strength_color(score)
+        self._strength_bar.setValue(score)
+        self._strength_bar.setStyleSheet(
+            f"QProgressBar::chunk {{ background-color: {color}; }}"
+        )
+        self._strength_label.setText(label)
+        self._strength_label.setStyleSheet(
+            f"font-size: 11px; color: {color}; font-weight: bold;"
+        )
 
     def _copy_password(self) -> None:
         self.copy_password_requested.emit(self._password.text())

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QAbstractItemView, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QTableWidget,
+    QTableWidgetItem,
+)
 
 from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
@@ -29,9 +33,13 @@ class EntryListWidget(QTableWidget):
         self.horizontalHeader().setStretchLastSection(True)
         self.setIconSize(QSize(16, 16))
         self.itemSelectionChanged.connect(self._on_selection)
+        self.setSortingEnabled(True)
+        self.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        self.horizontalHeader().sectionClicked.connect(self._on_sort)
 
     def set_entries(self, entries: list[EntryView]) -> None:
         self.setRowCount(0)
+        self.setSortingEnabled(False)
         for entry in entries:
             row = self.rowCount()
             self.insertRow(row)
@@ -50,6 +58,7 @@ class EntryListWidget(QTableWidget):
             self.setItem(row, 0, title)
             self.setItem(row, 1, QTableWidgetItem(entry.username))
             self.setItem(row, 2, QTableWidgetItem(entry.url))
+        self.setSortingEnabled(True)
 
     def selected_entry_uuid(self) -> str | None:
         items = self.selectedItems()
@@ -66,3 +75,6 @@ class EntryListWidget(QTableWidget):
         uuid = self.selected_entry_uuid()
         if uuid:
             self.entry_selected.emit(uuid)
+
+    def _on_sort(self, logical_index: int) -> None:
+        pass

@@ -55,6 +55,7 @@ from kdbxstudio.application.ssh_agent import (
 from kdbxstudio.application.update_check import check_github_release
 from kdbxstudio.core.database import (
     DatabaseError,
+    EntryView,
     InvalidCredentialsError,
     KdbxDatabase,
 )
@@ -250,6 +251,60 @@ class MainWindow(QMainWindow):
 
         focus_search = QShortcut(QKeySequence("Ctrl+F"), self)
         focus_search.activated.connect(self._focus_search)
+
+        copy_user = QShortcut(QKeySequence("Ctrl+U"), self)
+        copy_user.activated.connect(self._quick_copy_username)
+
+        copy_pass = QShortcut(QKeySequence("Ctrl+B"), self)
+        copy_pass.activated.connect(self._quick_copy_password)
+
+        copy_url = QShortcut(QKeySequence("Ctrl+Shift+U"), self)
+        copy_url.activated.connect(self._quick_copy_url)
+
+        copy_totp = QShortcut(QKeySequence("Ctrl+T"), self)
+        copy_totp.activated.connect(self._quick_copy_totp)
+
+    def _get_selected_entry(self) -> EntryView | None:
+        uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
+        if not uuid or self._dbm.active is None:
+            return None
+        return self._dbm.get_entry(uuid)
+
+    def _quick_copy_username(self) -> None:
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        if entry.username:
+            self._clipboard.copy(entry.username)
+            self.statusBar().showMessage("Username copied", 3000)
+
+    def _quick_copy_password(self) -> None:
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        if entry.password:
+            self._clipboard.copy(entry.password)
+            secs = self._settings.clipboard_timeout_ms // 1000
+            self.statusBar().showMessage(
+                f"Password copied (clears in {secs}s)", 3000
+            )
+
+    def _quick_copy_url(self) -> None:
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        if entry.url:
+            self._clipboard.copy(entry.url)
+            self.statusBar().showMessage("URL copied", 3000)
+
+    def _quick_copy_totp(self) -> None:
+        entry = self._get_selected_entry()
+        if entry is None or not entry.otp:
+            return
+        status = current_totp(entry.otp)
+        if status.valid and status.code:
+            self._clipboard.copy(status.code)
+            self.statusBar().showMessage("TOTP code copied", 3000)
 
     def _install_idle_filters(self) -> None:
         self.installEventFilter(self)
@@ -1059,12 +1114,36 @@ class MainWindow(QMainWindow):
         if self._dbm.active is None:
             QMessageBox.information(self, "Save", "No database is open.")
             return
+        db = self._dbm.active
+        if db.path and db.path.is_file():
+            backup_dir = db.path.parent / ".kdbxstudio-backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            from datetime import datetime
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"{db.path.stem}_{timestamp}{db.path.suffix}"
+            try:
+                import shutil
+
+                shutil.copy2(db.path, backup_path)
+                self._cleanup_old_backups(backup_dir, max_backups=10)
+            except OSError:
+                pass
         try:
             self._dbm.save()
             self.statusBar().showMessage("Database saved", 3000)
         except DatabaseError as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
         self._auto_lock.activity()
+
+    def _cleanup_old_backups(self, backup_dir: Path, max_backups: int = 10) -> None:
+        try:
+            backups = sorted(backup_dir.glob("*.kdbx"), key=lambda p: p.stat().st_mtime)
+            while len(backups) > max_backups:
+                oldest = backups.pop(0)
+                oldest.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     def close_database(self) -> None:
         if self._dbm.active is not None and self._dbm.active.is_dirty:
