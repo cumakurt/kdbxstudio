@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Checks
+        run: |
+          ruff check src tests
+          mypy
+          pytest -q
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+  source-assets:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist/wheel + icons
+        run: |
+          python -m pip install --upgrade pip build
+          pip install -e ".[dev]"
+          python scripts/generate_icons.py
+          python -m build
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: |
+            dist/*
+            assets/kdbxstudio.png
+            assets/icons/*
+
+  appdir:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare AppDir
+        run: |
+          pip install -e ".[dev]"
+          python scripts/generate_icons.py
+          chmod +x packaging/appimage/build_appdir.sh
+          ./packaging/appimage/build_appdir.sh dist/KDBXStudio.AppDir
+          cp assets/kdbxstudio.png dist/KDBXStudio.AppDir/kdbxstudio.png
+          cp assets/kdbxstudio.png \
+            dist/KDBXStudio.AppDir/usr/share/icons/hicolor/256x256/apps/kdbxstudio.png
+          tar -C dist -czf dist/KDBXStudio-AppDir.tar.gz KDBXStudio.AppDir
+      - name: Upload AppDir tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: appdir
+          path: dist/KDBXStudio-AppDir.tar.gz
+
+  github-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [source-assets, appdir]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            python-dist/*
+            appdir/*
+          generate_release_notes: true

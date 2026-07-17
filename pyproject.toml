@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kdbxstudio"
+version = "1.0.0"
+description = "Modern Qt6 KDBX password manager for Linux"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+  { name = "Cuma KURT", email = "cumakurt@gmail.com" },
+]
+maintainers = [
+  { name = "Cuma KURT", email = "cumakurt@gmail.com" },
+]
+keywords = ["keepass", "kdbx", "password-manager", "qt6"]
+dependencies = [
+  "pykeepass>=4.1.0",
+  "PySide6>=6.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/cumakurt/kdbxstudio"
+Repository = "https://github.com/cumakurt/kdbxstudio"
+Issues = "https://github.com/cumakurt/kdbxstudio/issues"
+Author = "https://www.linkedin.com/in/cuma-kurt-34414917/"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-qt>=4.4",
+  "ruff>=0.6",
+  "mypy>=1.11",
+]
+
+[project.scripts]
+kdbxstudio = "kdbxstudio.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+kdbxstudio = ["py.typed"]
+
+[tool.setuptools.data-files]
+"share/applications" = ["assets/kdbxstudio.desktop"]
+"share/icons/hicolor/scalable/apps" = ["assets/kdbxstudio.svg"]
+"share/kdbxstudio/icons" = ["assets/kdbxstudio.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["kdbxstudio"]
+warn_unused_ignores = true
+warn_return_any = false
+disallow_untyped_defs = true
+ignore_missing_imports = true

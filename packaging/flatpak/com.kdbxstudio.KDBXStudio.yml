@@ -1,0 +1,36 @@
+"""Flatpak manifest for KDBXStudio.
+
+Build (requires flatpak-builder):
+
+  flatpak-builder --user --install --force-clean build-dir \\
+      packaging/flatpak/com.kdbxstudio.KDBXStudio.yml
+
+Run:
+
+  flatpak run com.kdbxstudio.KDBXStudio
+"""
+
+id: com.kdbxstudio.KDBXStudio
+runtime: org.kde.Platform
+runtime-version: "6.7"
+sdk: org.kde.Sdk
+command: kdbxstudio
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: kdbxstudio
+    buildsystem: simple
+    build-commands:
+      - pip3 install --verbose --prefix=${FLATPAK_DEST} .
+      - install -Dm644 assets/kdbxstudio.desktop ${FLATPAK_DEST}/share/applications/com.kdbxstudio.KDBXStudio.desktop
+      - install -Dm644 assets/metainfo/com.kdbxstudio.KDBXStudio.metainfo.xml ${FLATPAK_DEST}/share/metainfo/com.kdbxstudio.KDBXStudio.metainfo.xml
+      - install -Dm644 assets/kdbxstudio.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/com.kdbxstudio.KDBXStudio.svg
+      - install -Dm644 assets/kdbxstudio.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/com.kdbxstudio.KDBXStudio.png
+    sources:
+      - type: dir
+        path: ../..

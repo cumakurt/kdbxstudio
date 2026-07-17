@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo for Flathub / GNOME Software / KDE Discover -->
+<component type="desktop-application">
+  <id>com.kdbxstudio.KDBXStudio</id>
+  <name>KDBXStudio</name>
+  <summary>Modern Qt6 KDBX password manager for Linux</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer_name>Cuma KURT</developer_name>
+  <description>
+    <p>
+      KDBXStudio is an open-source KeePass-compatible password manager built with Qt6.
+      It focuses on multi-database workspaces, password health audits, plugins, and a
+      keyboard-first desktop experience.
+    </p>
+    <ul>
+      <li>KDBX 4.x open/create/save with optional key files</li>
+      <li>Password health dashboard and advanced search</li>
+      <li>TOTP, attachments, certificates/SSH inspection</li>
+      <li>Plugin marketplace for built-in extensions</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.kdbxstudio.KDBXStudio.desktop</launchable>
+  <url type="homepage">https://github.com/cumakurt/kdbxstudio</url>
+  <url type="bugtracker">https://github.com/cumakurt/kdbxstudio/issues</url>
+  <url type="contact">mailto:cumakurt@gmail.com</url>
+  <developer id="com.kdbxstudio">
+    <name>Cuma KURT</name>
+  </developer>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main workspace with groups, entries, and password health</caption>
+      <image>https://raw.githubusercontent.com/cumakurt/kdbxstudio/main/assets/kdbxstudio.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.0.0" date="2026-07-17"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Utility</category>
+    <category>Security</category>
+  </categories>
+  <keywords>
+    <keyword>keepass</keyword>
+    <keyword>kdbx</keyword>
+    <keyword>password</keyword>
+    <keyword>security</keyword>
+  </keywords>
+</component>

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=KDBXStudio
+GenericName=Password Manager
+Comment=Modern Qt6 KDBX password manager for Linux (GPL-3.0)
+Exec=kdbxstudio %f
+Icon=com.kdbxstudio.KDBXStudio
+Terminal=false
+Categories=Utility;Security;Qt;
+Keywords=keepass;kdbx;password;security;
+StartupNotify=true
+MimeType=application/x-keepass2;
+StartupWMClass=kdbxstudio
+X-KDE-Author=Cuma KURT
+X-KDE-Email=cumakurt@gmail.com
