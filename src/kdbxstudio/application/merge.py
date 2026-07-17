@@ -92,7 +92,7 @@ def merge_databases(
             notes=entry.notes,
             custom_properties=dict(entry.custom_properties) or None,
             tags=list(entry.tags) or None,
-            expires=entry.expires if entry.expires or expiry_time else None,
+            expires=True if expiry_time else entry.expires,
             expiry_time=expiry_time,
         )
         if entry.otp:

@@ -42,7 +42,10 @@ class PluginContext:
     def emit(self, name: str, **payload: Any) -> list[Any]:
         results: list[Any] = []
         for _owner, callback in self._hooks.get(name, []):
-            results.append(callback(**payload))
+            try:
+                results.append(callback(**payload))
+            except Exception:
+                results.append(None)
         return results
 
     def set(self, key: str, value: Any) -> None:

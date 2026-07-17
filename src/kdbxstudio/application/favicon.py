@@ -45,7 +45,9 @@ def cached_favicon(url: str) -> Path | None:
     return path if path.is_file() and path.stat().st_size > 0 else None
 
 
-def fetch_favicon(url: str, *, timeout_s: float = 6.0) -> Path | None:
+def fetch_favicon(
+    url: str, *, timeout_s: float = 6.0, max_bytes: int = 65536
+) -> Path | None:
     """Download Google s2 favicon for the host; return local path or None."""
     host = normalize_host(url)
     if host is None:
@@ -60,10 +62,10 @@ def fetch_favicon(url: str, *, timeout_s: float = 6.0) -> Path | None:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            data = resp.read()
+            data = resp.read(max_bytes + 1)
     except (urllib.error.URLError, TimeoutError, OSError):
         return None
-    if not data:
+    if not data or len(data) > max_bytes:
         return None
     dest.write_bytes(data)
     return dest

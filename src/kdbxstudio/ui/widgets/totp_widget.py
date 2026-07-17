@@ -53,7 +53,6 @@ class TotpWidget(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(500)
         self._timer.timeout.connect(self._tick)
-        self._timer.start()
 
     def clear(self) -> None:
         self._otp_value = ""
@@ -62,10 +61,15 @@ class TotpWidget(QWidget):
         self._label.setText("No TOTP configured")
         self._code.setText("------")
         self._remaining.setValue(0)
+        self._timer.stop()
 
     def set_otp(self, otp: str) -> None:
         self._otp_value = otp or ""
         self._otp_edit.setText(self._otp_value)
+        if self._otp_value:
+            self._timer.start()
+        else:
+            self._timer.stop()
         self._tick()
 
     def otp_value(self) -> str:
@@ -85,7 +89,12 @@ class TotpWidget(QWidget):
         self._label.setText(status.label or "TOTP")
         self._last_code = status.code
         code = status.code
-        pretty = f"{code[:3]} {code[3:]}" if len(code) == 6 else code
+        if len(code) == 6:
+            pretty = f"{code[:3]} {code[3:]}"
+        elif len(code) == 8:
+            pretty = f"{code[:4]} {code[4:]}"
+        else:
+            pretty = code
         self._code.setText(pretty)
         self._remaining.setRange(0, status.period)
         self._remaining.setValue(status.remaining_seconds)

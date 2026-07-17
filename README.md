@@ -22,6 +22,7 @@ tools (TOTP, attachments, SSH/certificates) — without cloud lock-in.
 - [Author](#author)
 - [Screenshots](#screenshots)
 - [Features](#features)
+- [Why KDBXStudio?](#why-kdbxstudio)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Usage](#usage)
@@ -78,7 +79,7 @@ search, command palette, certificates tab, password generator, and a sample
 ### Workspace
 
 - Dockable **Groups** tree and **Password Health** panel
-- Entry list + detail split view (resizable), optional **favicon** icons
+- Entry list + detail split view (resizable), optional **favicon** icons (async fetch)
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
 - Compact / comfortable density, light / dark / system themes
@@ -91,11 +92,11 @@ search, command palette, certificates tab, password generator, and a sample
 - **Move entry** between groups
 - **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
 - Field-leading icons; action icons for Show / Copy / Generate / Save
-- **Markdown / JSON** notes preview
+- **Markdown / JSON** notes preview (valid HTML with `<ul>` lists)
 - **Secret templates**: Login, API Key, SSH, Certificate, Secure Note, Bank Card
-- **Password generator** with entropy estimate
-- **TOTP** live codes and countdown
-- Entry **history** list, restore, and field diff
+- **Password generator** with entropy estimate and secure clipboard copy
+- **TOTP** live codes and countdown (6 and 8 digit support, timer only when active)
+- Entry **history** list, restore, and field diff (including tags, custom fields, expiry)
 - Attachments (add / delete / **save as** / **drag-and-drop**) with text / PDF preview
 - PEM / OpenSSH **certificate and SSH inspector**; optional **ssh-add** to agent
 
@@ -111,22 +112,47 @@ search, command palette, certificates tab, password generator, and a sample
 
 ### Security session
 
-- Clipboard copy with **auto-clear timeout**
+- Clipboard copy with **auto-clear timeout** (all copy paths use ClipboardGuard)
 - **True idle auto-lock** (input activity) + optional minimize / tray
 - Clear clipboard on lock
 - **Read-only session** mode
 - Best-effort `SecureString` wipe for in-memory master password on close / lock
+- **Atomic settings write** with `chmod 0600` permissions
+- Input validation on all timeout and theme settings
 - Optional **update check** against GitHub Releases
 
 ### Extensibility & desktop polish
 
 - Plugin SDK + discoverable `*_plugin.py` modules (hooks cleared on deactivate)
+- **Isolated plugin callbacks** — one plugin error does not block others
 - Built-in **Plugin Marketplace** (local / built-in catalog)
 - Command Palette (`Ctrl+K` / `Ctrl+Shift+P`)
 - Persistable **window layout** (View → Save Layout / Reset Layout)
 - App icon, `.desktop` entry, AppStream metainfo
 - One-shot **`install.sh`**: distro detection, deps, portable **AppImage**
 - Flatpak packaging scaffold
+
+---
+
+## Why KDBXStudio?
+
+| Feature | KDBXStudio | KeePassXC | Bitwarden |
+|---------|-----------|-----------|-----------|
+| KeePass KDBX 4.x | ✓ | ✓ | ✓ |
+| Multi-database tabs | ✓ | ✗ | ✗ |
+| Password health audit | ✓ (built-in) | ✓ | ✓ |
+| HIBP k-anonymity | ✓ | ✓ | ✓ |
+| TOTP live display | ✓ | ✓ | ✓ |
+| Plugin system | ✓ | ✗ | ✓ (extensions) |
+| Command Palette | ✓ | ✗ | ✗ |
+| Emergency sheet | ✓ | ✗ | ✗ |
+| PEM / SSH inspector | ✓ | ✗ | ✗ |
+| Secret templates | ✓ | ✗ | ✗ |
+| Auto-Type (Linux) | ✓ | ✓ | ✗ |
+| System tray lock | ✓ | ✓ | ✓ |
+| Read-only mode | ✓ | ✗ | ✗ |
+| Flatpak + AppImage | ✓ | ✓ | ✓ |
+| Open source | GPL-3.0 | GPL-2.0 | GPL-3.0 |
 
 ---
 
@@ -230,7 +256,7 @@ Demo file written to `artifacts/visual/sample.kdbx` (password: `demo-pass-123`).
 | `Ctrl+S` | Save |
 | `Ctrl+L` | Lock all databases |
 | `Ctrl+Shift+V` / `Ctrl+Alt+A` | Auto-Type selected entry |
-| `Delete` | Move selected entry to Recycle Bin |
+| `Shift+Delete` | Move selected entry to Recycle Bin |
 | `F2` | Rename selected group |
 | `Ctrl+Q` | Quit (standard) |
 
@@ -246,22 +272,22 @@ Preferences are stored under XDG config:
 
 Notable settings:
 
-| Key | Meaning |
-|-----|---------|
-| `theme` | `dark` \| `light` \| `system` |
-| `ui_density` | `compact` \| `comfortable` |
-| `clipboard_timeout_ms` | Clipboard auto-clear delay |
-| `auto_lock_timeout_ms` | Idle lock delay |
-| `auto_lock_enabled` | Enable / disable idle lock |
-| `clear_clipboard_on_lock` | Wipe clipboard when locking |
-| `minimize_on_lock` | Minimize (and tray-hide) on lock |
-| `hibp_enabled` | HIBP k-anonymity checks during audit |
-| `autotype_sequence` | Auto-Type token sequence |
-| `check_updates_on_start` | GitHub Releases update check |
-| `start_minimized_to_tray` | Start hidden in the system tray |
-| `read_only` | Open databases in read-only mode |
-| `window_geometry` / `window_state` | Saved layout (base64) |
-| `recent_databases` | Recent vault paths |
+| Key | Meaning | Default |
+|-----|---------|---------|
+| `theme` | `dark` \| `light` \| `system` | `dark` |
+| `ui_density` | `compact` \| `comfortable` | `compact` |
+| `clipboard_timeout_ms` | Clipboard auto-clear delay (min: 1000) | `15000` |
+| `auto_lock_timeout_ms` | Idle lock delay (min: 0 = disabled) | `300000` |
+| `auto_lock_enabled` | Enable / disable idle lock | `true` |
+| `clear_clipboard_on_lock` | Wipe clipboard when locking | `true` |
+| `minimize_on_lock` | Minimize (and tray-hide) on lock | `false` |
+| `hibp_enabled` | HIBP k-anonymity checks during audit | `false` |
+| `autotype_sequence` | Auto-Type token sequence | `{USERNAME}{TAB}{PASSWORD}{ENTER}` |
+| `check_updates_on_start` | GitHub Releases update check | `true` |
+| `start_minimized_to_tray` | Start hidden in the system tray | `false` |
+| `read_only` | Open databases in read-only mode | `false` |
+| `window_geometry` / `window_state` | Saved layout (base64) | `""` |
+| `recent_databases` | Recent vault paths | `[]` |
 
 Use **Tools → Settings…** for the interactive dialog.
 
@@ -273,8 +299,8 @@ Use **Tools → Settings…** for the interactive dialog.
 UI            MainWindow, dialogs, widgets, theme (QSS + tokens), icons
 Application   DatabaseManager, SearchEngine, AuditEngine, PluginManager, CSV I/O, templates
 Core          pykeepass wrapper, crypto helpers, cache, TOTP, PEM, password generator
-Security      Settings store, clipboard guard, auto-lock, read-only flag
-Plugins       SDK, marketplace catalog, built-in plugins
+Security      Settings store (atomic write, chmod 0600), clipboard guard, auto-lock
+Plugins       SDK (isolated callbacks), marketplace catalog, built-in plugins
 ```
 
 Source layout:
@@ -365,9 +391,14 @@ Tag a version (`v1.0.0`, …) to trigger GitHub Actions release artifacts.
 ## Security notes
 
 - Secrets remain **local**; there is no built-in cloud sync.
+- All clipboard operations use **ClipboardGuard** with auto-clear timeout.
+- **Atomic settings write** with `chmod 0600` prevents corruption and unauthorized access.
 - Clipboard and auto-lock reduce shoulder-surfing and idle exposure — tune timeouts to your threat model.
 - CSV export writes passwords and OTP material in **plain text**; treat export files as highly sensitive.
 - Master password handling uses best-effort memory wipe; Python runtimes cannot guarantee zero residual copies.
+- Plugin callbacks are **isolated** — one plugin error does not affect others.
+- Favicon downloads are **size-limited** (64 KiB) and fetched asynchronously.
+- Input validation on all settings values prevents malformed configuration.
 - Prefer a strong master password, optional key file, and regular encrypted backups of your `.kdbx` files.
 
 ---

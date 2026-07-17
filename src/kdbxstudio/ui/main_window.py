@@ -180,6 +180,7 @@ class MainWindow(QMainWindow):
         workspace = QWidget()
         center_layout = QVBoxLayout(workspace)
         self._workspace_layout = center_layout
+        self._workspace_widget = workspace
         self._db_tabs.setMaximumHeight(28)
         center_layout.addWidget(self._db_tabs)
         center_layout.addWidget(self._search_box)
@@ -448,7 +449,7 @@ class MainWindow(QMainWindow):
         entry_menu.addAction(template_action)
 
         delete_action = QAction("Move to Recycle Bin", self)
-        delete_action.setShortcut(QKeySequence(Qt.Key.Key_Delete))
+        delete_action.setShortcut(QKeySequence("Shift+Delete"))
         delete_action.triggered.connect(lambda: self.delete_entry(False))
         entry_menu.addAction(delete_action)
 
@@ -828,7 +829,7 @@ class MainWindow(QMainWindow):
         self._auto_lock.activity()
 
     def open_password_generator(self) -> None:
-        dialog = PasswordGeneratorDialog(self)
+        dialog = PasswordGeneratorDialog(self, clipboard_guard=self._clipboard)
         if dialog.exec() != PasswordGeneratorDialog.DialogCode.Accepted:
             return
         password = dialog.password()
@@ -1191,8 +1192,9 @@ class MainWindow(QMainWindow):
             return
         try:
             count = self._dbm.empty_recycle_bin()
+            label = "entry" if count == 1 else "entries"
             self.statusBar().showMessage(
-                f"Removed {count} recycled entr(y/ies)", 4000
+                f"Removed {count} recycled {label}", 4000
             )
             self._refresh_audit()
         except DatabaseError as exc:
@@ -1280,7 +1282,7 @@ class MainWindow(QMainWindow):
             return
         self._groups_dock.show()
         self._audit_dock.show()
-        self._stack.setCurrentIndex(1)
+        self._stack.setCurrentWidget(self._workspace_widget)
         name = self._dbm.display_name()
         self.setWindowTitle(f"KDBXStudio — {name}")
         groups = self._dbm.list_groups()
@@ -1327,11 +1329,21 @@ class MainWindow(QMainWindow):
 
     def _maybe_fetch_favicon(self, url: str) -> None:
         had_cache = cached_favicon(url) is not None
-        try:
-            path = fetch_favicon(url)
-        except Exception:
+        if had_cache or self._dbm.active is None:
             return
-        if path is None or had_cache or self._dbm.active is None:
+        from threading import Thread
+
+        def _fetch() -> None:
+            try:
+                fetch_favicon(url)
+            except Exception:
+                pass
+            QTimer.singleShot(0, self._on_favicon_fetched)
+
+        Thread(target=_fetch, daemon=True).start()
+
+    def _on_favicon_fetched(self) -> None:
+        if self._dbm.active is None:
             return
         group_uuid = self._group_tree.selected_group_uuid()
         if group_uuid:

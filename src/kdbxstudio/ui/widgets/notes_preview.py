@@ -40,6 +40,8 @@ def markdown_to_html(text: str) -> str:
 
     html = _MD_HEADING.sub(heading_sub, html)
     html = _MD_UL.sub(r"<li>\1</li>", html)
+    _list_pattern = r"(<li>.*?</li>(?:\s*<li>.*?</li>)*)"
+    html = re.sub(_list_pattern, r"<ul>\1</ul>", html, flags=re.DOTALL)
     html = html.replace("\n\n", "</p><p>")
     html = html.replace("\n", "<br>")
     return f"<p>{html}</p>"

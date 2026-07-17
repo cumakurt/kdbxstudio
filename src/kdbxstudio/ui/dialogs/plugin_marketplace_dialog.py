@@ -143,6 +143,8 @@ class PluginMarketplaceDialog(QDialog):
         try:
             if entry.id not in {p.name for p in self._manager.list_plugins()}:
                 self._install()
+                if entry.id not in {p.name for p in self._manager.list_plugins()}:
+                    return
             self._manager.activate(entry.id)
             self._status.setText(f"Activated {entry.name}")
             self._reload()

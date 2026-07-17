@@ -30,10 +30,12 @@ class ClipboardGuard(QObject):
     def copy(self, text: str, timeout_ms: int | None = None) -> None:
         self._set(text)
         self._timer.stop()
-        self._timer.start(self._timeout_ms if timeout_ms is None else timeout_ms)
+        effective = timeout_ms if timeout_ms is not None else self._timeout_ms
+        if effective > 0:
+            self._timer.start(effective)
 
     def set_timeout(self, timeout_ms: int) -> None:
-        self._timeout_ms = timeout_ms
+        self._timeout_ms = max(0, timeout_ms)
 
     def cancel(self) -> None:
         self._timer.stop()
@@ -66,8 +68,11 @@ class AutoLockController(QObject):
             self._timer.stop()
 
     def set_timeout(self, idle_timeout_ms: int) -> None:
-        self._idle_timeout_ms = idle_timeout_ms
-        self.activity()
+        self._idle_timeout_ms = max(0, idle_timeout_ms)
+        if self._enabled and self._idle_timeout_ms > 0:
+            self.activity()
+        else:
+            self._timer.stop()
 
     def activity(self) -> None:
         if not self._enabled:

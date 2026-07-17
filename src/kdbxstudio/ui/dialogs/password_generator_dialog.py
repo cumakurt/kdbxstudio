@@ -22,11 +22,17 @@ from kdbxstudio.core.password_generator import (
     estimate_entropy_bits,
     generate_password,
 )
+from kdbxstudio.security.session import ClipboardGuard
 
 
 class PasswordGeneratorDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        clipboard_guard: ClipboardGuard | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._clipboard_guard = clipboard_guard
         self.setWindowTitle("Password Generator")
         self.setModal(True)
         self.resize(420, 280)
@@ -120,8 +126,11 @@ class PasswordGeneratorDialog(QDialog):
             self._entropy.setText(str(exc))
 
     def _copy(self) -> None:
-        from PySide6.QtGui import QGuiApplication
+        if self._clipboard_guard is not None:
+            self._clipboard_guard.copy(self._output.text())
+        else:
+            from PySide6.QtGui import QGuiApplication
 
-        clipboard = QGuiApplication.clipboard()
-        if clipboard is not None:
-            clipboard.setText(self._output.text())
+            clipboard = QGuiApplication.clipboard()
+            if clipboard is not None:
+                clipboard.setText(self._output.text())
