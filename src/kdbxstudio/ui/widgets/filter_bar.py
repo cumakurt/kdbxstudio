@@ -48,6 +48,7 @@ class FilterBarWidget(QWidget):
         self._empty = _chip("Empty")
         self._dupes = _chip("Dupes")
         self._expired = _chip("Expired")
+        self._expiring = _chip("Expiring")
         self._recycle = _chip("Recycle")
 
         self._chips = (
@@ -57,6 +58,7 @@ class FilterBarWidget(QWidget):
             self._empty,
             self._dupes,
             self._expired,
+            self._expiring,
             self._recycle,
         )
         for chip, tip in zip(
@@ -68,6 +70,7 @@ class FilterBarWidget(QWidget):
                 "Empty passwords",
                 "Duplicates",
                 "Past expiry date",
+                "Expiring within 30 days",
                 "Recycle Bin only",
             ),
             strict=True,
@@ -111,6 +114,7 @@ class FilterBarWidget(QWidget):
             empty_password=self._empty.isChecked(),
             duplicates_only=self._dupes.isChecked(),
             expired_only=self._expired.isChecked(),
+            expiring_soon_only=self._expiring.isChecked(),
         )
 
     def _emit(self) -> None:

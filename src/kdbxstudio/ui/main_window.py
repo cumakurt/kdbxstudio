@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+import shutil
 from base64 import b64decode, b64encode
 from datetime import datetime
 from pathlib import Path
+from threading import Thread
 
-from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer, QUrl
+from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -109,6 +111,8 @@ from kdbxstudio.ui.widgets.totp_widget import TotpWidget
 
 
 class MainWindow(QMainWindow):
+    _favicon_ready = Signal()
+
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(f"KDBXStudio {__version__}")
@@ -163,6 +167,7 @@ class MainWindow(QMainWindow):
         self._pem = PemInspectorWidget()
         self._totp = TotpWidget()
         self._audit_dash = AuditDashboardWidget()
+        self._favicon_ready.connect(self._on_favicon_fetched)
         self._search_box = QLineEdit()
         self._search_box.setPlaceholderText("Search entries…")
         self._search_box.setAccessibleName("Universal search")
@@ -216,6 +221,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Ready")
 
         self._group_tree.group_selected.connect(self._on_group_selected)
+        self._group_tree.entry_drop_requested.connect(self._on_entry_dropped_on_group)
         self._entry_list.entry_selected.connect(self._on_entry_selected)
         self._entry_detail.save_requested.connect(self._on_save_entry)
         self._entry_detail.copy_password_requested.connect(self._on_copy_password)
@@ -757,7 +763,7 @@ class MainWindow(QMainWindow):
                 keyfile=dialog.keyfile(),
                 clear_keyfile=dialog.clear_keyfile(),
             )
-            self._dbm.save()
+            self._save_with_backup()
             self.statusBar().showMessage(
                 "Master credentials updated and database saved", 5000
             )
@@ -1114,36 +1120,54 @@ class MainWindow(QMainWindow):
         if self._dbm.active is None:
             QMessageBox.information(self, "Save", "No database is open.")
             return
-        db = self._dbm.active
-        if db.path and db.path.is_file():
-            backup_dir = db.path.parent / ".kdbxstudio-backups"
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            from datetime import datetime
-
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = backup_dir / f"{db.path.stem}_{timestamp}{db.path.suffix}"
-            try:
-                import shutil
-
-                shutil.copy2(db.path, backup_path)
-                self._cleanup_old_backups(backup_dir, max_backups=10)
-            except OSError:
-                pass
         try:
-            self._dbm.save()
+            self._save_with_backup()
             self.statusBar().showMessage("Database saved", 3000)
         except DatabaseError as exc:
             QMessageBox.critical(self, "Save failed", str(exc))
         self._auto_lock.activity()
 
-    def _cleanup_old_backups(self, backup_dir: Path, max_backups: int = 10) -> None:
+    def _backup_session(self, session_id: str) -> None:
+        """Copy the on-disk vault before overwrite. Best-effort; never blocks save."""
+        path = Path(session_id)
+        if not path.is_file():
+            return
+        backup_dir = path.parent / ".kdbxstudio-backups"
         try:
-            backups = sorted(backup_dir.glob("*.kdbx"), key=lambda p: p.stat().st_mtime)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = backup_dir / f"{path.stem}_{timestamp}{path.suffix}"
+            shutil.copy2(path, backup_path)
+            self._cleanup_old_backups(backup_dir, stem=path.stem, max_backups=10)
+        except OSError:
+            self.statusBar().showMessage(
+                "Warning: could not write database backup", 5000
+            )
+
+    def _cleanup_old_backups(
+        self, backup_dir: Path, *, stem: str, max_backups: int = 10
+    ) -> None:
+        try:
+            pattern = f"{stem}_*.kdbx"
+            backups = sorted(
+                backup_dir.glob(pattern), key=lambda p: p.stat().st_mtime
+            )
             while len(backups) > max_backups:
                 oldest = backups.pop(0)
                 oldest.unlink(missing_ok=True)
         except OSError:
             pass
+
+    def _save_with_backup(self, session_id: str | None = None) -> None:
+        target = session_id or self._dbm.active_id
+        if target:
+            self._backup_session(target)
+        self._dbm.save(session_id)
+
+    def _save_all_with_backup(self) -> list[str]:
+        for session_id in self._dbm.dirty_session_ids():
+            self._backup_session(session_id)
+        return self._dbm.save_all()
 
     def close_database(self) -> None:
         if self._dbm.active is not None and self._dbm.active.is_dirty:
@@ -1159,7 +1183,7 @@ class MainWindow(QMainWindow):
                 return
             if answer == QMessageBox.StandardButton.Save:
                 try:
-                    self._dbm.save()
+                    self._save_with_backup()
                 except DatabaseError as exc:
                     QMessageBox.critical(self, "Save failed", str(exc))
                     return
@@ -1410,14 +1434,13 @@ class MainWindow(QMainWindow):
         had_cache = cached_favicon(url) is not None
         if had_cache or self._dbm.active is None:
             return
-        from threading import Thread
 
         def _fetch() -> None:
             try:
                 fetch_favicon(url)
             except Exception:
                 pass
-            QTimer.singleShot(0, self._on_favicon_fetched)
+            self._favicon_ready.emit()
 
         Thread(target=_fetch, daemon=True).start()
 
@@ -1525,7 +1548,7 @@ class MainWindow(QMainWindow):
                 return
             if answer == QMessageBox.StandardButton.Save:
                 try:
-                    self._dbm.save(session_id)
+                    self._save_with_backup(session_id)
                 except DatabaseError as exc:
                     QMessageBox.critical(self, "Save failed", str(exc))
                     return
@@ -1603,7 +1626,7 @@ class MainWindow(QMainWindow):
             return
         if self._dbm.dirty_session_ids():
             try:
-                self._dbm.save_all()
+                self._save_all_with_backup()
             except DatabaseError as exc:
                 QMessageBox.critical(
                     self,
@@ -1712,12 +1735,27 @@ class MainWindow(QMainWindow):
         target = next((g for g in groups if g.path == choice), None)
         if target is None:
             return
+        self._move_entry_to_group(uuid, target.uuid)
+
+    def _on_entry_dropped_on_group(self, entry_uuid: str, group_uuid: str) -> None:
+        if not self._ensure_writable():
+            return
+        self._move_entry_to_group(entry_uuid, group_uuid)
+
+    def _move_entry_to_group(self, entry_uuid: str, group_uuid: str) -> None:
+        if self._dbm.active is None:
+            return
         try:
-            entry = self._dbm.move_entry(uuid, target.uuid)
-            self._on_group_selected(target.uuid)
+            entry = self._dbm.move_entry(entry_uuid, group_uuid)
+            self._on_group_selected(group_uuid)
             self._show_entry(entry.uuid)
+            group = next(
+                (g for g in self._dbm.list_groups() if g.uuid == group_uuid),
+                None,
+            )
+            path = group.path if group is not None else group_uuid
             self.statusBar().showMessage(
-                f"Moved '{entry.title}' to {target.path}", 4000
+                f"Moved '{entry.title}' to {path}", 4000
             )
         except DatabaseError as exc:
             QMessageBox.critical(self, "Move failed", str(exc))
@@ -1979,7 +2017,7 @@ class MainWindow(QMainWindow):
                 return
             if answer == QMessageBox.StandardButton.Save:
                 try:
-                    self._dbm.save_all()
+                    self._save_all_with_backup()
                 except DatabaseError as exc:
                     QMessageBox.critical(self, "Save failed", str(exc))
                     self._quitting = False

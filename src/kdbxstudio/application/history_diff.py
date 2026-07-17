@@ -22,6 +22,23 @@ def _mask(value: str, *, secret: bool) -> str:
     return "••••••••"
 
 
+def _tags_text(item: HistoryView | EntryView) -> str:
+    return " ".join(sorted(item.tags)) if item.tags else ""
+
+
+def _custom_text(item: HistoryView | EntryView) -> str:
+    props = item.custom_properties or {}
+    return " ".join(sorted(f"{k}={v}" for k, v in props.items()))
+
+
+def _expiry_text(item: HistoryView | EntryView) -> str:
+    if item.expires and item.expiry_time:
+        return item.expiry_time
+    if item.expires:
+        return "expires"
+    return item.expiry_time or ""
+
+
 def diff_history(
     before: HistoryView | EntryView,
     after: HistoryView | EntryView,
@@ -35,23 +52,10 @@ def diff_history(
         ("url", before.url, after.url, False),
         ("notes", before.notes, after.notes, False),
         ("otp", before.otp, after.otp, True),
+        ("tags", _tags_text(before), _tags_text(after), False),
+        ("custom", _custom_text(before), _custom_text(after), False),
+        ("expiry", _expiry_text(before), _expiry_text(after), False),
     ]
-    if isinstance(before, EntryView) and isinstance(after, EntryView):
-        before_tags = sorted(before.tags) if before.tags else []
-        after_tags = sorted(after.tags) if after.tags else []
-        before_custom = sorted(
-            f"{k}={v}" for k, v in (before.custom_properties or {}).items()
-        )
-        after_custom = sorted(
-            f"{k}={v}" for k, v in (after.custom_properties or {}).items()
-        )
-        before_expiry = before.expiry_time or ""
-        after_expiry = after.expiry_time or ""
-        pairs.extend([
-            ("tags", " ".join(before_tags), " ".join(after_tags), False),
-            ("custom", " ".join(before_custom), " ".join(after_custom), False),
-            ("expiry", before_expiry, after_expiry, False),
-        ])
     diffs: list[FieldDiff] = []
     for name, left, right, secret in pairs:
         if (left or "") == (right or ""):

@@ -58,7 +58,7 @@ PRESETS: list[PasswordPreset] = [
         ),
     ),
     PasswordPreset(
-        name="Passphrase-like",
+        name="Long alphanumeric",
         description="32 chars, lowercase + digits only",
         options=GeneratorOptions(
             length=32, uppercase=False, lowercase=True,

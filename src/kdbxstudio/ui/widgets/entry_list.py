@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QMimeData, QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
 from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_kind_icon
+
+ENTRY_MIME = "application/x-kdbxstudio-entry"
 
 
 class EntryListWidget(QTableWidget):
@@ -35,7 +37,20 @@ class EntryListWidget(QTableWidget):
         self.itemSelectionChanged.connect(self._on_selection)
         self.setSortingEnabled(True)
         self.sortByColumn(0, Qt.SortOrder.AscendingOrder)
-        self.horizontalHeader().sectionClicked.connect(self._on_sort)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+
+    def mimeTypes(self) -> list[str]:
+        return [ENTRY_MIME, *super().mimeTypes()]
+
+    def mimeData(self, items: list[QTableWidgetItem]) -> QMimeData:  # type: ignore[override]
+        data = super().mimeData(items)
+        if data is None:
+            data = QMimeData()
+        uuid = self.selected_entry_uuid()
+        if uuid:
+            data.setData(ENTRY_MIME, uuid.encode("utf-8"))
+        return data
 
     def set_entries(self, entries: list[EntryView]) -> None:
         self.setRowCount(0)
@@ -75,6 +90,3 @@ class EntryListWidget(QTableWidget):
         uuid = self.selected_entry_uuid()
         if uuid:
             self.entry_selected.emit(uuid)
-
-    def _on_sort(self, logical_index: int) -> None:
-        pass

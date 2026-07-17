@@ -75,7 +75,7 @@ class AutoLockController(QObject):
             self._timer.stop()
 
     def activity(self) -> None:
-        if not self._enabled:
+        if not self._enabled or self._idle_timeout_ms <= 0:
             return
         self._timer.stop()
         self._timer.start(self._idle_timeout_ms)

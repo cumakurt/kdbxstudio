@@ -52,6 +52,7 @@ class EntryFilter:
     empty_password: bool = False
     duplicates_only: bool = False
     expired_only: bool = False
+    expiring_soon_only: bool = False
     min_password_length: int | None = None
 
     def is_empty(self) -> bool:
@@ -66,6 +67,7 @@ class EntryFilter:
             and not self.empty_password
             and not self.duplicates_only
             and not self.expired_only
+            and not self.expiring_soon_only
             and self.min_password_length is None
         )
 
@@ -190,6 +192,7 @@ class SearchEngine:
                     empty_password=filt.empty_password,
                     duplicates_only=filt.duplicates_only,
                     expired_only=filt.expired_only,
+                    expiring_soon_only=filt.expiring_soon_only,
                     min_password_length=filt.min_password_length,
                 )
 
@@ -338,6 +341,21 @@ class SearchEngine:
             from kdbxstudio.application.expiry import is_expired
 
             result = [e for e in result if is_expired(e)]
+
+        if filt.expiring_soon_only:
+            from datetime import UTC, datetime, timedelta
+
+            from kdbxstudio.application.expiry import parse_expiry
+
+            now = datetime.now(UTC)
+            soon = now + timedelta(days=30)
+            result = [
+                e
+                for e in result
+                if (exp := parse_expiry(e)) is not None
+                and exp > now
+                and exp <= soon
+            ]
 
         if filt.min_password_length is not None:
             result = [

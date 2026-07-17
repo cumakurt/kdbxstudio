@@ -32,9 +32,11 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     if not raw:
         return SecuritySettings()
     try:
-        clipboard_ms = max(1000, int(
+        raw_clipboard = int(
             raw.get("clipboard_timeout_ms", SecuritySettings.clipboard_timeout_ms)
-        ))
+        )
+        # 0 disables auto-clear; otherwise enforce a sane minimum.
+        clipboard_ms = 0 if raw_clipboard <= 0 else max(1000, raw_clipboard)
     except (TypeError, ValueError):
         clipboard_ms = SecuritySettings.clipboard_timeout_ms
     try:
@@ -102,7 +104,11 @@ def save_settings(
     )
     payload = {
         "version": _SETTINGS_VERSION,
-        "clipboard_timeout_ms": max(0, settings.clipboard_timeout_ms),
+        "clipboard_timeout_ms": (
+            0
+            if settings.clipboard_timeout_ms <= 0
+            else max(1000, settings.clipboard_timeout_ms)
+        ),
         "auto_lock_timeout_ms": max(0, settings.auto_lock_timeout_ms),
         "auto_lock_enabled": settings.auto_lock_enabled,
         "clear_clipboard_on_lock": settings.clear_clipboard_on_lock,

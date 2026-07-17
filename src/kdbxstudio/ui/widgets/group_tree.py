@@ -3,22 +3,26 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
+from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
+from PySide6.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
 
 from kdbxstudio.core.database import GroupView
+from kdbxstudio.ui.widgets.entry_list import ENTRY_MIME
 
 
 class GroupTreeWidget(QTreeWidget):
     """Hierarchical group browser."""
 
     group_selected = Signal(str)
+    entry_drop_requested = Signal(str, str)  # entry_uuid, group_uuid
 
     def __init__(self, parent: QTreeWidget | None = None) -> None:
         super().__init__(parent)
         self.setHeaderLabel("Groups")
         self.setUniformRowHeights(True)
-        self.setDragDropMode(QTreeWidget.DragDropMode.DragDrop)
-        self.setDefaultDropAction(Qt.DropAction.MoveAction)
+        # Accept entry drops only — do not rearrange groups in the tree.
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
         self.itemSelectionChanged.connect(self._on_selection)
 
     def set_groups(self, groups: list[GroupView], root_uuid: str) -> None:
@@ -61,6 +65,38 @@ class GroupTreeWidget(QTreeWidget):
             return None
         value = items[0].data(0, Qt.ItemDataRole.UserRole)
         return str(value) if value else None
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
+        if event.mimeData().hasFormat(ENTRY_MIME):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:  # noqa: N802
+        if event.mimeData().hasFormat(ENTRY_MIME):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        if not event.mimeData().hasFormat(ENTRY_MIME):
+            event.ignore()
+            return
+        raw = bytes(event.mimeData().data(ENTRY_MIME).data()).decode("utf-8")
+        entry_uuid = raw.strip()
+        if not entry_uuid:
+            event.ignore()
+            return
+        item = self.itemAt(event.position().toPoint())
+        if item is None:
+            event.ignore()
+            return
+        group_uuid = item.data(0, Qt.ItemDataRole.UserRole)
+        if not group_uuid:
+            event.ignore()
+            return
+        self.entry_drop_requested.emit(entry_uuid, str(group_uuid))
+        event.acceptProposedAction()
 
     def _on_selection(self) -> None:
         uuid = self.selected_group_uuid()

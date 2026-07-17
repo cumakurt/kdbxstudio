@@ -81,6 +81,7 @@ search, command palette, certificates tab, password generator, and a sample
 - Dockable **Groups** tree and **Password Health** panel
 - Entry list + detail split view (resizable), optional **favicon** icons (async fetch)
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
+- **Expiry countdown** — visual indicator showing days until entry expires
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
 - Compact / comfortable density, light / dark / system themes
 - System **tray** (show / lock / quit), minimize-on-lock
@@ -90,12 +91,13 @@ search, command palette, certificates tab, password generator, and a sample
 - Title, username, password, URL, notes, custom fields, **tags**, **expiry**
 - **Password strength meter** — real-time visual feedback (Very Weak → Strong)
 - **Auto-Type** on Linux (`xdotool` / `ydotool` / `wtype`) with configurable sequence
-- **Move entry** between groups (drag & drop supported)
+- **Move entry** between groups (dialog or drag entry onto a group in the tree)
 - **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
 - Field-leading icons; action icons for Show / Copy / Generate / Save
 - **Markdown / JSON** notes preview (valid HTML with `<ul>` lists)
 - **Secret templates**: Login, API Key, SSH, Certificate, Secure Note, Bank Card
-- **Password generator** with entropy estimate, secure clipboard copy, and presets (Strong, PIN, Memorable, Complex, Short)
+- **Password generator** with entropy estimate, secure clipboard copy, and presets
+  (Strong, PIN, Memorable, Complex, Long alphanumeric, Short)
 - **TOTP** live codes and countdown (6 and 8 digit support, timer only when active)
 - Entry **history** list, restore, and field diff (including tags, custom fields, expiry)
 - Attachments (add / delete / **save as** / **drag-and-drop**) with text / PDF preview
@@ -104,9 +106,12 @@ search, command palette, certificates tab, password generator, and a sample
 ### Search & audit
 
 - Inverted-index **full-text search** (includes tags)
-- Filter chips: URL, custom/OTP, weak / empty / duplicates, **expired**, Recycle Bin, tag/group text
+- Filter chips: URL, custom/OTP, weak / empty / duplicates, **expired**, **expiring soon**, Recycle Bin, tag/group text
 - **Password Health** audit: empty, weak, low entropy, duplicates, missing / reused usernames,
   **expired / expiring soon**, optional **HIBP** (k-anonymity)
+- **Health score** percentage with color-coded progress bar
+- **Expiry warnings** — visual alerts for expired and expiring entries
+- **Database statistics** — total entries, groups, URLs, TOTP, tags, attachments, custom fields
 - Double-click a finding to jump to the entry
 - Plugin hook `search.rank` for ranking tweaks
 - Command Palette jumps to entries and common actions
@@ -157,7 +162,7 @@ search, command palette, certificates tab, password generator, and a sample
 | Read-only mode | ✓ | ✗ | ✗ |
 | Database backup on save | ✓ | ✗ | ✗ |
 | Entry sorting | ✓ | ✓ | ✓ |
-| Drag & drop entries | ✓ | ✗ | ✗ |
+| Drag entry onto group | ✓ | ✗ | ✗ |
 | Flatpak + AppImage | ✓ | ✓ | ✓ |
 | Open source | GPL-3.0 | GPL-2.0 | GPL-3.0 |
 
@@ -287,7 +292,7 @@ Notable settings:
 |-----|---------|---------|
 | `theme` | `dark` \| `light` \| `system` | `dark` |
 | `ui_density` | `compact` \| `comfortable` | `compact` |
-| `clipboard_timeout_ms` | Clipboard auto-clear delay (min: 1000) | `15000` |
+| `clipboard_timeout_ms` | Clipboard auto-clear delay (`0` = never clear; otherwise min 1000) | `15000` |
 | `auto_lock_timeout_ms` | Idle lock delay (min: 0 = disabled) | `300000` |
 | `auto_lock_enabled` | Enable / disable idle lock | `true` |
 | `clear_clipboard_on_lock` | Wipe clipboard when locking | `true` |
@@ -404,8 +409,11 @@ Tag a version (`v1.0.0`, …) to trigger GitHub Actions release artifacts.
 - Secrets remain **local**; there is no built-in cloud sync.
 - All clipboard operations use **ClipboardGuard** with auto-clear timeout.
 - **Atomic settings write** with `chmod 0600` prevents corruption and unauthorized access.
-- **Automatic database backup** before each save (`.kdbxstudio-backups/`, max 10 kept).
+- **Automatic database backup** before every save path (manual save, auto-lock, quit,
+  tab close, credential change). Backups live under `.kdbxstudio-backups/` next to the
+  vault; up to 10 files are kept **per database stem**.
 - Clipboard and auto-lock reduce shoulder-surfing and idle exposure — tune timeouts to your threat model.
+  Set `clipboard_timeout_ms` to `0` to disable clipboard auto-clear.
 - CSV export writes passwords and OTP material in **plain text**; treat export files as highly sensitive.
 - Master password handling uses best-effort memory wipe; Python runtimes cannot guarantee zero residual copies.
 - Plugin callbacks are **isolated** — one plugin error does not affect others.

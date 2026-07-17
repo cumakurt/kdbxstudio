@@ -33,6 +33,12 @@ class AuditReport:
     expired: int = 0
     expiring_soon: int = 0
     pwned: int = 0
+    total_groups: int = 0
+    entries_with_attachments: int = 0
+    entries_with_otp: int = 0
+    entries_with_url: int = 0
+    entries_with_tags: int = 0
+    entries_with_custom_fields: int = 0
 
     @property
     def severity_counts(self) -> dict[str, int]:
@@ -42,6 +48,14 @@ class AuditReport:
             "warning": int(counts.get("warning", 0)),
             "info": int(counts.get("info", 0)),
         }
+
+    @property
+    def health_score(self) -> int:
+        if self.total_entries == 0:
+            return 100
+        good = self.total_entries - self.empty_passwords - self.weak_passwords
+        good = max(0, good)
+        return min(100, int(good * 100 / self.total_entries))
 
 
 def _charset_size(password: str) -> int:
@@ -91,13 +105,37 @@ class AuditEngine:
         expired = 0
         expiring_soon = 0
         pwned = 0
+        with_attachments = 0
+        with_otp = 0
+        with_url = 0
+        with_tags = 0
+        with_custom = 0
 
         password_map: dict[str, list[EntryView]] = {}
         username_map: dict[str, list[EntryView]] = {}
         now = datetime.now(UTC)
         soon = now + timedelta(days=self.EXPIRING_SOON_DAYS)
 
+        try:
+            group_count = len(self._dbm.list_groups())
+        except Exception:
+            group_count = 0
+
         for entry in entries:
+            if (entry.url or "").strip():
+                with_url += 1
+            if entry.tags:
+                with_tags += 1
+            if entry.custom_properties:
+                with_custom += 1
+            if entry.otp:
+                with_otp += 1
+            try:
+                attachments = self._dbm.list_attachments(entry.uuid)
+                if attachments:
+                    with_attachments += 1
+            except Exception:
+                pass
             username = (entry.username or "").strip()
             if not username:
                 missing_usernames += 1
@@ -278,4 +316,10 @@ class AuditEngine:
             expired=expired,
             expiring_soon=expiring_soon,
             pwned=pwned,
+            total_groups=group_count,
+            entries_with_attachments=with_attachments,
+            entries_with_otp=with_otp,
+            entries_with_url=with_url,
+            entries_with_tags=with_tags,
+            entries_with_custom_fields=with_custom,
         )

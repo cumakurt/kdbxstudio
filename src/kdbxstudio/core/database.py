@@ -68,6 +68,10 @@ class HistoryView:
     notes: str
     modified: str
     otp: str = ""
+    tags: tuple[str, ...] = ()
+    custom_properties: dict[str, str] = field(default_factory=dict)
+    expires: bool = False
+    expiry_time: str = ""
 
 
 @dataclass(frozen=True)
@@ -418,6 +422,20 @@ class KdbxDatabase:
             mtime = getattr(item, "mtime", None)
             if mtime is not None:
                 modified = str(mtime)
+            tags_raw = getattr(item, "tags", None) or []
+            tags = tuple(str(t).strip() for t in tags_raw if str(t).strip())
+            props = {
+                str(k): str(v)
+                for k, v in dict(getattr(item, "custom_properties", None) or {}).items()
+            }
+            expiry = ""
+            expires = bool(getattr(item, "expires", False))
+            expiry_time = getattr(item, "expiry_time", None)
+            if expiry_time is not None:
+                try:
+                    expiry = expiry_time.isoformat()
+                except Exception:
+                    expiry = str(expiry_time)
             result.append(
                 HistoryView(
                     index=index,
@@ -428,6 +446,10 @@ class KdbxDatabase:
                     notes=item.notes or "",
                     modified=modified,
                     otp=item.otp or "",
+                    tags=tags,
+                    custom_properties=props,
+                    expires=expires,
+                    expiry_time=expiry,
                 )
             )
         return result

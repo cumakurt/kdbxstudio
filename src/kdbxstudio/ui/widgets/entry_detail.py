@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import UTC, datetime
 
 from PySide6.QtCore import QDate, QSize, Qt, Signal
 from PySide6.QtGui import QAction
@@ -50,10 +51,10 @@ def _estimate_password_strength(password: str) -> tuple[int, str]:
         score += 20
     elif length >= 6:
         score += 10
-    if length >= 12:
-        score += 15
-    elif length >= 16:
+    if length >= 16:
         score += 20
+    elif length >= 12:
+        score += 15
     if re.search(r"[a-z]", password):
         score += 10
     if re.search(r"[A-Z]", password):
@@ -138,6 +139,10 @@ class EntryDetailWidget(QWidget):
         self._expiry_date.setEnabled(False)
         self._expires.toggled.connect(self._expiry_date.setEnabled)
 
+        self._expiry_countdown = QLabel("")
+        self._expiry_countdown.setWordWrap(True)
+        self._expiry_countdown.setVisible(False)
+
         expiry_row = QHBoxLayout()
         expiry_row.addWidget(self._expires)
         expiry_row.addWidget(self._expiry_date, stretch=1)
@@ -212,6 +217,7 @@ class EntryDetailWidget(QWidget):
         form.addRow("URL", self._url)
         form.addRow("Tags", self._tags)
         form.addRow("Expiry", expiry_row)
+        form.addRow("", self._expiry_countdown)
         form.addRow("Notes", self._notes)
         form.addRow("Custom fields", self._custom)
         form.addRow("", prop_btns)
@@ -255,6 +261,7 @@ class EntryDetailWidget(QWidget):
         self._url.clear()
         self._tags.clear()
         self._expires.setChecked(False)
+        self._expiry_countdown.setVisible(False)
         self._title.blockSignals(False)
         self._url.blockSignals(False)
         self._username.blockSignals(False)
@@ -291,7 +298,59 @@ class EntryDetailWidget(QWidget):
             custom_properties=entry.custom_properties,
         )
         self._apply_kind_icons(kind)
+        self._update_expiry_countdown(entry)
         self.set_enabled(True)
+
+    def _update_expiry_countdown(self, entry: EntryView) -> None:
+        if not entry.expires or not entry.expiry_time:
+            self._expiry_countdown.setVisible(False)
+            return
+        try:
+            text = entry.expiry_time.strip()
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            expiry_dt = datetime.fromisoformat(text)
+            if expiry_dt.tzinfo is None:
+                expiry_dt = expiry_dt.replace(tzinfo=UTC)
+            now = datetime.now(UTC)
+            delta = expiry_dt - now
+            days = delta.days
+            if days < 0:
+                self._expiry_countdown.setText(
+                    f"⚠ Expired {abs(days)} day(s) ago"
+                )
+                self._expiry_countdown.setStyleSheet(
+                    "color: #ef4444; font-weight: bold;"
+                )
+            elif days == 0:
+                self._expiry_countdown.setText("⚠ Expires today!")
+                self._expiry_countdown.setStyleSheet(
+                    "color: #f97316; font-weight: bold;"
+                )
+            elif days <= 7:
+                self._expiry_countdown.setText(
+                    f"⏰ Expires in {days} day(s)"
+                )
+                self._expiry_countdown.setStyleSheet(
+                    "color: #f97316; font-weight: bold;"
+                )
+            elif days <= 30:
+                self._expiry_countdown.setText(
+                    f"📅 Expires in {days} day(s)"
+                )
+                self._expiry_countdown.setStyleSheet(
+                    "color: #eab308;"
+                )
+            else:
+                self._expiry_countdown.setText(
+                    f"✓ Expires in {days} day(s)"
+                )
+                self._expiry_countdown.setStyleSheet(
+                    "color: #22c55e;"
+                )
+            self._expiry_countdown.setVisible(True)
+        except (ValueError, TypeError):
+            self._expiry_countdown.setVisible(False)
 
     def _refresh_field_icons(self) -> None:
         kind = detect_entry_kind(

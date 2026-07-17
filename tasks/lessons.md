@@ -15,3 +15,12 @@
 - Prefer `search(query, entry_filter=…)` or allow `search(EntryFilter)` — do not assume callers only pass strings.
 - Seed audit scenarios *before* recycling entries that contribute to reused-username / empty-password counts.
 - Attachment mutations must invalidate search/index caches, not only fire listeners.
+
+## Logic polish (2026-07-18)
+
+- Never advertise DnD without wiring drop → `move_entry`; prefer DropOnly on group tree.
+- Do not call Qt widget APIs from worker threads — use a Signal owned by the main-window QObject.
+- History UI diffs `HistoryView` pairs: put tags/custom/expiry on `HistoryView`, not only `EntryView`.
+- Centralize save+backup so auto-lock / quit / tab close cannot skip backups.
+- Clipboard `0` means disabled; AutoLock idle `0` must not arm a zero-delay timer.
+- Score helpers: put longer length thresholds before shorter `elif` branches.
