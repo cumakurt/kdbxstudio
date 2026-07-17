@@ -1,52 +1,61 @@
 #!/usr/bin/env bash
-# Scaffold an AppDir suitable for appimagetool / python-appimage.
-# This does not download AppImage tooling; it prepares the layout.
+# Prepare an AppDir for appimagetool.
+# Prefer the top-level installer (builds AppImage end-to-end):
+#   ./install.sh
+# This script only scaffolds the AppDir tree.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+if command -v readlink >/dev/null 2>&1; then
+  ROOT="$(readlink -f "$ROOT")"
+fi
 OUT="${1:-$ROOT/dist/KDBXStudio.AppDir}"
 
 rm -rf "$OUT"
-mkdir -p "$OUT/usr/bin" "$OUT/usr/lib" "$OUT/usr/share/applications" "$OUT/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$OUT/usr/bin" "$OUT/usr/share/applications" \
+         "$OUT/usr/share/icons/hicolor/256x256/apps"
 
-python3 -m venv "$OUT/usr/venv"
-# shellcheck disable=SC1091
-source "$OUT/usr/venv/bin/activate"
-pip install -U pip
-pip install "$ROOT"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+"$PYTHON_BIN" -m venv "$OUT/usr/venv"
+"$OUT/usr/venv/bin/python" -m pip install -q --upgrade pip setuptools wheel
+"$OUT/usr/venv/bin/python" -m pip install -q "$ROOT"
 
 cat > "$OUT/AppRun" <<'EOF'
 #!/usr/bin/env bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export PATH="$HERE/usr/venv/bin:$PATH"
+if [[ -d "$HERE/usr/venv/lib" ]]; then
+  _pyside="$(find "$HERE/usr/venv/lib" -type d -path '*/PySide6/Qt/plugins' 2>/dev/null | head -n1 || true)"
+  if [[ -n "$_pyside" ]]; then
+    export QT_PLUGIN_PATH="${_pyside}${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+  fi
+fi
 exec "$HERE/usr/venv/bin/python" -m kdbxstudio "$@"
 EOF
 chmod +x "$OUT/AppRun"
 
-# Icons / desktop metadata
-if [[ -f "$ROOT/assets/kdbxstudio.png" ]]; then
-  cp "$ROOT/assets/kdbxstudio.png" "$OUT/usr/share/icons/hicolor/256x256/apps/kdbxstudio.png"
-  cp "$ROOT/assets/kdbxstudio.png" "$OUT/kdbxstudio.png"
-else
-  printf '' > "$OUT/usr/share/icons/hicolor/256x256/apps/kdbxstudio.png"
-  ln -sf usr/share/icons/hicolor/256x256/apps/kdbxstudio.png "$OUT/kdbxstudio.png"
-fi
-
-if [[ -f "$ROOT/assets/kdbxstudio.desktop" ]]; then
-  cp "$ROOT/assets/kdbxstudio.desktop" "$OUT/usr/share/applications/kdbxstudio.desktop"
-else
-  cat > "$OUT/usr/share/applications/kdbxstudio.desktop" <<'EOF'
+cat > "$OUT/kdbxstudio.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=KDBXStudio
-Comment=Qt6 KDBX password manager
-Exec=kdbxstudio
+Comment=Modern Qt6 KDBX password manager
+Exec=AppRun %f
 Icon=kdbxstudio
-Categories=Utility;Security;
+Categories=Utility;Security;Qt;
 Terminal=false
+MimeType=application/x-keepass2;
+StartupNotify=true
 EOF
+cp -f "$OUT/kdbxstudio.desktop" "$OUT/usr/share/applications/kdbxstudio.desktop"
+
+if [[ -f "$ROOT/assets/icons/kdbxstudio-256.png" ]]; then
+  cp -f "$ROOT/assets/icons/kdbxstudio-256.png" "$OUT/kdbxstudio.png"
+elif [[ -f "$ROOT/assets/kdbxstudio.png" ]]; then
+  cp -f "$ROOT/assets/kdbxstudio.png" "$OUT/kdbxstudio.png"
+else
+  printf '' > "$OUT/kdbxstudio.png"
 fi
-ln -sf usr/share/applications/kdbxstudio.desktop "$OUT/kdbxstudio.desktop"
+cp -f "$OUT/kdbxstudio.png" "$OUT/usr/share/icons/hicolor/256x256/apps/kdbxstudio.png"
 
 cat > "$OUT/usr/bin/kdbxstudio" <<'EOF'
 #!/usr/bin/env bash
@@ -56,5 +65,4 @@ EOF
 chmod +x "$OUT/usr/bin/kdbxstudio"
 
 echo "AppDir prepared at: $OUT"
-echo "Next: install appimagetool and run:"
-echo "  appimagetool \"$OUT\" dist/KDBXStudio-x86_64.AppImage"
+echo "Next: ./install.sh   (or: appimagetool \"$OUT\" dist/KDBXStudio-x86_64.AppImage)"

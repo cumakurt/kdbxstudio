@@ -12,6 +12,7 @@ tools (TOTP, attachments, SSH/certificates) — without cloud lock-in.
 | **License** | [GPL-3.0-or-later](LICENSE) |
 | **Platform** | Linux (Qt6 / PySide6) |
 | **Python** | 3.11+ |
+| **Install** | `./install.sh` → AppImage |
 | **Repository** | [github.com/cumakurt/kdbxstudio](https://github.com/cumakurt/kdbxstudio) |
 
 ---
@@ -116,41 +117,66 @@ search, command palette, certificates tab, password generator, and a sample
 - Command Palette (`Ctrl+K` / `Ctrl+Shift+P`)
 - Persistable **window layout** (View → Save Layout / Reset Layout)
 - App icon, `.desktop` entry, AppStream metainfo
-- Flatpak and AppImage packaging scaffolds
+- One-shot **`install.sh`**: distro detection, deps, portable **AppImage**
+- Flatpak packaging scaffold
 
 ---
 
 ## Requirements
 
-- **OS:** Linux desktop
-- **Python:** 3.11 or newer
-- **Libraries:** `pykeepass`, `PySide6` (Qt6)
+- **OS:** Linux desktop (`x86_64` or `aarch64`)
+- **Python:** 3.11 or newer (for building / development)
+- **Libraries:** `pykeepass`, `PySide6` (Qt6) — pulled by `install.sh` / pip
+- **Network:** first AppImage build downloads `appimagetool` into `.cache/`
 - **Optional fonts:** Inter (system UI font if installed)
 
 ---
 
 ## Installation
 
-### From source (recommended for development)
+### Quick install (AppImage — recommended)
 
 ```bash
 git clone https://github.com/cumakurt/kdbxstudio.git
 cd kdbxstudio
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+chmod +x install.sh
+./install.sh
 ```
 
-### Run
+The installer detects your Linux distribution, installs any missing system
+packages quietly, builds a portable **AppImage** under `dist/`, and (unless
+`--no-desktop`) registers a desktop launcher plus `~/.local/bin/kdbxstudio`.
+
+| Option | Effect |
+|--------|--------|
+| `--appimage` | Build AppImage (default) |
+| `--venv` | Editable source install into `.venv` instead |
+| `--dev` | Dev extras (implies `--venv`) |
+| `--no-desktop` | Skip desktop entry, icons, and user launcher |
+| `--force` | Recreate AppDir / virtualenv from scratch |
+| `-y` / `--yes` | Non-interactive package manager installs |
+
+Detailed output is written under `.install-logs/` (gitignored).
+`appimagetool` is cached under `.cache/`.
+
+### Run (AppImage)
 
 ```bash
-python -m kdbxstudio
-# or, after install:
+./dist/KDBXStudio-x86_64.AppImage
+# or after desktop integration:
 kdbxstudio
 ```
 
-Pass a `.kdbx` path via your desktop environment / MIME association when using the
-installed `.desktop` file (`assets/kdbxstudio.desktop`).
+### From source (development)
+
+```bash
+./install.sh --dev
+# or manually:
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+python -m kdbxstudio
+```
 
 ---
 
@@ -246,11 +272,12 @@ src/kdbxstudio/
   security/            Preferences and session guards
   plugins/             SDK + builtins + marketplace
   ui/                  Qt shell, theme, dialogs, widgets
-assets/                Icons, desktop file, AppStream, fonts
-packaging/             Flatpak + AppImage
+assets/                Icons, desktop file, AppStream
+packaging/             Flatpak + AppImage helpers
 docs/                  UI specification
 tests/                 Unit and pytest-qt smoke tests
 scripts/               Visual smoke / sample DB helper
+install.sh             AppImage builder / optional venv installer
 ```
 
 ---
@@ -299,9 +326,10 @@ App ID: `com.kdbxstudio.KDBXStudio` (KDE Platform/SDK 6.7).
 ### AppImage
 
 ```bash
-chmod +x packaging/appimage/build_appdir.sh
-./packaging/appimage/build_appdir.sh
-appimagetool dist/KDBXStudio.AppDir dist/KDBXStudio-x86_64.AppImage
+./install.sh                 # default path
+# → dist/KDBXStudio-x86_64.AppImage   (or …-aarch64.AppImage)
+./install.sh --venv          # editable .venv instead of AppImage
+./install.sh --dev           # development extras (implies --venv)
 ```
 
 ### Releases
@@ -315,6 +343,7 @@ Tag a version (`v1.0.0`, …) to trigger GitHub Actions release artifacts.
 - [UI specification](docs/ui-specification.md) — colors, typography, layout, shortcuts
 - [COPYRIGHT](COPYRIGHT) — copyright and contact block
 - [Packaging](packaging/README.md) — Flatpak / AppImage notes
+- [`install.sh`](install.sh) — recommended AppImage installer
 
 ---
 

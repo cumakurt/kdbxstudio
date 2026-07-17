@@ -14,14 +14,21 @@ Requires KDE Platform/SDK 6.7 runtimes.
 
 ## AppImage
 
+Preferred (downloads `appimagetool` if needed and packs the image):
+
+```bash
+./install.sh
+# → dist/KDBXStudio-x86_64.AppImage
+```
+
+AppDir-only scaffold:
+
 ```bash
 chmod +x packaging/appimage/build_appdir.sh
 ./packaging/appimage/build_appdir.sh
-# then, with appimagetool on PATH:
-appimagetool dist/KDBXStudio.AppDir dist/KDBXStudio-x86_64.AppImage
 ```
 
-The AppDir script embeds a venv and uses `assets/kdbxstudio.png` when present.
+The AppDir embeds a venv with KDBXStudio + PySide6 and uses project icons when present.
 
 ## Flathub / AppStream
 
