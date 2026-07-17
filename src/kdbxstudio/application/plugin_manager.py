@@ -32,6 +32,9 @@ class PluginManager:
 
     def register(self, plugin: Plugin, *, path: str | None = None) -> None:
         name = plugin.meta.name
+        existing = self._loaded.get(name)
+        if existing is not None and existing.active:
+            self.deactivate(name)
         self._loaded[name] = LoadedPlugin(plugin=plugin, path=path)
 
     def unregister(self, name: str) -> None:
@@ -46,6 +49,7 @@ class PluginManager:
         try:
             item.plugin.activate(self._context)
         except Exception as exc:
+            self._context.clear_owner(name)
             raise PluginError(f"Failed to activate plugin '{name}': {exc}") from exc
         item.active = True
 
@@ -57,6 +61,7 @@ class PluginManager:
             item.plugin.deactivate(self._context)
         except Exception as exc:
             raise PluginError(f"Failed to deactivate plugin '{name}': {exc}") from exc
+        self._context.clear_owner(name)
         item.active = False
 
     def activate_all(self) -> None:

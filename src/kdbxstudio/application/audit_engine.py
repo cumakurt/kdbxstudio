@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from kdbxstudio.application.database_manager import DatabaseManager
+from kdbxstudio.application.expiry import parse_expiry
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.core.password_generator import estimate_entropy_bits
 
@@ -28,6 +30,9 @@ class AuditReport:
     low_entropy: int = 0
     missing_usernames: int = 0
     reused_usernames: int = 0
+    expired: int = 0
+    expiring_soon: int = 0
+    pwned: int = 0
 
     @property
     def severity_counts(self) -> dict[str, int]:
@@ -62,6 +67,7 @@ class AuditEngine:
     WEAK_LENGTH = 8
     LOW_ENTROPY_BITS = 40.0
     REUSED_USERNAME_THRESHOLD = 3
+    EXPIRING_SOON_DAYS = 14
 
     def __init__(self, database_manager: DatabaseManager) -> None:
         self._dbm = database_manager
@@ -71,6 +77,8 @@ class AuditEngine:
         session_id: str | None = None,
         *,
         include_recycle_bin: bool = False,
+        check_hibp: bool = False,
+        hibp_limit: int = 40,
     ) -> AuditReport:
         entries = self._dbm.all_entries(
             session_id, include_recycle_bin=include_recycle_bin
@@ -80,9 +88,14 @@ class AuditEngine:
         weak = 0
         low_entropy = 0
         missing_usernames = 0
+        expired = 0
+        expiring_soon = 0
+        pwned = 0
 
         password_map: dict[str, list[EntryView]] = {}
         username_map: dict[str, list[EntryView]] = {}
+        now = datetime.now(UTC)
+        soon = now + timedelta(days=self.EXPIRING_SOON_DAYS)
 
         for entry in entries:
             username = (entry.username or "").strip()
@@ -98,6 +111,31 @@ class AuditEngine:
                 )
             else:
                 username_map.setdefault(username.lower(), []).append(entry)
+
+            expiry = parse_expiry(entry)
+            if expiry is not None:
+                if expiry <= now:
+                    expired += 1
+                    findings.append(
+                        AuditFinding(
+                            kind="expired",
+                            message=f"Entry '{entry.title}' expired on {expiry.date()}",
+                            entry_uuid=entry.uuid,
+                            severity="critical",
+                        )
+                    )
+                elif expiry <= soon:
+                    expiring_soon += 1
+                    findings.append(
+                        AuditFinding(
+                            kind="expiring_soon",
+                            message=(
+                                f"Entry '{entry.title}' expires on {expiry.date()}"
+                            ),
+                            entry_uuid=entry.uuid,
+                            severity="warning",
+                        )
+                    )
 
             pwd = entry.password or ""
             if not pwd:
@@ -138,6 +176,59 @@ class AuditEngine:
                             ),
                             entry_uuid=entry.uuid,
                             severity="warning",
+                        )
+                    )
+
+        if check_hibp:
+            from kdbxstudio.application.hibp import HibpError, pwned_count
+
+            checked = 0
+            seen_pw: dict[str, int] = {}
+            for entry in entries:
+                if checked >= hibp_limit:
+                    findings.append(
+                        AuditFinding(
+                            kind="hibp_truncated",
+                            message=(
+                                f"HIBP check limited to {hibp_limit} passwords "
+                                "this run"
+                            ),
+                            entry_uuid=None,
+                            severity="info",
+                        )
+                    )
+                    break
+                pwd = entry.password or ""
+                if not pwd:
+                    continue
+                try:
+                    if pwd in seen_pw:
+                        count = seen_pw[pwd]
+                    else:
+                        count = pwned_count(pwd)
+                        seen_pw[pwd] = count
+                        checked += 1
+                except HibpError as exc:
+                    findings.append(
+                        AuditFinding(
+                            kind="hibp_error",
+                            message=str(exc),
+                            entry_uuid=None,
+                            severity="info",
+                        )
+                    )
+                    break
+                if count > 0:
+                    pwned += 1
+                    findings.append(
+                        AuditFinding(
+                            kind="pwned_password",
+                            message=(
+                                f"Entry '{entry.title}' password seen in breaches "
+                                f"({count} times)"
+                            ),
+                            entry_uuid=entry.uuid,
+                            severity="critical",
                         )
                     )
 
@@ -184,4 +275,7 @@ class AuditEngine:
             low_entropy=low_entropy,
             missing_usernames=missing_usernames,
             reused_usernames=reused_usernames,
+            expired=expired,
+            expiring_soon=expiring_soon,
+            pwned=pwned,
         )

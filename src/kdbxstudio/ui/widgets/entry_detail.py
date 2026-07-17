@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Signal
+from PySide6.QtCore import QDate, QSize, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QDateEdit,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -56,6 +58,19 @@ class EntryDetailWidget(QWidget):
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         self._url = QLineEdit()
         self._notes = NotesPreviewWidget()
+        self._tags = QLineEdit()
+        self._tags.setPlaceholderText("Comma-separated tags")
+        self._expires = QCheckBox("Expires")
+        self._expiry_date = QDateEdit()
+        self._expiry_date.setCalendarPopup(True)
+        self._expiry_date.setDisplayFormat("yyyy-MM-dd")
+        self._expiry_date.setDate(QDate.currentDate().addYears(1))
+        self._expiry_date.setEnabled(False)
+        self._expires.toggled.connect(self._expiry_date.setEnabled)
+
+        expiry_row = QHBoxLayout()
+        expiry_row.addWidget(self._expires)
+        expiry_row.addWidget(self._expiry_date, stretch=1)
 
         self._title_icon = _leading_icon(self._title, FieldKind.TITLE)
         self._username_icon = _leading_icon(self._username, FieldKind.USERNAME)
@@ -119,6 +134,8 @@ class EntryDetailWidget(QWidget):
         form.addRow("Username", self._username)
         form.addRow("Password", pwd_row)
         form.addRow("URL", self._url)
+        form.addRow("Tags", self._tags)
+        form.addRow("Expiry", expiry_row)
         form.addRow("Notes", self._notes)
         form.addRow("Custom fields", self._custom)
         form.addRow("", prop_btns)
@@ -141,10 +158,15 @@ class EntryDetailWidget(QWidget):
             self._username,
             self._password,
             self._url,
+            self._tags,
+            self._expires,
+            self._expiry_date,
             self._notes,
             self._custom,
         ):
             widget.setEnabled(enabled)
+        if enabled:
+            self._expiry_date.setEnabled(self._expires.isChecked())
 
     def clear(self) -> None:
         self._entry_uuid = None
@@ -155,6 +177,8 @@ class EntryDetailWidget(QWidget):
         self._username.clear()
         self._password.clear()
         self._url.clear()
+        self._tags.clear()
+        self._expires.setChecked(False)
         self._title.blockSignals(False)
         self._url.blockSignals(False)
         self._username.blockSignals(False)
@@ -172,6 +196,12 @@ class EntryDetailWidget(QWidget):
         self._username.setText(entry.username)
         self._password.setText(entry.password)
         self._url.setText(entry.url)
+        self._tags.setText(", ".join(entry.tags))
+        self._expires.setChecked(entry.expires)
+        if entry.expiry_time:
+            date = QDate.fromString(entry.expiry_time[:10], "yyyy-MM-dd")
+            if date.isValid():
+                self._expiry_date.setDate(date)
         self._title.blockSignals(False)
         self._url.blockSignals(False)
         self._username.blockSignals(False)
@@ -270,6 +300,14 @@ class EntryDetailWidget(QWidget):
     def _emit_save(self) -> None:
         if not self._entry_uuid:
             return
+        tags = tuple(
+            part.strip()
+            for part in self._tags.text().split(",")
+            if part.strip()
+        )
+        expiry_iso = ""
+        if self._expires.isChecked():
+            expiry_iso = self._expiry_date.date().toString(Qt.DateFormat.ISODate)
         self.save_requested.emit(
             {
                 "uuid": self._entry_uuid,
@@ -279,5 +317,8 @@ class EntryDetailWidget(QWidget):
                 "url": self._url.text(),
                 "notes": self._notes.toPlainText(),
                 "custom_properties": self._custom_as_dict(),
+                "tags": tags,
+                "expires": self._expires.isChecked(),
+                "expiry_time": expiry_iso,
             }
         )

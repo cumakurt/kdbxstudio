@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Signal
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QTextEdit,
@@ -25,11 +30,14 @@ class AttachmentPreviewWidget(QWidget):
 
     add_requested = Signal()
     delete_requested = Signal(int)
+    files_dropped = Signal(list)
+    save_requested = Signal(int, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._attachments: list[AttachmentView] = []
         self._pdf_buffer: QBuffer | None = None
+        self.setAcceptDrops(True)
 
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._on_row)
@@ -51,14 +59,17 @@ class AttachmentPreviewWidget(QWidget):
         add_btn.clicked.connect(self.add_requested.emit)
         del_btn = QPushButton("Remove")
         del_btn.clicked.connect(self._emit_delete)
+        save_btn = QPushButton("Save as…")
+        save_btn.clicked.connect(self._emit_save)
 
         buttons = QHBoxLayout()
         buttons.addWidget(add_btn)
         buttons.addWidget(del_btn)
+        buttons.addWidget(save_btn)
         buttons.addStretch()
 
         left = QVBoxLayout()
-        left.addWidget(QLabel("Attachments"))
+        left.addWidget(QLabel("Attachments (drop files here)"))
         left.addWidget(self._list)
         left.addLayout(buttons)
 
@@ -91,6 +102,20 @@ class AttachmentPreviewWidget(QWidget):
             self._text.clear()
             self._close_pdf()
 
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        paths: list[str] = []
+        for url in event.mimeData().urls():
+            local = url.toLocalFile()
+            if local:
+                paths.append(local)
+        if paths:
+            self.files_dropped.emit(paths)
+            event.acceptProposedAction()
+
     def _close_pdf(self) -> None:
         self._pdf_doc.close()
         if self._pdf_buffer is not None:
@@ -101,6 +126,23 @@ class AttachmentPreviewWidget(QWidget):
         row = self._list.currentRow()
         if 0 <= row < len(self._attachments):
             self.delete_requested.emit(self._attachments[row].id)
+
+    def _emit_save(self) -> None:
+        row = self._list.currentRow()
+        if row < 0 or row >= len(self._attachments):
+            return
+        item = self._attachments[row]
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save attachment", item.filename
+        )
+        if not path:
+            return
+        try:
+            Path(path).write_bytes(item.data)
+        except OSError as exc:
+            QMessageBox.critical(self, "Save failed", str(exc))
+            return
+        self.save_requested.emit(item.id, path)
 
     def _on_row(self, row: int) -> None:
         if row < 0 or row >= len(self._attachments):

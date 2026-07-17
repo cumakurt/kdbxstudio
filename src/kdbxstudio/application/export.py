@@ -23,6 +23,9 @@ def export_entries_csv(path: Path | str, entries: list[EntryView]) -> Path:
                 "notes",
                 "group",
                 "otp",
+                "tags",
+                "expires",
+                "expiry_time",
                 "custom_properties",
             ],
         )
@@ -40,6 +43,9 @@ def export_entries_csv(path: Path | str, entries: list[EntryView]) -> Path:
                     "notes": entry.notes,
                     "group": entry.group_path,
                     "otp": entry.otp,
+                    "tags": ",".join(entry.tags),
+                    "expires": "true" if entry.expires else "false",
+                    "expiry_time": entry.expiry_time,
                     "custom_properties": custom,
                 }
             )

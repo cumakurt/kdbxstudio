@@ -68,51 +68,59 @@ search, command palette, certificates tab, password generator, and a sample
 - Open and create **KDBX 4.x** databases (master password and optional key file)
 - **Multi-database** tabs — work on several vaults in one window
 - Save, close, and lock all open databases
-- Database properties and **change master credentials**
+- Database properties (version, **KDF**, encryption) and **change master credentials**
 - **Recent databases** on the welcome screen
 - **Recycle Bin** with empty-bin support
 - **CSV import / export** (export warns that secrets leave the vault in clear text)
+- **Merge** another `.kdbx` into the active vault
+- **Emergency sheet** (printable HTML) for offline backup of selected/all entries
 
 ### Workspace
 
 - Dockable **Groups** tree and **Password Health** panel
-- Entry list + detail split view (resizable)
-- Entry tabs: **Entry**, **TOTP**, **History**, **Attachments**, **Certificates / SSH**
+- Entry list + detail split view (resizable), optional **favicon** icons
+- Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
-- Compact light / dark / system themes with brand teal accents
+- Compact / comfortable density, light / dark / system themes
+- System **tray** (show / lock / quit), minimize-on-lock
 
 ### Entries & secrets
 
-- Title, username, password, URL, notes, custom fields
+- Title, username, password, URL, notes, custom fields, **tags**, **expiry**
+- **Auto-Type** on Linux (`xdotool` / `ydotool` / `wtype`) with configurable sequence
+- **Move entry** between groups
 - **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
-- Field-leading icons for title, username, password, URL; action icons for Show / Copy / Generate / Save
+- Field-leading icons; action icons for Show / Copy / Generate / Save
 - **Markdown / JSON** notes preview
 - **Secret templates**: Login, API Key, SSH, Certificate, Secure Note, Bank Card
 - **Password generator** with entropy estimate
 - **TOTP** live codes and countdown
-- Entry **history** list and restore
-- Attachments (add / delete) with text / PDF preview where applicable
-- PEM / OpenSSH **certificate and SSH inspector**
+- Entry **history** list, restore, and field diff
+- Attachments (add / delete / **save as** / **drag-and-drop**) with text / PDF preview
+- PEM / OpenSSH **certificate and SSH inspector**; optional **ssh-add** to agent
 
 ### Search & audit
 
-- Inverted-index **full-text search**
-- Filter chips: URL, custom fields, weak / empty passwords, duplicates, Recycle Bin
-- **Password Health** audit: empty, weak, low entropy, duplicates, missing / reused usernames
+- Inverted-index **full-text search** (includes tags)
+- Filter chips: URL, custom/OTP, weak / empty / duplicates, **expired**, Recycle Bin, tag/group text
+- **Password Health** audit: empty, weak, low entropy, duplicates, missing / reused usernames,
+  **expired / expiring soon**, optional **HIBP** (k-anonymity)
 - Double-click a finding to jump to the entry
 - Plugin hook `search.rank` for ranking tweaks
+- Command Palette jumps to entries and common actions
 
 ### Security session
 
 - Clipboard copy with **auto-clear timeout**
-- **Idle auto-lock** (configurable)
+- **True idle auto-lock** (input activity) + optional minimize / tray
 - Clear clipboard on lock
 - **Read-only session** mode
 - Best-effort `SecureString` wipe for in-memory master password on close / lock
+- Optional **update check** against GitHub Releases
 
 ### Extensibility & desktop polish
 
-- Plugin SDK + discoverable `*_plugin.py` modules
+- Plugin SDK + discoverable `*_plugin.py` modules (hooks cleared on deactivate)
 - Built-in **Plugin Marketplace** (local / built-in catalog)
 - Command Palette (`Ctrl+K` / `Ctrl+Shift+P`)
 - Persistable **window layout** (View → Save Layout / Reset Layout)
@@ -221,6 +229,7 @@ Demo file written to `artifacts/visual/sample.kdbx` (password: `demo-pass-123`).
 | `Ctrl+N` | New database |
 | `Ctrl+S` | Save |
 | `Ctrl+L` | Lock all databases |
+| `Ctrl+Shift+V` / `Ctrl+Alt+A` | Auto-Type selected entry |
 | `Delete` | Move selected entry to Recycle Bin |
 | `F2` | Rename selected group |
 | `Ctrl+Q` | Quit (standard) |
@@ -240,10 +249,16 @@ Notable settings:
 | Key | Meaning |
 |-----|---------|
 | `theme` | `dark` \| `light` \| `system` |
+| `ui_density` | `compact` \| `comfortable` |
 | `clipboard_timeout_ms` | Clipboard auto-clear delay |
 | `auto_lock_timeout_ms` | Idle lock delay |
 | `auto_lock_enabled` | Enable / disable idle lock |
 | `clear_clipboard_on_lock` | Wipe clipboard when locking |
+| `minimize_on_lock` | Minimize (and tray-hide) on lock |
+| `hibp_enabled` | HIBP k-anonymity checks during audit |
+| `autotype_sequence` | Auto-Type token sequence |
+| `check_updates_on_start` | GitHub Releases update check |
+| `start_minimized_to_tray` | Start hidden in the system tray |
 | `read_only` | Open databases in read-only mode |
 | `window_geometry` / `window_state` | Saved layout (base64) |
 | `recent_databases` | Recent vault paths |

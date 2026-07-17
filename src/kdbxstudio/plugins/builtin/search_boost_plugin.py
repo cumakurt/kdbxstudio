@@ -14,10 +14,13 @@ class SearchBoostPlugin:
     )
 
     def activate(self, context: PluginContext) -> None:
-        context.register_hook("search.rank", self._boost)
+        context.register_hook(
+            "search.rank", self._boost, owner=self.meta.name
+        )
         context.set("search_boost.enabled", True)
 
     def deactivate(self, context: PluginContext) -> None:
+        context.clear_owner(self.meta.name)
         context.set("search_boost.enabled", False)
 
     def _boost(self, score: int = 0, **_: object) -> int:

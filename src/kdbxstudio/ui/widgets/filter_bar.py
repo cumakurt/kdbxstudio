@@ -37,11 +37,17 @@ class FilterBarWidget(QWidget):
         self._group.setAccessibleName("Group path filter")
         self._group.returnPressed.connect(self._emit)
 
+        self._tag = QLineEdit()
+        self._tag.setPlaceholderText("Tag…")
+        self._tag.setAccessibleName("Tag filter")
+        self._tag.returnPressed.connect(self._emit)
+
         self._has_url = _chip("URL")
-        self._has_custom = _chip("Custom")
+        self._has_custom = _chip("Custom/OTP")
         self._weak = _chip("Weak")
         self._empty = _chip("Empty")
         self._dupes = _chip("Dupes")
+        self._expired = _chip("Expired")
         self._recycle = _chip("Recycle")
 
         self._chips = (
@@ -50,16 +56,18 @@ class FilterBarWidget(QWidget):
             self._weak,
             self._empty,
             self._dupes,
+            self._expired,
             self._recycle,
         )
         for chip, tip in zip(
             self._chips,
             (
                 "Has URL",
-                "Has custom fields",
+                "Has custom fields or OTP",
                 "Weak passwords",
                 "Empty passwords",
                 "Duplicates",
+                "Past expiry date",
                 "Recycle Bin only",
             ),
             strict=True,
@@ -78,6 +86,7 @@ class FilterBarWidget(QWidget):
         layout.setSpacing(4)
         layout.addWidget(QLabel("Filter"))
         layout.addWidget(self._group, stretch=1)
+        layout.addWidget(self._tag)
         for chip in self._chips:
             layout.addWidget(chip)
         layout.addWidget(apply_btn)
@@ -85,6 +94,7 @@ class FilterBarWidget(QWidget):
 
     def clear(self) -> None:
         self._group.clear()
+        self._tag.clear()
         for chip in self._chips:
             chip.setChecked(False)
         self._emit()
@@ -93,12 +103,14 @@ class FilterBarWidget(QWidget):
         return EntryFilter(
             query=query,
             group_path_contains=self._group.text().strip(),
+            tag_contains=self._tag.text().strip(),
             has_url=True if self._has_url.isChecked() else None,
             has_otp_or_custom=True if self._has_custom.isChecked() else None,
             in_recycle_bin=True if self._recycle.isChecked() else False,
             weak_only=self._weak.isChecked(),
             empty_password=self._empty.isChecked(),
             duplicates_only=self._dupes.isChecked(),
+            expired_only=self._expired.isChecked(),
         )
 
     def _emit(self) -> None:

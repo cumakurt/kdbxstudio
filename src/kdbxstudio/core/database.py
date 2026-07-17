@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,9 @@ class EntryView:
     custom_properties: dict[str, str] = field(default_factory=dict)
     in_recycle_bin: bool = False
     otp: str = ""
+    expires: bool = False
+    expiry_time: str = ""
+    tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -86,6 +90,8 @@ class DatabaseInfo:
     recycle_bin_entries: int
     dirty: bool
     version: str
+    kdf_algorithm: str = "unknown"
+    encryption: str = "unknown"
 
 
 class KdbxDatabase:
@@ -323,6 +329,9 @@ class KdbxDatabase:
         url: str = "",
         notes: str = "",
         custom_properties: dict[str, str] | None = None,
+        tags: list[str] | tuple[str, ...] | None = None,
+        expires: bool | None = None,
+        expiry_time: datetime | None = None,
     ) -> EntryView:
         kp = self._require_kp()
         group = self._find_group(group_uuid)
@@ -333,7 +342,11 @@ class KdbxDatabase:
             password=password,
             url=url,
             notes=notes,
+            tags=list(tags) if tags else None,
+            expiry_time=expiry_time,
         )
+        if expires is not None:
+            entry.expires = expires
         if custom_properties:
             for key, value in custom_properties.items():
                 entry.set_custom_property(key, value)
@@ -351,6 +364,9 @@ class KdbxDatabase:
         notes: str | None = None,
         otp: str | None = None,
         custom_properties: dict[str, str] | None = None,
+        tags: list[str] | tuple[str, ...] | None = None,
+        expires: bool | None = None,
+        expiry_time: datetime | None = None,
         keep_history: bool = True,
     ) -> EntryView:
         entry = self._find_entry(entry_uuid)
@@ -368,6 +384,13 @@ class KdbxDatabase:
             entry.notes = notes
         if otp is not None:
             entry.otp = otp
+        if tags is not None:
+            entry.tags = list(tags)
+        if expires is not None:
+            entry.expires = expires
+        if expiry_time is not None:
+            entry.expiry_time = expiry_time
+            entry.expires = True
         if custom_properties is not None:
             existing = dict(entry.custom_properties or {})
             for key in list(existing):
@@ -375,6 +398,14 @@ class KdbxDatabase:
                     entry.delete_custom_property(key)
             for key, value in custom_properties.items():
                 entry.set_custom_property(key, value)
+        self._dirty = True
+        return self._to_entry_view(entry)
+
+    def move_entry(self, entry_uuid: str, group_uuid: str) -> EntryView:
+        kp = self._require_kp()
+        entry = self._find_entry(entry_uuid)
+        group = self._find_group(group_uuid)
+        kp.move_entry(entry, group)
         self._dirty = True
         return self._to_entry_view(entry)
 
@@ -433,6 +464,18 @@ class KdbxDatabase:
             version = f"{kp.version[0]}.{kp.version[1]}"
         except Exception:
             pass
+        kdf = "unknown"
+        try:
+            kdf = str(getattr(kp, "kdf_algorithm", None) or "unknown")
+        except Exception:
+            pass
+        encryption = "AES / ChaCha20 (KeePass)"
+        try:
+            enc = getattr(kp, "encryption_algorithm", None)
+            if enc:
+                encryption = str(enc)
+        except Exception:
+            pass
         return DatabaseInfo(
             path=str(self._path) if self._path else "",
             entry_count=len(kp.entries),
@@ -440,6 +483,8 @@ class KdbxDatabase:
             recycle_bin_entries=recycle_count,
             dirty=self._dirty,
             version=version,
+            kdf_algorithm=kdf,
+            encryption=encryption,
         )
 
     def list_attachments(self, entry_uuid: str) -> list[AttachmentView]:
@@ -569,6 +614,16 @@ class KdbxDatabase:
         props = {
             str(k): str(v) for k, v in dict(entry.custom_properties or {}).items()
         }
+        tags_raw = getattr(entry, "tags", None) or []
+        tags = tuple(str(t).strip() for t in tags_raw if str(t).strip())
+        expiry = ""
+        expires = bool(getattr(entry, "expires", False))
+        expiry_time = getattr(entry, "expiry_time", None)
+        if expiry_time is not None:
+            try:
+                expiry = expiry_time.isoformat()
+            except Exception:
+                expiry = str(expiry_time)
         return EntryView(
             uuid=str(entry.uuid),
             title=entry.title or "",
@@ -580,4 +635,7 @@ class KdbxDatabase:
             custom_properties=props,
             in_recycle_bin=self._is_in_recycle_bin(entry),
             otp=entry.otp or "",
+            expires=expires,
+            expiry_time=expiry,
+            tags=tags,
         )

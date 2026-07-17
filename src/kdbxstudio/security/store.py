@@ -8,7 +8,7 @@ from pathlib import Path
 
 from kdbxstudio.security.settings import SecuritySettings
 
-_SETTINGS_VERSION = 3
+_SETTINGS_VERSION = 4
 _MAX_RECENT = 12
 
 
@@ -52,6 +52,23 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
         read_only=bool(raw.get("read_only", SecuritySettings.read_only)),
         window_geometry=str(raw.get("window_geometry", "")),
         window_state=str(raw.get("window_state", "")),
+        ui_density=str(raw.get("ui_density", SecuritySettings.ui_density)),
+        hibp_enabled=bool(raw.get("hibp_enabled", SecuritySettings.hibp_enabled)),
+        autotype_sequence=str(
+            raw.get("autotype_sequence", SecuritySettings.autotype_sequence)
+        ),
+        check_updates_on_start=bool(
+            raw.get(
+                "check_updates_on_start",
+                SecuritySettings.check_updates_on_start,
+            )
+        ),
+        start_minimized_to_tray=bool(
+            raw.get(
+                "start_minimized_to_tray",
+                SecuritySettings.start_minimized_to_tray,
+            )
+        ),
     )
 
 
@@ -78,6 +95,11 @@ def save_settings(
         "read_only": settings.read_only,
         "window_geometry": settings.window_geometry,
         "window_state": settings.window_state,
+        "ui_density": settings.ui_density,
+        "hibp_enabled": settings.hibp_enabled,
+        "autotype_sequence": settings.autotype_sequence,
+        "check_updates_on_start": settings.check_updates_on_start,
+        "start_minimized_to_tray": settings.start_minimized_to_tray,
         "recent_databases": recent_paths[:_MAX_RECENT],
     }
     target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

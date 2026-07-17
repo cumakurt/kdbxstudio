@@ -222,6 +222,8 @@ Prefer **Inter** when installed; fall back to `Noto Sans`, then `Sans Serif`.
 
 ## 15. Out of scope (later)
 
-- Remote Plugin Marketplace storefront / signed plugin feeds
+- Remote Plugin Marketplace storefront / signed plugin feeds (local catalog + SDK only)
 - Motion design system beyond subtle fades (palette ~140ms fade is in)
-- Cloud sync / HIBP breach checks
+- Cloud sync
+- YubiKey / hardware challenge-response (not exposed by pykeepass today)
+- Flathub publication (manifest scaffold only; submit separately)

@@ -44,24 +44,28 @@ class EntryFilter:
 
     query: str = ""
     group_path_contains: str = ""
+    tag_contains: str = ""
     has_url: bool | None = None
     has_otp_or_custom: bool | None = None
     in_recycle_bin: bool | None = False
     weak_only: bool = False
     empty_password: bool = False
     duplicates_only: bool = False
+    expired_only: bool = False
     min_password_length: int | None = None
 
     def is_empty(self) -> bool:
         return (
             not self.query.strip()
             and not self.group_path_contains.strip()
+            and not self.tag_contains.strip()
             and self.has_url is None
             and self.has_otp_or_custom is None
             and self.in_recycle_bin is False
             and not self.weak_only
             and not self.empty_password
             and not self.duplicates_only
+            and not self.expired_only
             and self.min_password_length is None
         )
 
@@ -92,6 +96,7 @@ class InvertedIndex:
             "url": entry.url or "",
             "notes": entry.notes or "",
             "group": entry.group_path or "",
+            "tags": " ".join(entry.tags),
             "custom": " ".join(
                 f"{k} {v}" for k, v in (entry.custom_properties or {}).items()
             ),
@@ -168,12 +173,14 @@ class SearchEngine:
             filt = EntryFilter(
                 query=query,
                 group_path_contains=filt.group_path_contains,
+                tag_contains=filt.tag_contains,
                 has_url=filt.has_url,
                 has_otp_or_custom=filt.has_otp_or_custom,
                 in_recycle_bin=filt.in_recycle_bin,
                 weak_only=filt.weak_only,
                 empty_password=filt.empty_password,
                 duplicates_only=filt.duplicates_only,
+                expired_only=filt.expired_only,
                 min_password_length=filt.min_password_length,
             )
 
@@ -282,15 +289,31 @@ class SearchEngine:
         if group_q:
             result = [e for e in result if group_q in (e.group_path or "").lower()]
 
+        tag_q = filt.tag_contains.strip().lower()
+        if tag_q:
+            result = [
+                e
+                for e in result
+                if any(tag_q in t.lower() for t in e.tags)
+            ]
+
         if filt.has_url is True:
             result = [e for e in result if bool((e.url or "").strip())]
         elif filt.has_url is False:
             result = [e for e in result if not (e.url or "").strip()]
 
         if filt.has_otp_or_custom is True:
-            result = [e for e in result if bool(e.custom_properties)]
+            result = [
+                e
+                for e in result
+                if bool(e.custom_properties) or bool((e.otp or "").strip())
+            ]
         elif filt.has_otp_or_custom is False:
-            result = [e for e in result if not e.custom_properties]
+            result = [
+                e
+                for e in result
+                if not e.custom_properties and not (e.otp or "").strip()
+            ]
 
         if filt.empty_password:
             result = [e for e in result if not (e.password or "")]
@@ -301,6 +324,11 @@ class SearchEngine:
                 for e in result
                 if e.password and len(e.password) < 8
             ]
+
+        if filt.expired_only:
+            from kdbxstudio.application.expiry import is_expired
+
+            result = [e for e in result if is_expired(e)]
 
         if filt.min_password_length is not None:
             result = [

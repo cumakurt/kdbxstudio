@@ -18,6 +18,11 @@ class SecuritySettings:
     read_only: bool = False
     window_geometry: str = ""  # base64 of QByteArray
     window_state: str = ""  # base64 of QMainWindow.saveState()
+    ui_density: str = "compact"  # compact | comfortable
+    hibp_enabled: bool = False
+    autotype_sequence: str = "{USERNAME}{TAB}{PASSWORD}{ENTER}"
+    check_updates_on_start: bool = True
+    start_minimized_to_tray: bool = False
 
     def with_updates(self, **kwargs: object) -> SecuritySettings:
         return replace(self, **kwargs)  # type: ignore[arg-type]

@@ -19,15 +19,29 @@ class PluginContext:
     """Services exposed to plugins (kept intentionally small)."""
 
     def __init__(self) -> None:
-        self._hooks: dict[str, list[Callable[..., Any]]] = {}
+        self._hooks: dict[str, list[tuple[str | None, Callable[..., Any]]]] = {}
         self._data: dict[str, Any] = {}
 
-    def register_hook(self, name: str, callback: Callable[..., Any]) -> None:
-        self._hooks.setdefault(name, []).append(callback)
+    def register_hook(
+        self,
+        name: str,
+        callback: Callable[..., Any],
+        *,
+        owner: str | None = None,
+    ) -> None:
+        self._hooks.setdefault(name, []).append((owner, callback))
+
+    def clear_owner(self, owner: str) -> None:
+        for name, items in list(self._hooks.items()):
+            kept = [(o, cb) for o, cb in items if o != owner]
+            if kept:
+                self._hooks[name] = kept
+            else:
+                self._hooks.pop(name, None)
 
     def emit(self, name: str, **payload: Any) -> list[Any]:
         results: list[Any] = []
-        for callback in self._hooks.get(name, []):
+        for _owner, callback in self._hooks.get(name, []):
             results.append(callback(**payload))
         return results
 

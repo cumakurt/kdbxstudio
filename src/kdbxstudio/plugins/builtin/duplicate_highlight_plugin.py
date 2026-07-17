@@ -15,13 +15,6 @@ class DuplicateHighlightPlugin:
         author="KDBXStudio",
     )
 
-    def activate(self, context: PluginContext) -> None:
-        context.register_hook("audit.completed", self._on_audit)
-        context.set("duplicate_highlight.count", 0)
-
-    def deactivate(self, context: PluginContext) -> None:
-        context.set("duplicate_highlight.count", 0)
-
     def _on_audit(self, report: object, **_: object) -> int:
         findings = getattr(report, "findings", ())
         count = sum(
@@ -29,7 +22,25 @@ class DuplicateHighlightPlugin:
             for f in findings
             if getattr(f, "kind", "") == "duplicate_password"
         )
+        # Caller may not have context; return count for emit consumers.
         return count
+
+    def activate(self, context: PluginContext) -> None:
+        self._context = context
+
+        def _wrapped(report: object, **kwargs: object) -> int:
+            count = self._on_audit(report, **kwargs)
+            context.set("duplicate_highlight.count", count)
+            return count
+
+        context.register_hook(
+            "audit.completed", _wrapped, owner=self.meta.name
+        )
+        context.set("duplicate_highlight.count", 0)
+
+    def deactivate(self, context: PluginContext) -> None:
+        context.clear_owner(self.meta.name)
+        context.set("duplicate_highlight.count", 0)
 
 
 def create_plugin() -> DuplicateHighlightPlugin:

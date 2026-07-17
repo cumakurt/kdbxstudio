@@ -1,4 +1,4 @@
-"""Entry history browser widget."""
+"""Entry history browser widget with field diff."""
 
 from __future__ import annotations
 
@@ -14,7 +14,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kdbxstudio.application.history_diff import diff_history
 from kdbxstudio.core.database import HistoryView
+
+
+def _mask_secret(value: str) -> str:
+    return "••••••••" if value else ""
 
 
 class HistoryWidget(QWidget):
@@ -33,6 +38,9 @@ class HistoryWidget(QWidget):
         self._restore = QPushButton("Restore selected revision")
         self._restore.setEnabled(False)
         self._restore.clicked.connect(self._emit_restore)
+        self._reveal = QPushButton("Reveal secrets")
+        self._reveal.setCheckable(True)
+        self._reveal.toggled.connect(self._refresh_detail)
 
         self._list.currentRowChanged.connect(self._on_row)
 
@@ -41,9 +49,10 @@ class HistoryWidget(QWidget):
         left.addWidget(QLabel("Revisions"))
         left.addWidget(self._list)
         left.addWidget(self._restore)
+        left.addWidget(self._reveal)
         left.addWidget(self._empty)
         right = QVBoxLayout()
-        right.addWidget(QLabel("Snapshot"))
+        right.addWidget(QLabel("Snapshot / diff vs newer"))
         right.addWidget(self._detail)
         layout.addLayout(left, 1)
         layout.addLayout(right, 2)
@@ -54,6 +63,7 @@ class HistoryWidget(QWidget):
         self._detail.clear()
         self._empty.show()
         self._restore.setEnabled(False)
+        self._reveal.setChecked(False)
 
     def set_history(self, items: list[HistoryView]) -> None:
         self._items = items
@@ -61,6 +71,7 @@ class HistoryWidget(QWidget):
         self._detail.clear()
         self._empty.setVisible(not items)
         self._restore.setEnabled(False)
+        self._reveal.setChecked(False)
         for item in items:
             label = item.modified or f"Revision {item.index}"
             title = item.title or "(untitled)"
@@ -79,21 +90,37 @@ class HistoryWidget(QWidget):
             self._detail.clear()
             self._restore.setEnabled(False)
             return
-        item = self._items[row]
         self._restore.setEnabled(True)
-        self._detail.setPlainText(
-            "\n".join(
-                [
-                    f"Title: {item.title}",
-                    f"Username: {item.username}",
-                    f"Password: {item.password}",
-                    f"URL: {item.url}",
-                    f"OTP: {item.otp}",
-                    f"Modified: {item.modified}",
-                    "",
-                    "Notes:",
-                    item.notes,
-                ]
-            )
-        )
-        self.revision_selected.emit(item.index)
+        self._refresh_detail()
+        self.revision_selected.emit(self._items[row].index)
+
+    def _refresh_detail(self) -> None:
+        row = self._list.currentRow()
+        if row < 0 or row >= len(self._items):
+            self._detail.clear()
+            return
+        item = self._items[row]
+        reveal = self._reveal.isChecked()
+        password = item.password if reveal else _mask_secret(item.password)
+        otp = item.otp if reveal else _mask_secret(item.otp)
+        lines = [
+            f"Title: {item.title}",
+            f"Username: {item.username}",
+            f"Password: {password}",
+            f"URL: {item.url}",
+            f"OTP: {otp}",
+            f"Modified: {item.modified}",
+            "",
+            "Notes:",
+            item.notes,
+        ]
+        if row > 0:
+            newer = self._items[row - 1]
+            diffs = diff_history(item, newer, mask_secrets=not reveal)
+            lines.append("")
+            lines.append("Diff vs newer revision:")
+            if not diffs:
+                lines.append("(no field changes)")
+            for diff in diffs:
+                lines.append(f"- {diff.field}: {diff.before!r} → {diff.after!r}")
+        self._detail.setPlainText("\n".join(lines))

@@ -1,10 +1,12 @@
-"""Entry list widget with per-entry type icons."""
+"""Entry list widget with per-entry type icons and optional favicons."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QAbstractItemView, QTableWidget, QTableWidgetItem
 
+from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_kind_icon
 
@@ -36,8 +38,15 @@ class EntryListWidget(QTableWidget):
             kind = detect_entry_kind_from_view(entry)
             title = QTableWidgetItem(entry.title)
             title.setData(int(Qt.ItemDataRole.UserRole), entry.uuid)
-            title.setIcon(entry_kind_icon(kind))
-            title.setToolTip(f"{entry.title} ({kind.value})")
+            icon = entry_kind_icon(kind)
+            fav = cached_favicon(entry.url)
+            if fav is not None:
+                icon = QIcon(str(fav))
+            title.setIcon(icon)
+            tip = f"{entry.title} ({kind.value})"
+            if entry.tags:
+                tip += f" [{', '.join(entry.tags)}]"
+            title.setToolTip(tip)
             self.setItem(row, 0, title)
             self.setItem(row, 1, QTableWidgetItem(entry.username))
             self.setItem(row, 2, QTableWidgetItem(entry.url))

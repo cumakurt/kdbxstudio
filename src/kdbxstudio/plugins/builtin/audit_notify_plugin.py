@@ -16,9 +16,17 @@ class AuditNotifyPlugin:
     )
 
     def activate(self, context: PluginContext) -> None:
-        context.register_hook("audit.completed", self._on_audit)
+        def _wrapped(report: object, **kwargs: object) -> str:
+            stamp = self._on_audit(report, **kwargs)
+            context.set("audit_notify.last", stamp)
+            return stamp
+
+        context.register_hook(
+            "audit.completed", _wrapped, owner=self.meta.name
+        )
 
     def deactivate(self, context: PluginContext) -> None:
+        context.clear_owner(self.meta.name)
         context.set("audit_notify.last", None)
 
     def _on_audit(self, report: object, **_: object) -> str:

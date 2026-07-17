@@ -119,6 +119,26 @@ class DatabaseManager:
         db.save()
         self._notify()
 
+    def save_all(self) -> list[str]:
+        """Save every dirty session. Returns saved session ids."""
+        saved: list[str] = []
+        for session_id, db in list(self._databases.items()):
+            if not db.is_dirty:
+                continue
+            db.save()
+            saved.append(session_id)
+        if saved:
+            self._notify()
+        return saved
+
+    def dirty_session_ids(self) -> list[str]:
+        return [sid for sid, db in self._databases.items() if db.is_dirty]
+
+    def refresh(self, session_id: str | None = None) -> None:
+        """Invalidate caches and notify listeners for a session (or all)."""
+        self._invalidate(session_id)
+        self._notify()
+
     def list_groups(self, session_id: str | None = None) -> list[GroupView]:
         return self._get(session_id).list_groups()
 
@@ -233,6 +253,9 @@ class DatabaseManager:
         notes: str | None = None,
         otp: str | None = None,
         custom_properties: dict[str, str] | None = None,
+        tags: list[str] | tuple[str, ...] | None = None,
+        expires: bool | None = None,
+        expiry_time: object | None = None,
         session_id: str | None = None,
     ) -> EntryView:
         entry = self._get(session_id).update_entry(
@@ -244,7 +267,21 @@ class DatabaseManager:
             notes=notes,
             otp=otp,
             custom_properties=custom_properties,
+            tags=tags,
+            expires=expires,
+            expiry_time=expiry_time,  # type: ignore[arg-type]
         )
+        self._invalidate(session_id or self._active_id)
+        self._notify()
+        return entry
+
+    def move_entry(
+        self,
+        entry_uuid: str,
+        group_uuid: str,
+        session_id: str | None = None,
+    ) -> EntryView:
+        entry = self._get(session_id).move_entry(entry_uuid, group_uuid)
         self._invalidate(session_id or self._active_id)
         self._notify()
         return entry
