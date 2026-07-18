@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
-from PySide6.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QAbstractItemView, QFrame, QTreeWidget, QTreeWidgetItem
 
 from kdbxstudio.core.database import GroupView
 from kdbxstudio.i18n import tr
@@ -23,6 +23,8 @@ class GroupTreeWidget(QTreeWidget):
         self.setHeaderLabel(tr("Groups"))
         self.setUniformRowHeights(True)
         self.setIconSize(QSize(18, 18))
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setAlternatingRowColors(True)
         # Accept entry drops only — do not rearrange groups in the tree.
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)

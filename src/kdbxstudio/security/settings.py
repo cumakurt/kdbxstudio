@@ -34,6 +34,8 @@ class SecuritySettings:
     check_updates_on_start: bool = True
     start_minimized_to_tray: bool = False
     language: str = "en"  # en | tr
+    custom_theme_path: str = ""  # path to imported JSON theme
+    dashboard_hidden_panels: str = ""  # comma-separated panel ids
 
     def with_updates(self, **kwargs: object) -> SecuritySettings:
         return replace(self, **kwargs)  # type: ignore[arg-type]

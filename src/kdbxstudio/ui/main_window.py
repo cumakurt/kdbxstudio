@@ -67,6 +67,7 @@ from kdbxstudio.security.store import (
     save_settings,
 )
 from kdbxstudio.ui.dialogs.command_palette import CommandPalette, PaletteAction
+from kdbxstudio.ui.dialogs.health_fix_wizard import HealthFixWizardDialog
 from kdbxstudio.ui.dialogs.new_entry_dialog import NewEntryDialog
 from kdbxstudio.ui.dialogs.unlock_dialog import UnlockDialog
 from kdbxstudio.ui.jobs import run_in_thread_pool
@@ -93,11 +94,13 @@ from kdbxstudio.ui.theme import (
     refresh_theme_for_screen,
     suggested_window_size,
 )
+from kdbxstudio.ui.theme.custom_theme import load_custom_theme_json
 from kdbxstudio.ui.theme.scale import detect_ui_scale
 from kdbxstudio.ui.theme.tokens import THEME_CHOICES, parse_theme, theme_label
 from kdbxstudio.ui.widgets.attachment_preview import AttachmentPreviewWidget
 from kdbxstudio.ui.widgets.empty_workspace import EmptyWorkspaceWidget
 from kdbxstudio.ui.widgets.entry_detail import EntryDetailWidget
+from kdbxstudio.ui.widgets.toast import ToastHost
 from kdbxstudio.ui.widgets.entry_list import EntryListWidget
 from kdbxstudio.ui.widgets.filter_bar import FilterBarWidget
 from kdbxstudio.ui.widgets.group_tree import GroupTreeWidget
@@ -120,6 +123,11 @@ class MainWindow(QMainWindow):
         self._main_toolbar: QToolBar | None = None
         self._settings = load_settings()
         set_language(self._settings.language)
+        if self._settings.custom_theme_path:
+            try:
+                load_custom_theme_json(self._settings.custom_theme_path)
+            except (OSError, ValueError, TypeError):
+                pass
 
         self._dbm = DatabaseManager()
         self._search = SearchEngine(self._dbm)
@@ -262,6 +270,8 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage(tr("Ready"))
+        self._toast = ToastHost(self)
+        self._locked_tray = False
 
         self._group_tree.group_selected.connect(self._on_group_selected)
         self._group_tree.entry_drop_requested.connect(self._on_entry_dropped_on_group)
@@ -526,6 +536,8 @@ class MainWindow(QMainWindow):
 
     def _show_status_message(self, message: str, timeout_ms: int) -> None:
         self.statusBar().showMessage(message, timeout_ms)
+        if hasattr(self, "_toast") and self._toast is not None:
+            self._toast.show_message(message, timeout_ms)
 
     def _run_startup_tasks(self) -> None:
         if self._settings.check_updates_on_start:
@@ -659,6 +671,23 @@ class MainWindow(QMainWindow):
         tray.activated.connect(self._on_tray_activated)
         tray.show()
         self._tray = tray
+        self._tray_normal_icon = icon
+        self._tray_lock_icon = menu_icon("lock", size=22)
+
+    def _set_tray_locked(self, locked: bool) -> None:
+        if self._tray is None:
+            return
+        self._locked_tray = locked
+        if locked:
+            lock_icon = getattr(self, "_tray_lock_icon", None)
+            if lock_icon is not None:
+                self._tray.setIcon(lock_icon)
+            self._tray.setToolTip(tr("KDBXStudio — locked"))
+        else:
+            normal = getattr(self, "_tray_normal_icon", None)
+            if normal is not None:
+                self._tray.setIcon(normal)
+            self._tray.setToolTip(f"KDBXStudio {__version__}")
 
     def _retranslate_shell(self) -> None:
         """Rebuild menus/toolbar/tray after a language change."""
@@ -2142,9 +2171,34 @@ class MainWindow(QMainWindow):
             vm.refresh_requested.connect(self._refresh_audit)
             vm.entry_activated.connect(self._on_finding_activated)
             vm.fix_next_requested.connect(self._on_fix_next_finding)
+            self._audit_dialog.dashboard.set_hidden_panels(
+                self._settings.dashboard_hidden_panels
+            )
         return self._audit_dialog
 
     def _on_fix_next_finding(self, kind: str, entry_uuid: str) -> None:
+        # Prefer guided wizard when the dashboard has a full findings list.
+        dialog = self._audit_dialog
+        findings = []
+        if dialog is not None and dialog.view_model.snapshot is not None:
+            findings = list(dialog.view_model.snapshot.findings)
+        actionable = [f for f in findings if getattr(f, "entry_uuid", None)]
+        if len(actionable) > 1:
+            wizard = HealthFixWizardDialog(actionable, self)
+            wizard.open_entry.connect(self._on_finding_activated)
+            wizard.fix_entry.connect(self._apply_finding_fix)
+            wizard.exec()
+            if hasattr(dialog, "dashboard"):
+                csv = dialog.dashboard.hidden_panels_csv()
+                if csv != self._settings.dashboard_hidden_panels:
+                    self._settings = self._settings.with_updates(
+                        dashboard_hidden_panels=csv
+                    )
+                    save_settings(self._settings)
+            return
+        self._apply_finding_fix(kind, entry_uuid)
+
+    def _apply_finding_fix(self, kind: str, entry_uuid: str) -> None:
         self._on_finding_activated(entry_uuid)
         tips = {
             "empty_password": tr("Generate or enter a strong password, then Save."),
@@ -2160,7 +2214,7 @@ class MainWindow(QMainWindow):
             ),
         }
         tip = tips.get(kind, tr("Review and update this entry."))
-        self.statusBar().showMessage(tip, 8000)
+        self._show_status_message(tip, 8000)
         if kind in {
             "empty_password",
             "weak_password",
@@ -2198,6 +2252,24 @@ class MainWindow(QMainWindow):
         snapshot = self._security_analyzer.run(audit_report=report)
         if dialog is not None:
             dialog.view_model.set_snapshot(snapshot)
+        tones: dict[str, str] = {}
+        for finding in report.findings:
+            if not finding.entry_uuid:
+                continue
+            tone = (
+                "danger"
+                if finding.severity == "critical"
+                else "warning"
+                if finding.severity == "warning"
+                else "muted"
+            )
+            prev = tones.get(finding.entry_uuid)
+            if prev == "danger":
+                continue
+            if prev == "warning" and tone == "muted":
+                continue
+            tones[finding.entry_uuid] = tone
+        self._entry_list.set_audit_tones(tones)
         self._plugins.context.emit("audit.completed", report=report)
         self._auto_lock.activity()
         if not check_hibp:
@@ -2489,7 +2561,8 @@ class MainWindow(QMainWindow):
         self._dbm.close_all()
         self._clear_entry_panels()
         self._sync_browser_bridge()
-        self.statusBar().showMessage(tr("Databases locked"), 5000)
+        self._set_tray_locked(True)
+        self._show_status_message(tr("Databases locked"), 5000)
         log_security_event("vault_locked", databases=len(paths))
         if self._settings.minimize_on_lock:
             self.showMinimized()
@@ -2503,6 +2576,7 @@ class MainWindow(QMainWindow):
             try:
                 self._dbm.open(db_path, password=password, keyfile=keyfile)
                 log_security_event("vault_unlocked", database=db_path.name)
+                self._set_tray_locked(False)
             except (InvalidCredentialsError, DatabaseError) as exc:
                 QMessageBox.critical(self, tr("Unlock failed"), str(exc))
                 log_security_event("vault_unlock_failed", database=db_path.name)

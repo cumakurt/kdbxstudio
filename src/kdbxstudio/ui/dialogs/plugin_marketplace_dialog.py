@@ -6,7 +6,6 @@ import importlib
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
@@ -15,64 +14,72 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QTextEdit,
-    QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.application.plugin_manager import PluginManager
+from kdbxstudio.i18n import tr
 from kdbxstudio.plugins.marketplace import MarketplacePlugin, get_catalog
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
-class PluginMarketplaceDialog(QDialog):
+class PluginMarketplaceDialog(DialogShell):
     def __init__(
         self,
         manager: PluginManager,
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Plugin Marketplace")
-        self.setModal(True)
-        self.resize(640, 420)
+        super().__init__(
+            parent,
+            title=tr("Plugin Marketplace"),
+            subtitle=tr("Browse and install catalog plugins"),
+            icon_name="extension",
+            width=680,
+        )
+        self.resize(680, 460)
         self._manager = manager
         self._catalog = get_catalog()
 
         self._list = QListWidget()
-        self._list.setAccessibleName("Plugin catalog")
+        self._list.setAccessibleName(tr("Plugin catalog"))
         self._list.currentRowChanged.connect(self._on_select)
         self._detail = QTextEdit()
         self._detail.setReadOnly(True)
-        self._detail.setAccessibleName("Plugin details")
+        self._detail.setAccessibleName(tr("Plugin details"))
         self._status = QLabel("")
-        self._status.setAccessibleName("Marketplace status")
+        self._status.setAccessibleName(tr("Marketplace status"))
 
-        install = QPushButton("Install / Register")
+        install = QPushButton(tr("Install / Register"))
         install.clicked.connect(self._install)
-        activate = QPushButton("Activate")
+        activate = QPushButton(tr("Activate"))
         activate.clicked.connect(self._activate)
-        deactivate = QPushButton("Deactivate")
+        deactivate = QPushButton(tr("Deactivate"))
         deactivate.clicked.connect(self._deactivate)
 
-        buttons = QHBoxLayout()
-        buttons.addWidget(install)
-        buttons.addWidget(activate)
-        buttons.addWidget(deactivate)
-        buttons.addStretch()
+        actions = QHBoxLayout()
+        actions.addWidget(install)
+        actions.addWidget(activate)
+        actions.addWidget(deactivate)
+        actions.addStretch()
 
-        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        close.rejected.connect(self.reject)
-        close.accepted.connect(self.accept)
+        self.body.addWidget(self._list, stretch=1)
+        self.body.addWidget(self._detail, stretch=1)
+        self.body.addWidget(self._status)
+        self.body.addLayout(actions)
 
-        body = QHBoxLayout()
-        body.addWidget(self._list, 2)
-        body.addWidget(self._detail, 3)
+        self.button_box.clear()
+        close = self.button_box.addButton(QDialogButtonBox.StandardButton.Close)
+        if close is not None:
+            close.setProperty("cssClass", "primary")
+        self.button_box.rejected.connect(self.reject)
+        self.button_box.accepted.connect(self.accept)
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Browse built-in and local plugins"))
-        layout.addLayout(body)
-        layout.addLayout(buttons)
-        layout.addWidget(self._status)
-        layout.addWidget(close)
-        self._reload()
+        for plugin in self._catalog:
+            item = QListWidgetItem(f"{plugin.name} — {plugin.summary}")
+            item.setData(Qt.ItemDataRole.UserRole, plugin.id)
+            self._list.addItem(item)
+        if self._catalog:
+            self._list.setCurrentRow(0)
 
     def _reload(self) -> None:
         self._list.clear()

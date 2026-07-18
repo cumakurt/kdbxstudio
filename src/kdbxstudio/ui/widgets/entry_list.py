@@ -11,22 +11,29 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QBrush, QColor, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFrame,
     QHeaderView,
     QMenu,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableView,
     QWidget,
 )
 
+from kdbxstudio.application.expiry import entry_list_tone
 from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.i18n import tr
 from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_list_icon
 from kdbxstudio.ui.theme.geometry import density_metrics
+from kdbxstudio.ui.theme.manager import current_tokens
 
 ENTRY_MIME = "application/x-kdbxstudio-entry"
+
+_TONE_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 def _row_height() -> int:
@@ -36,6 +43,48 @@ def _row_height() -> int:
         return density_metrics(current_density()).row_height
     except Exception:
         return 32
+
+
+def _tone_brush(tone: str | None) -> QBrush | None:
+    if not tone:
+        return None
+    tokens = current_tokens()
+    if tone == "danger":
+        color = QColor(tokens.text_danger)
+    elif tone == "warning":
+        color = QColor(tokens.text_warning)
+    elif tone == "muted":
+        color = QColor(tokens.text_muted)
+    elif tone == "success":
+        color = QColor(tokens.text_success)
+    else:
+        return None
+    color.setAlpha(36 if tokens.is_dark else 48)
+    return QBrush(color)
+
+
+class _SeverityDelegate(QStyledItemDelegate):
+    """Paint a left accent bar for severity-toned rows."""
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:  # noqa: N802
+        super().paint(painter, option, index)
+        if index.column() != 0:
+            return
+        tone = index.data(_TONE_ROLE)
+        if not tone:
+            return
+        tokens = current_tokens()
+        if tone == "danger":
+            color = QColor(tokens.text_danger)
+        elif tone == "warning":
+            color = QColor(tokens.text_warning)
+        elif tone == "muted":
+            color = QColor(tokens.border_strong)
+        else:
+            color = QColor(tokens.brand_primary)
+        painter.save()
+        painter.fillRect(option.rect.x(), option.rect.y(), 3, option.rect.height(), color)
+        painter.restore()
 
 
 class EntryTableModel(QAbstractTableModel):
@@ -48,6 +97,19 @@ class EntryTableModel(QAbstractTableModel):
         self._entries: list[EntryView] = []
         self._sort_column = 0
         self._sort_order = Qt.SortOrder.AscendingOrder
+        self._audit_tones: dict[str, str] = {}
+
+    def set_audit_tones(self, tones: dict[str, str]) -> None:
+        self._audit_tones = dict(tones)
+        rows = len(self._entries)
+        if rows:
+            top = self.index(0, 0)
+            bottom = self.index(rows - 1, self.columnCount() - 1)
+            self.dataChanged.emit(
+                top,
+                bottom,
+                [Qt.ItemDataRole.BackgroundRole, _TONE_ROLE],
+            )
 
     def rowCount(self, parent: QModelIndex | None = None) -> int:  # noqa: N802
         if parent is not None and parent.isValid():
@@ -93,9 +155,23 @@ class EntryTableModel(QAbstractTableModel):
                 tip += f" [{', '.join(entry.tags)}]"
             if entry.url and cached_favicon(entry.url) is not None:
                 tip += " · favicon"
+            tone = entry_list_tone(
+                entry, audit_tone=self._audit_tones.get(entry.uuid)
+            )
+            if tone:
+                tip += f" · {tone}"
             return tip
         if role == Qt.ItemDataRole.UserRole and col == 0:
             return entry.uuid
+        if role == _TONE_ROLE:
+            return entry_list_tone(
+                entry, audit_tone=self._audit_tones.get(entry.uuid)
+            )
+        if role == Qt.ItemDataRole.BackgroundRole:
+            tone = entry_list_tone(
+                entry, audit_tone=self._audit_tones.get(entry.uuid)
+            )
+            return _tone_brush(tone)
         return None
 
     def refresh_icons(self) -> None:
@@ -172,17 +248,23 @@ class EntryListWidget(QTableView):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("entryListPane")
         self._model = EntryTableModel(self)
         self.setModel(self._model)
+        self.setItemDelegate(_SeverityDelegate(self))
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setAlternatingRowColors(True)
+        self.setShowGrid(False)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.verticalHeader().setVisible(False)
         header = self.horizontalHeader()
         header.setStretchLastSection(True)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionsClickable(True)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header.setHighlightSections(False)
         header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         header.customContextMenuRequested.connect(self._header_context_menu)
         self.setIconSize(QSize(16, 16))
@@ -208,6 +290,9 @@ class EntryListWidget(QTableView):
         self.verticalHeader().setDefaultSectionSize(row_h)
         self.setIconSize(QSize(max(16, row_h - 12), max(16, row_h - 12)))
         self.refresh_icons()
+
+    def set_audit_tones(self, tones: dict[str, str]) -> None:
+        self._model.set_audit_tones(tones)
 
     def select_row_at(self, pos: QPoint) -> bool:
         index = self.indexAt(pos)
@@ -253,7 +338,6 @@ class EntryListWidget(QTableView):
             action = QAction(tr(name), menu)
             action.setCheckable(True)
             action.setChecked(not header.isSectionHidden(col))
-            # Keep at least one column visible.
             visible_count = sum(
                 1 for c in range(len(self.COLUMNS)) if not header.isSectionHidden(c)
             )

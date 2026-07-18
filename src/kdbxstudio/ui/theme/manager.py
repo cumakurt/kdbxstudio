@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette, QScreen
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette, QScreen, QTextCharFormat
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QApplication, QWidget
 
 from kdbxstudio.ui.theme.accent import AccentId, apply_accent, parse_accent
@@ -75,8 +76,6 @@ def detect_system_mode() -> ThemeMode:
     hints = app.styleHints()
     try:
         scheme = hints.colorScheme()
-        from PySide6.QtCore import Qt
-
         if scheme == Qt.ColorScheme.Light:
             return ThemeMode.LIGHT
         if scheme == Qt.ColorScheme.Dark:
@@ -155,6 +154,29 @@ def set_widget_tone(widget: QWidget, tone: str | None) -> None:
         style.unpolish(widget)
         style.polish(widget)
     widget.update()
+
+
+def polish_calendar_popup(date_edit: QWidget) -> None:
+    """Force theme palette on a QDateEdit calendar popup when it opens."""
+    calendar_fn = getattr(date_edit, "calendarWidget", None)
+    if calendar_fn is None:
+        return
+    calendar = calendar_fn()
+    if calendar is None:
+        return
+    calendar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    calendar.setAutoFillBackground(True)
+    calendar.setPalette(build_palette(_current_tokens))
+
+    today_fmt = QTextCharFormat()
+    today_fmt.setForeground(_qcolor(_current_tokens.brand_primary))
+    today_fmt.setFontWeight(700)
+    calendar.setDateTextFormat(QDate.currentDate(), today_fmt)
+
+    weekend = QTextCharFormat()
+    weekend.setForeground(_qcolor(_current_tokens.text_muted))
+    calendar.setWeekdayTextFormat(Qt.DayOfWeek.Saturday, weekend)
+    calendar.setWeekdayTextFormat(Qt.DayOfWeek.Sunday, weekend)
 
 
 def apply_theme(

@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -240,6 +241,11 @@ class SecuritySettingsDialog(DialogShell):
         form.addRow("", self._updates)
         form.addRow("", self._tray)
         form.addRow(tr("Theme"), self._theme)
+        self._import_theme = QPushButton(tr("Import custom theme…"))
+        self._import_theme.setProperty("cssClass", "secondary")
+        self._import_theme.clicked.connect(self._import_custom_theme)
+        self._custom_theme_path = settings.custom_theme_path
+        form.addRow("", self._import_theme)
         form.addRow(tr("Accent"), accent_host)
         form.addRow("", accent_hint)
         form.addRow(tr("UI density"), self._density)
@@ -331,4 +337,32 @@ class SecuritySettingsDialog(DialogShell):
             check_updates_on_start=self._updates.isChecked(),
             start_minimized_to_tray=self._tray.isChecked(),
             language=str(self._language.currentData() or "en"),
+            custom_theme_path=self._custom_theme_path,
+            dashboard_hidden_panels=self._original.dashboard_hidden_panels,
+        )
+
+    def _import_custom_theme(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("Import theme JSON"),
+            "",
+            tr("Theme JSON (*.json)"),
+        )
+        if not path:
+            return
+        try:
+            from kdbxstudio.ui.theme.custom_theme import load_custom_theme_json
+
+            load_custom_theme_json(path)
+        except (OSError, ValueError, TypeError) as exc:
+            QMessageBox.warning(self, tr("Import theme"), str(exc))
+            return
+        self._custom_theme_path = path
+        index = self._theme.findData("custom")
+        if index >= 0:
+            self._theme.setCurrentIndex(index)
+        QMessageBox.information(
+            self,
+            tr("Import theme"),
+            tr("Custom theme loaded. Save settings to apply."),
         )

@@ -7,13 +7,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.core.totp import current_totp
+from kdbxstudio.ui.widgets.countdown_ring import CountdownRing
 
 
 class TotpWidget(QWidget):
@@ -28,8 +28,7 @@ class TotpWidget(QWidget):
         self._code = QLabel("------")
         self._code.setObjectName("totpCode")
         self._label = QLabel("No TOTP configured")
-        self._remaining = QProgressBar()
-        self._remaining.setTextVisible(True)
+        self._ring = CountdownRing(size=64)
         self._otp_edit = QLineEdit()
         self._otp_edit.setPlaceholderText("otpauth://… or base32 secret")
 
@@ -39,12 +38,12 @@ class TotpWidget(QWidget):
         top = QHBoxLayout()
         top.addWidget(self._code)
         top.addStretch()
+        top.addWidget(self._ring)
         top.addWidget(copy_btn)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._label)
         layout.addLayout(top)
-        layout.addWidget(self._remaining)
         layout.addWidget(QLabel("OTP URI / secret"))
         layout.addWidget(self._otp_edit)
 
@@ -58,7 +57,8 @@ class TotpWidget(QWidget):
         self._otp_edit.clear()
         self._label.setText("No TOTP configured")
         self._code.setText("------")
-        self._remaining.setValue(0)
+        self._ring.set_value(0)
+        self._ring.set_caption("")
         self._timer.stop()
 
     def set_otp(self, otp: str) -> None:
@@ -80,9 +80,9 @@ class TotpWidget(QWidget):
             self._label.setText(status.error or "No TOTP configured")
             self._code.setText("------")
             self._last_code = ""
-            self._remaining.setRange(0, 30)
-            self._remaining.setValue(0)
-            self._remaining.setFormat("")
+            self._ring.set_range(30)
+            self._ring.set_value(0)
+            self._ring.set_caption("")
             return
         self._label.setText(status.label or "TOTP")
         self._last_code = status.code
@@ -94,9 +94,16 @@ class TotpWidget(QWidget):
         else:
             pretty = code
         self._code.setText(pretty)
-        self._remaining.setRange(0, status.period)
-        self._remaining.setValue(status.remaining_seconds)
-        self._remaining.setFormat(f"{status.remaining_seconds}s")
+        remaining = status.remaining_seconds
+        self._ring.set_range(status.period)
+        self._ring.set_value(remaining)
+        self._ring.set_caption(f"{remaining}s")
+        if remaining <= 5:
+            self._ring.set_tone("danger")
+        elif remaining <= 10:
+            self._ring.set_tone("warning")
+        else:
+            self._ring.set_tone("success")
 
     def _copy(self) -> None:
         if self._last_code:

@@ -8,8 +8,6 @@ from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDateEdit,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
@@ -17,13 +15,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QTextEdit,
-    QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.i18n import tr
 from kdbxstudio.security.session import ClipboardGuard
 from kdbxstudio.ui.dialogs.password_generator_dialog import PasswordGeneratorDialog
+from kdbxstudio.ui.theme.manager import polish_calendar_popup
+from kdbxstudio.ui.theme.motion import fade_in
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,7 @@ class NewEntryData:
     expiry_date: str  # yyyy-MM-dd when expires is True
 
 
-class NewEntryDialog(QDialog):
+class NewEntryDialog(DialogShell):
     """Collect all common entry fields and create in one step."""
 
     def __init__(
@@ -49,11 +49,16 @@ class NewEntryDialog(QDialog):
         clipboard_guard: ClipboardGuard | None = None,
         group_path: str = "",
     ) -> None:
-        super().__init__(parent)
+        super().__init__(
+            parent,
+            title=tr("New Entry"),
+            subtitle=tr("Create a credential in the selected group"),
+            icon_name="add",
+            width=520,
+        )
         self._clipboard_guard = clipboard_guard
-        self.setWindowTitle(tr("New Entry"))
-        self.setModal(True)
-        self.resize(480, 520)
+        self._anim = None
+        self.resize(520, 560)
 
         self._title = QLineEdit()
         self._title.setPlaceholderText(tr("Required"))
@@ -82,8 +87,14 @@ class NewEntryDialog(QDialog):
         self._expiry_date.setDisplayFormat("yyyy-MM-dd")
         self._expiry_date.setDate(QDate.currentDate().addYears(1))
         self._expiry_date.setMinimumDate(QDate(1970, 1, 1))
+        self._expiry_date.setReadOnly(False)
+        line = self._expiry_date.lineEdit()
+        if line is not None:
+            line.setReadOnly(False)
         self._expiry_date.setEnabled(False)
+        polish_calendar_popup(self._expiry_date)
         self._has_expiry.toggled.connect(self._on_expiry_mode_toggled)
+        self._expiry_date.dateChanged.connect(self._on_expiry_date_changed)
 
         show_btn = QPushButton(tr("Show"))
         show_btn.setCheckable(True)
@@ -96,10 +107,10 @@ class NewEntryDialog(QDialog):
         pwd_row.addWidget(show_btn)
         pwd_row.addWidget(gen_btn)
 
-        expiry_row = QHBoxLayout()
-        expiry_row.addWidget(self._never_expires)
-        expiry_row.addWidget(self._has_expiry)
-        expiry_row.addWidget(self._expiry_date, stretch=1)
+        expiry_mode_row = QHBoxLayout()
+        expiry_mode_row.addWidget(self._never_expires)
+        expiry_mode_row.addWidget(self._has_expiry)
+        expiry_mode_row.addStretch(1)
 
         form = QFormLayout()
         if group_path:
@@ -112,30 +123,20 @@ class NewEntryDialog(QDialog):
         form.addRow(tr("URL"), self._url)
         form.addRow(tr("Tags"), self._tags)
         form.addRow(tr("TOTP"), self._otp)
-        form.addRow(tr("Expiry"), expiry_row)
+        form.addRow(tr("Expiry"), expiry_mode_row)
+        form.addRow(tr("Expiry date"), self._expiry_date)
         form.addRow(tr("Notes"), self._notes)
+        self.body.addLayout(form)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save
-            | QDialogButtonBox.StandardButton.Cancel
-        )
-        save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
-        if save_btn is not None:
-            save_btn.setText(tr("Create"))
-            save_btn.setProperty("cssClass", "primary")
-            save_btn.setDefault(True)
-        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-        if cancel_btn is not None:
-            cancel_btn.setProperty("cssClass", "secondary")
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 16)
-        layout.setSpacing(16)
-        layout.addLayout(form)
-        layout.addWidget(buttons)
+        self.set_primary_text(tr("Create"))
+        self.button_box.accepted.disconnect()
+        self.button_box.accepted.connect(self._accept)
         self._title.setFocus()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        polish_calendar_popup(self._expiry_date)
+        self._anim = fade_in(self)
 
     def entry_data(self) -> NewEntryData:
         tags = tuple(
@@ -157,8 +158,20 @@ class NewEntryDialog(QDialog):
 
     def _on_expiry_mode_toggled(self, has_expiry: bool) -> None:
         self._expiry_date.setEnabled(has_expiry)
+        self._expiry_date.setReadOnly(not has_expiry)
+        line = self._expiry_date.lineEdit()
+        if line is not None:
+            line.setReadOnly(not has_expiry)
         if has_expiry:
             self._expiry_date.setFocus()
+
+    def _on_expiry_date_changed(self, _date: QDate) -> None:
+        if not self._has_expiry.isChecked():
+            self._has_expiry.blockSignals(True)
+            self._has_expiry.setChecked(True)
+            self._has_expiry.blockSignals(False)
+            self._expiry_date.setEnabled(True)
+            self._expiry_date.setReadOnly(False)
 
     def _toggle_password(self, checked: bool) -> None:
         mode = (

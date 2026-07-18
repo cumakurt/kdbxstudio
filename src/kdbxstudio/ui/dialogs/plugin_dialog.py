@@ -2,32 +2,38 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.application.plugin_manager import PluginManager
+from kdbxstudio.i18n import tr
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
-class PluginDialog(QDialog):
+class PluginDialog(DialogShell):
     def __init__(
         self, manager: PluginManager, parent: QWidget | None = None
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Plugins")
+        super().__init__(
+            parent,
+            title=tr("Plugins"),
+            subtitle=tr("Activate or deactivate installed plugins"),
+            icon_name="extension",
+            width=520,
+        )
         self._manager = manager
-        self.resize(480, 320)
+        self.resize(520, 360)
 
         self._list = QListWidget()
-        activate = QPushButton("Activate")
-        deactivate = QPushButton("Deactivate")
+        activate = QPushButton(tr("Activate"))
+        deactivate = QPushButton(tr("Deactivate"))
         activate.clicked.connect(self._activate)
         deactivate.clicked.connect(self._deactivate)
 
@@ -35,15 +41,15 @@ class PluginDialog(QDialog):
         buttons.addWidget(activate)
         buttons.addWidget(deactivate)
         buttons.addStretch()
+        self.body.addWidget(self._list)
+        self.body.addLayout(buttons)
 
-        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        close.rejected.connect(self.reject)
-        close.accepted.connect(self.accept)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self._list)
-        layout.addLayout(buttons)
-        layout.addWidget(close)
+        self.button_box.clear()
+        close = self.button_box.addButton(QDialogButtonBox.StandardButton.Close)
+        if close is not None:
+            close.setProperty("cssClass", "primary")
+        self.button_box.rejected.connect(self.reject)
+        self.button_box.accepted.connect(self.accept)
         self._reload()
 
     def _reload(self) -> None:
@@ -52,14 +58,14 @@ class PluginDialog(QDialog):
             state = "active" if info.active else "inactive"
             text = f"{info.name} {info.version} [{state}] — {info.description}"
             item = QListWidgetItem(text)
-            item.setData(256, info.name)
+            item.setData(Qt.ItemDataRole.UserRole, info.name)
             self._list.addItem(item)
 
     def _selected_name(self) -> str | None:
         item = self._list.currentItem()
         if item is None:
             return None
-        value = item.data(256)
+        value = item.data(Qt.ItemDataRole.UserRole)
         return str(value) if value else None
 
     def _activate(self) -> None:

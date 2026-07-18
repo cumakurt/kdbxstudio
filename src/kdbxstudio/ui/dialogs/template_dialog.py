@@ -4,26 +4,30 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QLabel,
     QLineEdit,
     QTextEdit,
-    QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.application.templates import EntryTemplate, list_templates
+from kdbxstudio.i18n import tr
+from kdbxstudio.ui.theme.motion import fade_in
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
-class TemplateDialog(QDialog):
+class TemplateDialog(DialogShell):
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("New Entry from Template")
-        self.setModal(True)
-        self.resize(420, 360)
-
+        super().__init__(
+            parent,
+            title=tr("New Entry from Template"),
+            subtitle=tr("Start from a structured secret template"),
+            icon_name="add",
+            width=460,
+        )
+        self._anim = None
+        self.resize(460, 400)
         self._templates = list_templates()
         self._combo = QComboBox()
         for template in self._templates:
@@ -38,33 +42,22 @@ class TemplateDialog(QDialog):
         self._notes = QTextEdit()
 
         form = QFormLayout()
-        form.addRow("Template", self._combo)
+        form.addRow(tr("Template"), self._combo)
         form.addRow("", self._description)
-        form.addRow("Title", self._title)
+        form.addRow(tr("Title"), self._title)
+        self.body.addLayout(form)
+        self.body.addLayout(self._fields_form)
+        self.body.addWidget(QLabel(tr("Notes")))
+        self.body.addWidget(self._notes)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        if ok_btn is not None:
-            ok_btn.setProperty("cssClass", "primary")
-            ok_btn.setDefault(True)
-        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-        if cancel_btn is not None:
-            cancel_btn.setProperty("cssClass", "secondary")
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 16)
-        layout.setSpacing(16)
-        layout.addLayout(form)
-        layout.addLayout(self._fields_form)
-        layout.addWidget(QLabel("Notes"))
-        layout.addWidget(self._notes)
-        layout.addWidget(buttons)
-
+        self.set_primary_text(tr("Create"))
+        self.button_box.accepted.disconnect()
+        self.button_box.accepted.connect(self._accept)
         self._on_template_changed(0)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._anim = fade_in(self)
 
     def selected_template(self) -> EntryTemplate:
         template_id = str(self._combo.currentData())

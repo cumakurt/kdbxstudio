@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from PySide6.QtCore import QDate, QSize, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -11,6 +9,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDateEdit,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -25,6 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kdbxstudio.application.expiry import (
+    expiry_chip_info,
+    expiry_local_date_iso,
+    local_date_to_utc_end_of_day,
+)
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.core.password_strength import (
     StrengthBucket,
@@ -39,8 +43,10 @@ from kdbxstudio.ui.icons.entry_type import (
     detect_entry_kind,
     field_icon,
 )
-from kdbxstudio.ui.theme.manager import set_widget_tone
+from kdbxstudio.ui.theme.manager import polish_calendar_popup, set_widget_tone
 from kdbxstudio.ui.widgets.notes_preview import NotesPreviewWidget
+from kdbxstudio.ui.widgets.status_chip import StatusChip
+from kdbxstudio.ui.widgets.tag_colors import tag_chip_colors
 
 _STRENGTH_LABELS = {
     StrengthBucket.EMPTY: "Empty",
@@ -118,17 +124,25 @@ class EntryDetailWidget(QWidget):
         self._expiry_date.setDisplayFormat("yyyy-MM-dd")
         self._expiry_date.setDate(QDate.currentDate().addYears(1))
         self._expiry_date.setMinimumDate(QDate(1970, 1, 1))
+        self._expiry_date.setReadOnly(False)
+        line = self._expiry_date.lineEdit()
+        if line is not None:
+            line.setReadOnly(False)
+            line.setPlaceholderText(tr("YYYY-MM-DD"))
         self._expiry_date.setEnabled(False)
+        polish_calendar_popup(self._expiry_date)
+        self._form_enabled = False
         self._has_expiry.toggled.connect(self._on_expiry_mode_toggled)
+        self._expiry_date.dateChanged.connect(self._on_expiry_date_changed)
 
-        self._expiry_countdown = QLabel("")
-        self._expiry_countdown.setWordWrap(True)
-        self._expiry_countdown.setVisible(False)
+        self._expiry_countdown = StatusChip(object_name="expiryChip")
+        self._tag_chips = QHBoxLayout()
+        self._tag_chips.setSpacing(4)
 
-        expiry_row = QHBoxLayout()
-        expiry_row.addWidget(self._never_expires)
-        expiry_row.addWidget(self._has_expiry)
-        expiry_row.addWidget(self._expiry_date, stretch=1)
+        expiry_mode_row = QHBoxLayout()
+        expiry_mode_row.addWidget(self._never_expires)
+        expiry_mode_row.addWidget(self._has_expiry)
+        expiry_mode_row.addStretch(1)
 
         self._title_icon = _leading_icon(self._title, FieldKind.TITLE)
         self._username_icon = _leading_icon(self._username, FieldKind.USERNAME)
@@ -145,7 +159,11 @@ class EntryDetailWidget(QWidget):
         self._custom.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
+        self._custom.horizontalHeader().setHighlightSections(False)
         self._custom.verticalHeader().setVisible(False)
+        self._custom.setShowGrid(False)
+        self._custom.setFrameShape(QFrame.Shape.NoFrame)
+        self._custom.setAlternatingRowColors(True)
         self._custom.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._custom.customContextMenuRequested.connect(self._show_custom_menu)
 
@@ -201,7 +219,9 @@ class EntryDetailWidget(QWidget):
         form.addRow(tr("Strength"), strength_row)
         form.addRow(tr("URL"), self._url)
         form.addRow(tr("Tags"), self._tags)
-        form.addRow(tr("Expiry"), expiry_row)
+        form.addRow("", self._tag_chips)
+        form.addRow(tr("Expiry"), expiry_mode_row)
+        form.addRow(tr("Expiry date"), self._expiry_date)
         form.addRow("", self._expiry_countdown)
         form.addRow(tr("Notes"), self._notes)
         form.addRow(tr("Custom fields"), self._custom)
@@ -220,6 +240,7 @@ class EntryDetailWidget(QWidget):
         self._apply_kind_icons(EntryKind.GENERIC)
 
     def set_enabled(self, enabled: bool) -> None:
+        self._form_enabled = enabled
         for widget in (
             self._title,
             self._username,
@@ -228,13 +249,11 @@ class EntryDetailWidget(QWidget):
             self._tags,
             self._never_expires,
             self._has_expiry,
-            self._expiry_date,
             self._notes,
             self._custom,
         ):
             widget.setEnabled(enabled)
-        if enabled:
-            self._expiry_date.setEnabled(self._has_expiry.isChecked())
+        self._sync_expiry_date_enabled()
 
     def clear(self) -> None:
         self._entry_uuid = None
@@ -246,9 +265,12 @@ class EntryDetailWidget(QWidget):
         self._password.clear()
         self._url.clear()
         self._tags.clear()
+        self._clear_tag_chips()
         self._never_expires.setChecked(True)
+        self._expiry_date.blockSignals(True)
         self._expiry_date.setDate(QDate.currentDate().addYears(1))
-        self._expiry_countdown.setVisible(False)
+        self._expiry_date.blockSignals(False)
+        self._expiry_countdown.clear_chip()
         self._title.blockSignals(False)
         self._url.blockSignals(False)
         self._username.blockSignals(False)
@@ -263,17 +285,20 @@ class EntryDetailWidget(QWidget):
         self._title.blockSignals(True)
         self._url.blockSignals(True)
         self._username.blockSignals(True)
+        self._expiry_date.blockSignals(True)
         self._title.setText(entry.title)
         self._username.setText(entry.username)
         self._password.setText(entry.password)
         self._url.setText(entry.url)
         self._tags.setText(", ".join(entry.tags))
+        self._refresh_tag_chips(entry.tags)
         if entry.expires:
             self._has_expiry.setChecked(True)
         else:
             self._never_expires.setChecked(True)
-        if entry.expiry_time:
-            date = QDate.fromString(entry.expiry_time[:10], "yyyy-MM-dd")
+        local_iso = expiry_local_date_iso(entry)
+        if local_iso:
+            date = QDate.fromString(local_iso, "yyyy-MM-dd")
             if date.isValid():
                 self._expiry_date.setDate(date)
         elif not entry.expires:
@@ -281,6 +306,7 @@ class EntryDetailWidget(QWidget):
         self._title.blockSignals(False)
         self._url.blockSignals(False)
         self._username.blockSignals(False)
+        self._expiry_date.blockSignals(False)
         self._notes.setPlainText(entry.notes)
         self._load_custom(entry.custom_properties)
         kind = detect_entry_kind(
@@ -295,51 +321,81 @@ class EntryDetailWidget(QWidget):
         self._reset_password_visibility()
         self.set_enabled(True)
 
+    def _sync_expiry_date_enabled(self) -> None:
+        editable = self._form_enabled and self._has_expiry.isChecked()
+        self._expiry_date.setEnabled(editable)
+        self._expiry_date.setReadOnly(not editable)
+        line = self._expiry_date.lineEdit()
+        if line is not None:
+            line.setReadOnly(not editable)
+
     def _on_expiry_mode_toggled(self, has_expiry: bool) -> None:
-        self._expiry_date.setEnabled(has_expiry and self._never_expires.isEnabled())
-        if has_expiry and self._has_expiry.isEnabled():
-            self._expiry_date.setFocus()
+        self._sync_expiry_date_enabled()
+        if has_expiry and self._form_enabled:
+            self._expiry_date.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._refresh_expiry_countdown_from_editor()
+
+    def _on_expiry_date_changed(self, _date: QDate) -> None:
+        if not self._form_enabled:
+            return
+        if not self._has_expiry.isChecked():
+            self._has_expiry.blockSignals(True)
+            self._has_expiry.setChecked(True)
+            self._has_expiry.blockSignals(False)
+            self._sync_expiry_date_enabled()
+        self._refresh_expiry_countdown_from_editor()
+
+    def _refresh_expiry_countdown_from_editor(self) -> None:
+        if not self._has_expiry.isChecked():
+            self._expiry_countdown.clear_chip()
+            return
+        iso = self._expiry_date.date().toString("yyyy-MM-dd")
+        stub = EntryView(
+            uuid=self._entry_uuid or "",
+            title="",
+            username="",
+            password="",
+            url="",
+            notes="",
+            group_path="",
+            expires=True,
+            expiry_time=local_date_to_utc_end_of_day(iso).isoformat(),
+        )
+        self._update_expiry_countdown(stub)
 
     def _update_expiry_countdown(self, entry: EntryView) -> None:
-        if not entry.expires or not entry.expiry_time:
-            self._expiry_countdown.setVisible(False)
+        info = expiry_chip_info(entry)
+        if info is None:
+            self._expiry_countdown.clear_chip()
             return
-        try:
-            text = entry.expiry_time.strip()
-            if text.endswith("Z"):
-                text = text[:-1] + "+00:00"
-            expiry_dt = datetime.fromisoformat(text)
-            if expiry_dt.tzinfo is None:
-                expiry_dt = expiry_dt.replace(tzinfo=UTC)
-            now = datetime.now(UTC)
-            delta = expiry_dt - now
-            days = delta.days
-            if days < 0:
-                self._expiry_countdown.setText(
-                    trf("⚠ Expired {days} day(s) ago", days=abs(days))
-                )
-                set_widget_tone(self._expiry_countdown, "danger")
-            elif days == 0:
-                self._expiry_countdown.setText(tr("⚠ Expires today!"))
-                set_widget_tone(self._expiry_countdown, "warning")
-            elif days <= 7:
-                self._expiry_countdown.setText(
-                    trf("⏰ Expires in {days} day(s)", days=days)
-                )
-                set_widget_tone(self._expiry_countdown, "warning")
-            elif days <= 30:
-                self._expiry_countdown.setText(
-                    trf("📅 Expires in {days} day(s)", days=days)
-                )
-                set_widget_tone(self._expiry_countdown, "warning")
-            else:
-                self._expiry_countdown.setText(
-                    trf("✓ Expires in {days} day(s)", days=days)
-                )
-                set_widget_tone(self._expiry_countdown, "success")
-            self._expiry_countdown.setVisible(True)
-        except (ValueError, TypeError):
-            self._expiry_countdown.setVisible(False)
+        label = info.label
+        if info.tone == "danger":
+            text = trf("Expired {label}", label=label)
+        elif label == "Today":
+            text = tr("Expires today")
+        else:
+            text = trf("Expires in {label}", label=label)
+        self._expiry_countdown.set_chip(text, info.tone)
+
+    def _clear_tag_chips(self) -> None:
+        while self._tag_chips.count():
+            item = self._tag_chips.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _refresh_tag_chips(self, tags: tuple[str, ...] | list[str]) -> None:
+        self._clear_tag_chips()
+        for tag in tags:
+            chip = QLabel(tag)
+            chip.setObjectName("tagChip")
+            bg, fg = tag_chip_colors(tag)
+            chip.setStyleSheet(
+                f"QLabel#tagChip {{ background-color: {bg}; color: {fg}; "
+                f"border-radius: 8px; padding: 2px 8px; }}"
+            )
+            self._tag_chips.addWidget(chip)
+        self._tag_chips.addStretch(1)
 
     def _refresh_field_icons(self) -> None:
         kind = detect_entry_kind(

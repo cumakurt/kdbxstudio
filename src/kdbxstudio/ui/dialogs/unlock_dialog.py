@@ -4,26 +4,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.i18n import tr
-from kdbxstudio.ui.icons import ICON_KEY, ICON_LOCK, ICON_OPEN, icon, standard_icon
+from kdbxstudio.ui.icons import ICON_KEY, ICON_LOCK, ICON_OPEN, standard_icon
 from kdbxstudio.ui.theme import current_ui_scale
+from kdbxstudio.ui.theme.motion import fade_in
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
 def _lead(edit: QLineEdit, icon_name: str) -> None:
@@ -32,7 +30,7 @@ def _lead(edit: QLineEdit, icon_name: str) -> None:
     edit.addAction(action, QLineEdit.ActionPosition.LeadingPosition)
 
 
-class UnlockDialog(QDialog):
+class UnlockDialog(DialogShell):
     """Collect password and optional key file for open/create."""
 
     def __init__(
@@ -42,12 +40,22 @@ class UnlockDialog(QDialog):
         path: Path | None = None,
         create_mode: bool = False,
     ) -> None:
-        super().__init__(parent)
+        title = tr("Create Database") if create_mode else tr("Unlock Database")
+        subtitle = (
+            tr("Choose a path and set master credentials")
+            if create_mode
+            else tr("Enter master password and optional key file")
+        )
+        super().__init__(
+            parent,
+            title=title,
+            subtitle=subtitle,
+            icon_name="add" if create_mode else ICON_LOCK,
+            width=520,
+        )
         self._path = path
         self._create_mode = create_mode
-        title = tr("Create Database") if create_mode else tr("Unlock Database")
-        self.setWindowTitle(title)
-        self.setModal(True)
+        self._anim = None
         scale = current_ui_scale()
         self.setMinimumWidth(scale.px(460))
 
@@ -55,7 +63,6 @@ class UnlockDialog(QDialog):
         self._path_edit.setReadOnly(not create_mode and path is not None)
         _lead(self._path_edit, ICON_OPEN)
         browse = QPushButton(tr("Browse…"))
-        # autoDefault buttons steal Enter from the password field.
         browse.setAutoDefault(False)
         browse.setDefault(False)
         browse.clicked.connect(self._browse_path)
@@ -97,56 +104,23 @@ class UnlockDialog(QDialog):
             form.addRow(tr("Confirm"), self._confirm)
         form.addRow(tr("Key file"), key_row)
         form.addRow("", self._show_password)
+        self.body.addLayout(form)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        if ok_btn is not None:
-            ok_btn.setText(tr("Create") if create_mode else tr("Unlock"))
-            ok_btn.setProperty("cssClass", "primary")
-            ok_btn.setAutoDefault(True)
-            ok_btn.setDefault(True)
-            ok_btn.setMinimumWidth(scale.px(120))
-        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-        if cancel_btn is not None:
-            cancel_btn.setProperty("cssClass", "secondary")
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
-        # Enter in password fields must unlock/create, not open Browse.
+        self.set_primary_text(tr("Create") if create_mode else tr("Unlock"))
+        ok = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        if ok is not None:
+            ok.setMinimumWidth(scale.px(120))
+            ok.setAutoDefault(True)
+            ok.setDefault(True)
+        self.button_box.accepted.disconnect()
+        self.button_box.accepted.connect(self._accept)
         self._password.returnPressed.connect(self._accept)
         self._confirm.returnPressed.connect(self._accept)
-
-        card = QWidget()
-        card.setObjectName("unlockCard")
-        card.setFixedWidth(scale.px(420))
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(
-            scale.px(24), scale.px(24), scale.px(24), scale.px(24)
-        )
-        card_layout.setSpacing(scale.px(16))
-
-        heading_row = QHBoxLayout()
-        heading_row.setSpacing(12)
-        icon_label = QLabel()
-        icon_name = "add" if create_mode else ICON_LOCK
-        icon_label.setPixmap(icon(icon_name, size=28, brand=True).pixmap(28, 28))
-        icon_label.setFixedSize(32, 32)
-        heading_row.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
-        heading = QLabel(title)
-        heading.setObjectName("emptyBrand")
-        heading_row.addWidget(heading, 1)
-        card_layout.addLayout(heading_row)
-        card_layout.addLayout(form)
-        card_layout.addWidget(buttons)
-
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 24, 24, 24)
-        outer.addStretch()
-        outer.addWidget(card, alignment=Qt.AlignmentFlag.AlignHCenter)
-        outer.addStretch()
-
         self._password.setFocus()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._anim = fade_in(self)
 
     def database_path(self) -> Path:
         return Path(self._path_edit.text().strip())

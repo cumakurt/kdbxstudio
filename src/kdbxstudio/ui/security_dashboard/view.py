@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -30,6 +31,8 @@ class SecurityDashboardView(QWidget):
         super().__init__(parent)
         self.setObjectName("securityDashboard")
         self._vm = view_model
+        self._hidden_panels: set[str] = set()
+        self._panel_by_id: dict[str, object] = {}
         register_default_panels()
 
         self._empty = QLabel(tr("No database open"))
@@ -39,9 +42,13 @@ class SecurityDashboardView(QWidget):
         refresh = QPushButton(tr("Refresh"))
         refresh.setAccessibleName(tr("Refresh security dashboard"))
         refresh.clicked.connect(self._vm.request_refresh)
+        layout_btn = QPushButton(tr("Panels"))
+        layout_btn.setProperty("cssClass", "secondary")
+        layout_btn.clicked.connect(self._show_panel_menu)
 
         top = QHBoxLayout()
         top.addWidget(QLabel(tr("Security Dashboard")), stretch=1)
+        top.addWidget(layout_btn)
         top.addWidget(refresh)
 
         self._grid_host = QWidget()
@@ -67,6 +74,7 @@ class SecurityDashboardView(QWidget):
                 row += 1
                 col = 0
             self._panels.append(panel)
+            self._panel_by_id[spec.id] = panel
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -92,3 +100,35 @@ class SecurityDashboardView(QWidget):
         self._scroll.setVisible(True)
         for panel in self._panels:
             panel.update_snapshot(snapshot)
+
+
+    def set_hidden_panels(self, panel_ids: set[str] | list[str] | str) -> None:
+        if isinstance(panel_ids, str):
+            hidden = {p.strip() for p in panel_ids.split(",") if p.strip()}
+        else:
+            hidden = set(panel_ids)
+        self._hidden_panels = hidden
+        for panel_id, panel in self._panel_by_id.items():
+            panel.setVisible(panel_id not in hidden)
+
+    def hidden_panels_csv(self) -> str:
+        return ",".join(sorted(self._hidden_panels))
+
+    def _show_panel_menu(self) -> None:
+        menu = QMenu(self)
+        for spec in registered_panels():
+            action = menu.addAction(tr(spec.title))
+            action.setCheckable(True)
+            action.setChecked(spec.id not in self._hidden_panels)
+
+            def _toggle(checked: bool, panel_id: str = spec.id) -> None:
+                if checked:
+                    self._hidden_panels.discard(panel_id)
+                else:
+                    self._hidden_panels.add(panel_id)
+                panel = self._panel_by_id.get(panel_id)
+                if panel is not None:
+                    panel.setVisible(panel_id not in self._hidden_panels)
+
+            action.toggled.connect(_toggle)
+        menu.exec(self.mapToGlobal(self.rect().topRight()))

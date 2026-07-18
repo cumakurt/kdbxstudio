@@ -6,33 +6,37 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QVBoxLayout,
     QWidget,
 )
 
+from kdbxstudio.i18n import tr
+from kdbxstudio.ui.theme.motion import fade_in
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
-class ChangeCredentialsDialog(QDialog):
+
+class ChangeCredentialsDialog(DialogShell):
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle("Change Master Password")
-        self.setModal(True)
-        self.resize(420, 220)
-
+        super().__init__(
+            parent,
+            title=tr("Change Master Password"),
+            subtitle=tr("Update the database master password and key file"),
+            icon_name="key",
+            width=460,
+        )
+        self._anim = None
         self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         self._confirm = QLineEdit()
         self._confirm.setEchoMode(QLineEdit.EchoMode.Password)
         self._keyfile = QLineEdit()
-        self._clear_key = QCheckBox("Remove key file")
-        self._show = QCheckBox("Show password")
+        self._clear_key = QCheckBox(tr("Remove key file"))
+        self._show = QCheckBox(tr("Show password"))
         self._show.toggled.connect(self._toggle)
 
         browse = QPushButton("…")
@@ -42,30 +46,20 @@ class ChangeCredentialsDialog(QDialog):
         key_row.addWidget(browse)
 
         form = QFormLayout()
-        form.addRow("New password", self._password)
-        form.addRow("Confirm", self._confirm)
-        form.addRow("Key file", key_row)
+        form.addRow(tr("New password"), self._password)
+        form.addRow(tr("Confirm"), self._confirm)
+        form.addRow(tr("Key file"), key_row)
         form.addRow("", self._clear_key)
         form.addRow("", self._show)
+        self.body.addLayout(form)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
-        if ok_btn is not None:
-            ok_btn.setProperty("cssClass", "primary")
-            ok_btn.setDefault(True)
-        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
-        if cancel_btn is not None:
-            cancel_btn.setProperty("cssClass", "secondary")
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
+        self.set_primary_text(tr("Change"))
+        self.button_box.accepted.disconnect()
+        self.button_box.accepted.connect(self._accept)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 16)
-        layout.setSpacing(16)
-        layout.addLayout(form)
-        layout.addWidget(buttons)
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._anim = fade_in(self)
 
     def password(self) -> str | None:
         text = self._password.text()
@@ -91,7 +85,7 @@ class ChangeCredentialsDialog(QDialog):
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select Key File", str(Path.home()), "All Files (*)"
+            self, tr("Select Key File"), str(Path.home()), tr("All Files (*)")
         )
         if path:
             self._keyfile.setText(path)
@@ -99,17 +93,15 @@ class ChangeCredentialsDialog(QDialog):
 
     def _accept(self) -> None:
         if self._password.text() != self._confirm.text():
-            QMessageBox.warning(self, "Mismatch", "Passwords do not match.")
+            QMessageBox.warning(
+                self, tr("Password mismatch"), tr("Passwords do not match.")
+            )
             return
-        if (
-            not self._password.text()
-            and not self._keyfile.text().strip()
-            and not self._clear_key.isChecked()
-        ):
+        if not self._password.text() and not self._keyfile.text().strip() and not self._clear_key.isChecked():
             QMessageBox.warning(
                 self,
-                "No changes",
-                "Provide a new password and/or key file, or clear the key file.",
+                tr("Missing credentials"),
+                tr("Provide a password and/or a key file."),
             )
             return
         self.accept()

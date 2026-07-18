@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from kdbxstudio.core.database import AttachmentView
 from kdbxstudio.i18n import tr
+from kdbxstudio.ui.widgets.empty_state import EmptyStateWidget
 
 
 class AttachmentPreviewWidget(QWidget):
@@ -60,6 +61,12 @@ class AttachmentPreviewWidget(QWidget):
         self._stack = QStackedWidget()
         self._stack.addWidget(self._text)
         self._stack.addWidget(self._pdf_view)
+        self._empty = EmptyStateWidget(
+            icon_name="attach_file",
+            title=tr("No attachments"),
+            hint=tr("Drop files here or use Add…"),
+        )
+        self._stack.addWidget(self._empty)
 
         add_btn = QPushButton(tr("Add…"))
         add_btn.clicked.connect(self.add_requested.emit)
@@ -97,6 +104,7 @@ class AttachmentPreviewWidget(QWidget):
         self._info.setText(tr("No attachment selected"))
         self._text.clear()
         self._close_pdf()
+        self._stack.setCurrentWidget(self._empty)
 
     def set_attachments(self, attachments: list[AttachmentView]) -> None:
         self._attachments = attachments
@@ -111,6 +119,7 @@ class AttachmentPreviewWidget(QWidget):
             self._info.setText(tr("No attachment selected"))
             self._text.clear()
             self._close_pdf()
+            self._stack.setCurrentWidget(self._empty)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():

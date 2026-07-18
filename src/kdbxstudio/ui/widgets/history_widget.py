@@ -15,9 +15,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from html import escape
+
 from kdbxstudio.application.history_diff import diff_history
 from kdbxstudio.core.database import HistoryView
 from kdbxstudio.i18n import tr, trf
+from kdbxstudio.ui.theme.manager import current_tokens
 
 
 def _mask_secret(value: str) -> str:
@@ -138,13 +141,34 @@ class HistoryWidget(QWidget):
             tr("Notes:"),
             item.notes,
         ]
+        html_parts = [f"<pre>{escape(chr(10).join(lines))}</pre>"]
         if row > 0:
             newer = self._items[row - 1]
             diffs = diff_history(item, newer, mask_secrets=not reveal)
-            lines.append("")
-            lines.append(tr("Diff vs newer revision:"))
+            tokens = current_tokens()
+            html_parts.append(f"<h3>{escape(tr('Diff vs newer revision:'))}</h3>")
             if not diffs:
-                lines.append(tr("(no field changes)"))
-            for diff in diffs:
-                lines.append(f"- {diff.field}: {diff.before!r} → {diff.after!r}")
-        self._detail.setPlainText("\n".join(lines))
+                html_parts.append(f"<p>{escape(tr('(no field changes)'))}</p>")
+            else:
+                html_parts.append("<table cellspacing='4'>")
+                for diff in diffs:
+                    if not diff.before and diff.after:
+                        color = tokens.text_success
+                        kind = tr("added")
+                    elif diff.before and not diff.after:
+                        color = tokens.text_danger
+                        kind = tr("removed")
+                    else:
+                        color = tokens.text_warning
+                        kind = tr("changed")
+                    html_parts.append(
+                        "<tr>"
+                        f"<td><b>{escape(diff.field)}</b></td>"
+                        f"<td style='color:{color}'>{escape(kind)}</td>"
+                        f"<td><code>{escape(diff.before)}</code></td>"
+                        f"<td>→</td>"
+                        f"<td><code>{escape(diff.after)}</code></td>"
+                        "</tr>"
+                    )
+                html_parts.append("</table>")
+        self._detail.setHtml("".join(html_parts))

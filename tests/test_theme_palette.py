@@ -83,7 +83,8 @@ def test_stylesheet_covers_item_views_and_tones() -> None:
         assert "QTableView" in css
         assert "QTreeView" in css
         assert "QTextBrowser" in css
-        assert "QDateEdit" in css
+        assert "QCalendarWidget QWidget#qt_calendar_navigationbar" in css
+        assert "QDateEdit::drop-down" in css
         assert "QRadioButton" in css
         assert "QScrollBar:horizontal" in css
         assert 'QProgressBar[tone="success"]' in css

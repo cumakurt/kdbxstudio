@@ -88,6 +88,15 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     language = normalize_language(
         str(raw.get("language", SecuritySettings.language))
     )
+    custom_theme_path = str(
+        raw.get("custom_theme_path", SecuritySettings.custom_theme_path)
+    )
+    dashboard_hidden_panels = str(
+        raw.get(
+            "dashboard_hidden_panels",
+            SecuritySettings.dashboard_hidden_panels,
+        )
+    )
     return SecuritySettings(
         clipboard_timeout_ms=clipboard_ms,
         auto_lock_timeout_ms=autolock_ms,
@@ -160,6 +169,8 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
             )
         ),
         language=language,
+        custom_theme_path=custom_theme_path,
+        dashboard_hidden_panels=dashboard_hidden_panels,
     )
 
 
@@ -206,6 +217,8 @@ def save_settings(
         "check_updates_on_start": settings.check_updates_on_start,
         "start_minimized_to_tray": settings.start_minimized_to_tray,
         "language": settings.language,
+        "custom_theme_path": settings.custom_theme_path,
+        "dashboard_hidden_panels": settings.dashboard_hidden_panels,
         "recent_databases": recent_paths[:_MAX_RECENT],
     }
     data = json.dumps(payload, indent=2) + "\n"

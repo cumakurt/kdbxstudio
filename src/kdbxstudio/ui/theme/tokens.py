@@ -6,7 +6,7 @@ Nord, Dracula, Tokyo Night, Catppuccin, Solarized, One Dark, Gruvbox.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 
@@ -24,6 +24,9 @@ class ThemeMode(StrEnum):
     SOLARIZED_DARK = "solarized-dark"
     ONE_DARK = "one-dark"
     GRUVBOX_DARK = "gruvbox-dark"
+    HIGH_CONTRAST = "high-contrast"
+    HIGH_CONTRAST_LIGHT = "high-contrast-light"
+    CUSTOM = "custom"
 
 
 # Human-readable English labels (also used as i18n keys via tr()).
@@ -39,6 +42,9 @@ THEME_LABELS: dict[ThemeMode, str] = {
     ThemeMode.SOLARIZED_DARK: "Solarized Dark",
     ThemeMode.ONE_DARK: "One Dark",
     ThemeMode.GRUVBOX_DARK: "Gruvbox Dark",
+    ThemeMode.HIGH_CONTRAST: "High Contrast",
+    ThemeMode.HIGH_CONTRAST_LIGHT: "High Contrast Light",
+    ThemeMode.CUSTOM: "Custom",
 }
 
 
@@ -361,6 +367,46 @@ GRUVBOX_DARK = _dark(
     text_success="#B8BB26",
 )
 
+HIGH_CONTRAST = _dark(
+    ThemeMode.HIGH_CONTRAST,
+    brand_primary="#00E5FF",
+    brand_primary_hover="#66F0FF",
+    brand_accent="#FFFF00",
+    brand_on_primary="#000000",
+    surface_app="#000000",
+    surface_panel="#0A0A0A",
+    surface_elevated="#1A1A1A",
+    surface_sunken="#000000",
+    border_subtle="#FFFFFF",
+    border_strong="#FFFFFF",
+    text_primary="#FFFFFF",
+    text_secondary="#FFFFFF",
+    text_muted="#CCCCCC",
+    text_danger="#FF5555",
+    text_warning="#FFDD00",
+    text_success="#00FF88",
+)
+
+HIGH_CONTRAST_LIGHT = _light(
+    ThemeMode.HIGH_CONTRAST_LIGHT,
+    brand_primary="#0000EE",
+    brand_primary_hover="#0000AA",
+    brand_accent="#AA0000",
+    brand_on_primary="#FFFFFF",
+    surface_app="#FFFFFF",
+    surface_panel="#FFFFFF",
+    surface_elevated="#F0F0F0",
+    surface_sunken="#EEEEEE",
+    border_subtle="#000000",
+    border_strong="#000000",
+    text_primary="#000000",
+    text_secondary="#000000",
+    text_muted="#333333",
+    text_danger="#CC0000",
+    text_warning="#886600",
+    text_success="#006600",
+)
+
 # Backward-compatible aliases
 LIGHT = STUDIO_LIGHT
 DARK = STUDIO_DARK
@@ -376,6 +422,8 @@ THEME_REGISTRY: dict[ThemeMode, ThemeTokens] = {
     ThemeMode.SOLARIZED_DARK: SOLARIZED_DARK,
     ThemeMode.ONE_DARK: ONE_DARK,
     ThemeMode.GRUVBOX_DARK: GRUVBOX_DARK,
+    ThemeMode.HIGH_CONTRAST: HIGH_CONTRAST,
+    ThemeMode.HIGH_CONTRAST_LIGHT: HIGH_CONTRAST_LIGHT,
 }
 
 # Order shown in Settings / View → Theme menus
@@ -391,6 +439,9 @@ THEME_CHOICES: tuple[ThemeMode, ...] = (
     ThemeMode.SOLARIZED_DARK,
     ThemeMode.ONE_DARK,
     ThemeMode.GRUVBOX_DARK,
+    ThemeMode.HIGH_CONTRAST,
+    ThemeMode.HIGH_CONTRAST_LIGHT,
+    ThemeMode.CUSTOM,
 )
 
 VALID_THEME_IDS: frozenset[str] = frozenset(m.value for m in THEME_CHOICES)
@@ -414,4 +465,11 @@ def tokens_for(mode: ThemeMode) -> ThemeTokens:
     """Return tokens for a concrete (non-SYSTEM) theme."""
     if mode == ThemeMode.SYSTEM:
         return STUDIO_DARK
+    if mode == ThemeMode.CUSTOM:
+        from kdbxstudio.ui.theme.custom_theme import current_custom_tokens
+
+        custom = current_custom_tokens()
+        if custom is not None:
+            return custom
+        return replace(STUDIO_DARK, mode=ThemeMode.CUSTOM)
     return THEME_REGISTRY.get(mode, STUDIO_DARK)
