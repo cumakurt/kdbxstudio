@@ -56,6 +56,9 @@ class UnlockDialog(QDialog):
         self._path_edit.setReadOnly(not create_mode and path is not None)
         _lead(self._path_edit, ICON_OPEN)
         browse = QPushButton(tr("Browse…"))
+        # autoDefault buttons steal Enter from the password field.
+        browse.setAutoDefault(False)
+        browse.setDefault(False)
         browse.clicked.connect(self._browse_path)
 
         path_row = QHBoxLayout()
@@ -77,6 +80,8 @@ class UnlockDialog(QDialog):
         self._keyfile.setPlaceholderText(tr("Optional key file"))
         _lead(self._keyfile, ICON_KEY)
         key_browse = QPushButton(tr("…"))
+        key_browse.setAutoDefault(False)
+        key_browse.setDefault(False)
         key_browse.clicked.connect(self._browse_keyfile)
         key_row = QHBoxLayout()
         key_row.addWidget(self._keyfile)
@@ -101,10 +106,14 @@ class UnlockDialog(QDialog):
         if ok_btn is not None:
             ok_btn.setText(tr("Create") if create_mode else tr("Unlock"))
             ok_btn.setProperty("cssClass", "primary")
+            ok_btn.setAutoDefault(True)
             ok_btn.setDefault(True)
             ok_btn.setMinimumWidth(scale.px(120))
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
+        # Enter in password fields must unlock/create, not open Browse.
+        self._password.returnPressed.connect(self._accept)
+        self._confirm.returnPressed.connect(self._accept)
 
         card = QWidget()
         card.setObjectName("unlockCard")

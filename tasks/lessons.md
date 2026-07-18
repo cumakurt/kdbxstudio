@@ -16,6 +16,10 @@
 - Seed audit scenarios *before* recycling entries that contribute to reused-username / empty-password counts.
 - Attachment mutations must invalidate search/index caches, not only fire listeners.
 
+## Unlock dialog Enter (2026-07-18)
+
+- In Qt dialogs, `QPushButton` defaults to `autoDefault=True`; Enter activates Browse instead of Unlock. Set `setAutoDefault(False)` on Browse/… buttons and keep only Ok as default; also wire password `returnPressed` → accept.
+
 ## Perf / correctness (2026-07-18)
 
 - Audit must never call `attachment_count(uuid)` per entry — put `attachment_count` on `EntryView` during list.
