@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from functools import lru_cache
 from urllib.parse import urlparse
 
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QIcon, QPainter, QPainterPath, QPixmap
 
+from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.ui.icons import icon, standard_icon
+from kdbxstudio.ui.icons.group_icons import GroupKind, group_kind_icon
 
 __all__ = [
     "EntryKind",
@@ -17,9 +21,11 @@ __all__ = [
     "detect_entry_kind",
     "detect_entry_kind_from_view",
     "entry_kind_icon",
+    "entry_list_icon",
     "field_icon",
     "field_icon_name",
     "category_icon_name",
+    "clear_entry_icon_cache",
     "standard_icon",
 ]
 
@@ -64,14 +70,83 @@ class FieldKind(StrEnum):
 
 
 _HOST_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
-    (re.compile(r"(gmail|outlook|proton|mail\.|imap|smtp)", re.I), EntryKind.EMAIL),
-    (re.compile(r"(github|gitlab|bitbucket|codeberg)", re.I), EntryKind.DEV),
-    (re.compile(r"(aws|azure|gcp|cloudflare|digitalocean)", re.I), EntryKind.CLOUD),
-    (re.compile(r"(paypal|stripe|visa|mastercard|bank|wise)", re.I), EntryKind.BANK),
+    (
+        re.compile(
+            r"(gmail|outlook|proton|mail\.|imap|smtp|yahoo\.|icloud)",
+            re.I,
+        ),
+        EntryKind.EMAIL,
+    ),
+    (
+        re.compile(r"(github|gitlab|bitbucket|codeberg|stackoverflow)", re.I),
+        EntryKind.DEV,
+    ),
+    (
+        re.compile(
+            r"(aws|azure|gcp|cloudflare|digitalocean|heroku|vercel|netlify)",
+            re.I,
+        ),
+        EntryKind.CLOUD,
+    ),
+    (
+        re.compile(
+            r"(paypal|stripe|visa|mastercard|bank|wise|revolut|binance|coinbase)",
+            re.I,
+        ),
+        EntryKind.BANK,
+    ),
     (re.compile(r"(postgres|mysql|mongo|redis|sql)", re.I), EntryKind.DATABASE),
     (re.compile(r"(docker|hub\.docker)", re.I), EntryKind.DOCKER),
     (re.compile(r"(k8s|kubernetes)", re.I), EntryKind.KUBERNETES),
+    (
+        re.compile(r"(microsoft|office\.com|live\.com|onedrive)", re.I),
+        EntryKind.WINDOWS,
+    ),
+    (re.compile(r"(apple\.com|icloud\.com)", re.I), EntryKind.IDENTITY),
+    (
+        re.compile(r"(dropbox|box\.com|drive\.google)", re.I),
+        EntryKind.CLOUD,
+    ),
+    (
+        re.compile(r"(slack|discord|teams\.microsoft|zoom\.us)", re.I),
+        EntryKind.LOGIN,
+    ),
+    (
+        re.compile(
+            r"(facebook|instagram|twitter|x\.com|linkedin|tiktok)",
+            re.I,
+        ),
+        EntryKind.LOGIN,
+    ),
+    (re.compile(r"(amazon|ebay|etsy|shopify)", re.I), EntryKind.LOGIN),
+    (re.compile(r"(netflix|spotify|youtube|twitch)", re.I), EntryKind.LOGIN),
 )
+
+
+# Colorful badges reuse the Groups icon kit for a consistent look.
+_ENTRY_TO_GROUP: dict[EntryKind, GroupKind] = {
+    EntryKind.LOGIN: GroupKind.INTERNET,
+    EntryKind.EMAIL: GroupKind.EMAIL,
+    EntryKind.API: GroupKind.API,
+    EntryKind.SSH: GroupKind.SSH,
+    EntryKind.CERTIFICATE: GroupKind.CERTIFICATE,
+    EntryKind.BANK: GroupKind.BANK,
+    EntryKind.WIFI: GroupKind.WIFI,
+    EntryKind.DATABASE: GroupKind.DATABASE,
+    EntryKind.CLOUD: GroupKind.CLOUD,
+    EntryKind.DEV: GroupKind.DEV,
+    EntryKind.NOTE: GroupKind.NOTE,
+    EntryKind.SERVER: GroupKind.SERVER,
+    EntryKind.VPN: GroupKind.VPN,
+    EntryKind.DOCKER: GroupKind.DOCKER,
+    EntryKind.KUBERNETES: GroupKind.KUBERNETES,
+    EntryKind.LINUX: GroupKind.LINUX,
+    EntryKind.WINDOWS: GroupKind.WINDOWS,
+    EntryKind.IDENTITY: GroupKind.IDENTITY,
+    EntryKind.CRYPTO: GroupKind.CRYPTO,
+    EntryKind.LICENSE: GroupKind.LICENSE,
+    EntryKind.GENERIC: GroupKind.FOLDER,
+}
 
 _TITLE_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
     (re.compile(r"\b(ssh|openssh|ed25519|rsa)\b", re.I), EntryKind.SSH),
@@ -232,7 +307,56 @@ def category_icon_name(kind: EntryKind) -> str:
 
 
 def entry_kind_icon(kind: EntryKind, *, size: int = 18) -> QIcon:
-    return icon(category_icon_name(kind), size=size)
+    """Colorful category badge (same visual language as Groups)."""
+    group = _ENTRY_TO_GROUP.get(kind, GroupKind.FOLDER)
+    return group_kind_icon(group, size=size)
+
+
+@lru_cache(maxsize=256)
+def _rounded_file_icon(path: str, size: int) -> QIcon:
+    """Site favicon / brand mark clipped to a soft rounded square."""
+    src = QPixmap(path)
+    if src.isNull():
+        return QIcon()
+    scaled = src.scaled(
+        size,
+        size,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    if scaled.width() > size or scaled.height() > size:
+        x = max(0, (scaled.width() - size) // 2)
+        y = max(0, (scaled.height() - size) // 2)
+        scaled = scaled.copy(x, y, size, size)
+    out = QPixmap(size, size)
+    out.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+    radius = max(2.0, size * 0.22)
+    path_clip = QRectF(0.5, 0.5, size - 1.0, size - 1.0)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(Qt.PenStyle.NoPen)
+    clip = QPainterPath()
+    clip.addRoundedRect(path_clip, radius, radius)
+    painter.setClipPath(clip)
+    painter.drawPixmap(0, 0, scaled)
+    painter.end()
+    return QIcon(out)
+
+
+def clear_entry_icon_cache() -> None:
+    _rounded_file_icon.cache_clear()
+
+
+def entry_list_icon(entry: EntryView, *, size: int = 16) -> QIcon:
+    """Prefer original site favicon when cached; otherwise colorful kind badge."""
+    fav = cached_favicon(entry.url)
+    if fav is not None:
+        rounded = _rounded_file_icon(str(fav), size)
+        if not rounded.isNull():
+            return rounded
+    return entry_kind_icon(detect_entry_kind_from_view(entry), size=size)
 
 
 def field_icon(

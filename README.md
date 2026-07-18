@@ -52,7 +52,8 @@ Copyright (C) 2026 Cuma KURT.
 
 ## Screenshots
 
-Captured from the sample vault (`scripts/smoke_visual.py`, Studio Dark, English):
+Captured from the sample vault (`scripts/smoke_visual.py`, Studio Dark + teal accent, English).
+The workspace shot shows colorful **group category icons** and **site favicons** on entries.
 
 | Welcome | Workspace |
 | --- | --- |
@@ -94,15 +95,17 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 
 ### Workspace
 
-- Dockable **Groups** tree
+- Dockable **Groups** tree with **colorful category icons** auto-assigned from group names (Internet, Windows, Linux, Cloud, SSH, Docker, …)
 - **Security Dashboard** (Tools → Security Dashboard…) with Security Score, KPI cards, charts, recommendations, findings, Fix next, and open-entry actions
-- Fast entry list (`QTableView` model) + detail split view (resizable), optional **favicon** icons
+- Fast entry list (`QTableView` model) + detail split view (resizable)
+- Entry list icons: **original site favicons** for known URLs (cached + auto-prefetch), otherwise colorful category badges
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - **Expiry countdown** — visual indicator showing days until entry expires
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
 - System **tray** (show / lock / quit) — closing the window quits the app; tray icon can still show/hide or lock
-- Compact / comfortable density
+- Compact / comfortable density; **UI scale**, font size, and menu size in Settings
 - **Theme styles**: Studio Dark/Light, System, plus Nord, Dracula, Tokyo Night, Catppuccin (Mocha/Latte), Solarized Dark, One Dark, Gruvbox Dark
+- **Accent color** picker (teal / blue / purple / green / orange / red) applied across themes
 - **UI language**: English (default) or Turkish — Tools → Settings… → Language
 
 ### Entries & secrets
@@ -113,8 +116,9 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 - **Auto-Type 2.0** on Linux (`xdotool` / `ydotool` / `wtype`): `{DELAY=N}`, active-window match, configurable sequence and initial delay
 - **Move entry** between groups (dialog or drag entry onto a group in the tree)
 - **Multi-select delete** — select one or many entries (`Ctrl`/`Shift`+click, `Ctrl+A`); `Delete` → Recycle Bin, `Shift+Delete` → permanent
-- **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
+- **Contextual icons**: URL / title / PEM / template type → colorful login, email, API, SSH, bank, Wi‑Fi, Linux, Windows, …
 - Field-leading icons; action icons for Show / Copy / Generate / Save
+- **Site favicons** for entry URLs (Google s2, local cache under `~/.cache/kdbxstudio/favicons/`)
 - **Markdown / JSON** notes preview (valid HTML with `<ul>` lists)
 - **Secret templates**: Login, API Key, SSH, Certificate, Secure Note, Bank Card
 - **Password generator** with entropy estimate, secure clipboard copy, and presets

@@ -11,7 +11,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.i18n import tr
-from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_kind_icon
+from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_list_icon
 from kdbxstudio.ui.theme.geometry import density_metrics
 
 ENTRY_MIME = "application/x-kdbxstudio-entry"
@@ -81,20 +81,31 @@ class EntryTableModel(QAbstractTableModel):
             if col == 2:
                 return entry.url
         if role == Qt.ItemDataRole.DecorationRole and col == 0:
-            kind = detect_entry_kind_from_view(entry)
-            fav = cached_favicon(entry.url)
-            if fav is not None:
-                return QIcon(str(fav))
-            return entry_kind_icon(kind)
+            size = 16
+            parent = self.parent()
+            if isinstance(parent, QTableView):
+                size = max(16, parent.iconSize().width())
+            return entry_list_icon(entry, size=size)
         if role == Qt.ItemDataRole.ToolTipRole and col == 0:
             kind = detect_entry_kind_from_view(entry)
             tip = f"{entry.title} ({kind.value})"
             if entry.tags:
                 tip += f" [{', '.join(entry.tags)}]"
+            if entry.url and cached_favicon(entry.url) is not None:
+                tip += " · favicon"
             return tip
         if role == Qt.ItemDataRole.UserRole and col == 0:
             return entry.uuid
         return None
+
+    def refresh_icons(self) -> None:
+        """Notify views that decoration icons may have changed (e.g. favicon)."""
+        rows = len(self._entries)
+        if rows == 0:
+            return
+        top = self.index(0, 0)
+        bottom = self.index(rows - 1, 0)
+        self.dataChanged.emit(top, bottom, [Qt.ItemDataRole.DecorationRole])
 
     def flags(self, index: QModelIndex):  # noqa: N802
         if not index.isValid():
@@ -157,6 +168,7 @@ class EntryListWidget(QTableView):
     entry_selected = Signal(str)
     delete_requested = Signal()
     permanent_delete_requested = Signal()
+    favicon_prefetch_requested = Signal(object)  # list[str] urls
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -195,6 +207,7 @@ class EntryListWidget(QTableView):
         row_h = _row_height()
         self.verticalHeader().setDefaultSectionSize(row_h)
         self.setIconSize(QSize(max(16, row_h - 12), max(16, row_h - 12)))
+        self.refresh_icons()
 
     def select_row_at(self, pos: QPoint) -> bool:
         index = self.indexAt(pos)
@@ -208,6 +221,12 @@ class EntryListWidget(QTableView):
 
     def set_entries(self, entries: list[EntryView]) -> None:
         self._model.set_entries(entries)
+        urls = [e.url for e in entries if (e.url or "").strip()]
+        if urls:
+            self.favicon_prefetch_requested.emit(urls)
+
+    def refresh_icons(self) -> None:
+        self._model.refresh_icons()
 
     def selected_entry_uuid(self) -> str | None:
         uuids = self.selected_entry_uuids()

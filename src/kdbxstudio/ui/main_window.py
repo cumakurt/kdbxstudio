@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 from kdbxstudio import __version__
 from kdbxstudio.application.audit_engine import AuditEngine, AuditReport
 from kdbxstudio.application.database_manager import DatabaseManager
-from kdbxstudio.application.favicon import cached_favicon, fetch_favicon
+from kdbxstudio.application.favicon import cached_favicon, fetch_favicon, prefetch_favicons
 from kdbxstudio.application.plugin_manager import PluginManager
 from kdbxstudio.application.search_engine import EntryFilter, SearchEngine
 from kdbxstudio.application.security_dashboard import SecurityDashboardAnalyzer
@@ -81,6 +81,7 @@ from kdbxstudio.ui.icons import (
     menu_icon,
 )
 from kdbxstudio.ui.icons.group_icons import clear_group_icon_cache
+from kdbxstudio.ui.icons.entry_type import clear_entry_icon_cache
 from kdbxstudio.ui.theme import (
     ACCENT_CHOICES,
     accent_label,
@@ -254,6 +255,9 @@ class MainWindow(QMainWindow):
         self._group_tree.group_selected.connect(self._on_group_selected)
         self._group_tree.entry_drop_requested.connect(self._on_entry_dropped_on_group)
         self._entry_list.entry_selected.connect(self._on_entry_selected)
+        self._entry_list.favicon_prefetch_requested.connect(
+            self._prefetch_entry_favicons
+        )
         self._entry_detail.save_requested.connect(self._on_save_entry)
         self._entry_detail.copy_password_requested.connect(self._on_copy_password)
         self._entry_detail.generate_password_requested.connect(
@@ -1196,6 +1200,7 @@ class MainWindow(QMainWindow):
         """Re-apply theme/accent/scale/font/menu and refresh chrome icons."""
         clear_icon_cache()
         clear_group_icon_cache()
+        clear_entry_icon_cache()
         app = QApplication.instance()
         if isinstance(app, QApplication):
             apply_theme(
@@ -1218,6 +1223,7 @@ class MainWindow(QMainWindow):
             groups = self._dbm.list_groups()
             root = self._dbm.root_group_uuid()
             self._group_tree.set_groups(groups, root, select_uuid=selected or root)
+            self._entry_list.refresh_icons()
 
     def _rebuild_toolbar_icons(self) -> None:
         """Recreate toolbar buttons so outlined icons pick up the new brand tint."""
@@ -2233,24 +2239,18 @@ class MainWindow(QMainWindow):
 
         Thread(target=_fetch, daemon=True).start()
 
+    def _prefetch_entry_favicons(self, urls: object) -> None:
+        if self._dbm.active is None or not isinstance(urls, list):
+            return
+        prefetch_favicons(
+            [str(u) for u in urls],
+            on_done=lambda: self._favicon_ready.emit(),
+        )
+
     def _on_favicon_fetched(self) -> None:
         if self._dbm.active is None:
             return
-        query = self._search_box.text().strip()
-        filt = self._filter_bar.current_filter(query=query)
-        if query or not filt.is_empty():
-            self._run_search()
-            return
-        group_uuid = self._group_tree.selected_group_uuid()
-        if group_uuid:
-            recursive: bool | None = None
-            for group in self._dbm.list_groups():
-                if group.uuid == group_uuid and group.is_recycle_bin:
-                    recursive = True
-                    break
-            self._entry_list.set_entries(
-                self._dbm.list_entries(group_uuid, recursive=recursive)
-            )
+        self._entry_list.refresh_icons()
 
     def _attach_file(self, path: Path | str) -> str:
         """Attach a regular file. Returns 'attached', 'skipped', or 'failed'."""
