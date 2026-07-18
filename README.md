@@ -52,15 +52,28 @@ Copyright (C) 2026 Cuma KURT.
 
 ## Screenshots
 
-Generate local UI captures with the visual smoke script:
+Captured from the sample vault (`scripts/smoke_visual.py`, Studio Dark, English):
+
+| Welcome | Workspace |
+| --- | --- |
+| ![Welcome](assets/screenshots/01-welcome.png) | ![Workspace](assets/screenshots/02-workspace.png) |
+
+| Search | Command palette |
+| --- | --- |
+| ![Search](assets/screenshots/03-search.png) | ![Command palette](assets/screenshots/04-command-palette.png) |
+
+| Password Health | Password generator |
+| --- | --- |
+| ![Password Health](assets/screenshots/05-password-health.png) | ![Password generator](assets/screenshots/06-password-generator.png) |
+
+Regenerate locally:
 
 ```bash
 QT_QPA_PLATFORM=offscreen python scripts/smoke_visual.py
 ```
 
-Outputs (gitignored) land under `artifacts/visual/`: welcome screen, workspace,
-search, command palette, certificates tab, password generator, and a sample
-`.kdbx` for manual testing.
+Dev captures go to `artifacts/visual/` (gitignored). README copies are written to
+`assets/screenshots/`. Sample vault password: `demo-pass-123`.
 
 ---
 
