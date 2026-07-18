@@ -155,6 +155,11 @@ class UnlockDialog(QDialog):
         text = self._password.text()
         return text if text else None
 
+    def clear_secrets(self) -> None:
+        """Wipe credential widgets after the caller has consumed the values."""
+        self._password.clear()
+        self._confirm.clear()
+
     def keyfile(self) -> Path | None:
         text = self._keyfile.text().strip()
         return Path(text) if text else None

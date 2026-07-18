@@ -15,6 +15,7 @@ from kdbxstudio.core.database import (
     GroupView,
     HistoryView,
     KdbxDatabase,
+    redact_entry_secrets,
 )
 
 
@@ -59,6 +60,18 @@ class DatabaseManager:
         session_id = str(path)
         db = KdbxDatabase()
         db.open(path, password=password, keyfile=keyfile)
+        return self.adopt(db, path, make_active=make_active)
+
+    def adopt(
+        self,
+        db: KdbxDatabase,
+        path: Path | str,
+        *,
+        make_active: bool = True,
+    ) -> str:
+        """Register an already-opened database (e.g. unlocked on a worker thread)."""
+        path = Path(path).resolve()
+        session_id = str(path)
         if session_id in self._databases:
             self._databases[session_id].close()
         self._databases[session_id] = db
@@ -80,14 +93,7 @@ class DatabaseManager:
         session_id = str(path)
         db = KdbxDatabase()
         db.create(path, password=password, keyfile=keyfile)
-        if session_id in self._databases:
-            self._databases[session_id].close()
-        self._databases[session_id] = db
-        self._invalidate(session_id)
-        if make_active or self._active_id is None:
-            self._active_id = session_id
-        self._notify()
-        return session_id
+        return self.adopt(db, path, make_active=make_active)
 
     def set_active(self, session_id: str) -> None:
         if session_id not in self._databases:
@@ -215,8 +221,13 @@ class DatabaseManager:
         session_id: str | None = None,
         *,
         recursive: bool | None = None,
+        include_secrets: bool = True,
     ) -> list[EntryView]:
-        return self._get(session_id).list_entries(group_uuid, recursive=recursive)
+        return self._get(session_id).list_entries(
+            group_uuid,
+            recursive=recursive,
+            include_secrets=include_secrets,
+        )
 
     def get_entry(
         self, entry_uuid: str, session_id: str | None = None
@@ -411,17 +422,34 @@ class DatabaseManager:
         session_id: str | None = None,
         *,
         include_recycle_bin: bool = True,
+        include_secrets: bool = True,
     ) -> list[EntryView]:
+        """Return all entries.
+
+        The session cache always stores full secrets for audit/search filters.
+        Pass ``include_secrets=False`` for UI list models so widgets do not retain
+        password/OTP strings.
+        """
         sid = session_id or self._active_id
         if sid is None:
             return []
         cached = self._index_cache.get(sid)
         if cached is None:
-            cached = self._get(sid).list_entries()
+            cached = self._get(sid).list_entries(include_secrets=True)
             self._index_cache.set(sid, cached)
         if include_recycle_bin:
-            return list(cached)
-        return [e for e in cached if not e.in_recycle_bin]
+            entries = list(cached)
+        else:
+            entries = [e for e in cached if not e.in_recycle_bin]
+        if include_secrets:
+            return entries
+        return [redact_entry_secrets(e) for e in entries]
+
+    def attachment_stats(
+        self, session_id: str | None = None
+    ) -> list[tuple[str, str, int]]:
+        """Batch attachment metadata (uuid, filename, size) without N+1 loads."""
+        return self._get(session_id).iter_attachment_stats()
 
     def display_name(self, session_id: str | None = None) -> str:
         db = self._get(session_id)

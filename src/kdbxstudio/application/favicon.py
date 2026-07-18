@@ -11,6 +11,8 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from urllib.parse import urlparse
 
+from kdbxstudio.core.paths import ensure_private_dir
+
 _CACHE_DIR: Path | None = None
 _FAVICON_HIT: dict[str, Path | None] = {}
 _IN_FLIGHT: set[str] = set()
@@ -21,9 +23,7 @@ _PREFETCH_CAP = 40
 def cache_dir() -> Path:
     global _CACHE_DIR
     if _CACHE_DIR is None:
-        root = Path.home() / ".cache" / "kdbxstudio" / "favicons"
-        root.mkdir(parents=True, exist_ok=True)
-        _CACHE_DIR = root
+        _CACHE_DIR = ensure_private_dir(Path.home() / ".cache" / "kdbxstudio" / "favicons")
     return _CACHE_DIR
 
 

@@ -11,6 +11,7 @@ from kdbxstudio.core.database import (
     HistoryView,
     InvalidCredentialsError,
     KdbxDatabase,
+    redact_entry_secrets,
 )
 from kdbxstudio.core.password_generator import (
     GeneratorOptions,
@@ -34,6 +35,7 @@ __all__ = [
     "SecureString",
     "generate_password",
     "inspect_pem_text",
+    "redact_entry_secrets",
     "wipe_bytearray",
     "wipe_bytes",
 ]

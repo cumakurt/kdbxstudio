@@ -407,7 +407,7 @@ def test_e2e_sample_database_feature_matrix(tmp_path: Path) -> None:
         / "builtin"
     )
     plugins = PluginManager()
-    names = plugins.discover(builtin)
+    names = plugins.discover(builtin, allow_unverified=True)
     assert set(names) >= {
         "search-boost",
         "duplicate-highlight",

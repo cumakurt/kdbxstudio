@@ -105,7 +105,8 @@ def test_plugin_allowlist_blocks_unknown(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     mgr = PluginManager(PluginContext())
-    assert mgr.discover(tmp_path) == ["demo"]
+    assert mgr.discover(tmp_path) == []
+    assert mgr.discover(tmp_path, allow_unverified=True) == ["demo"]
     mgr2 = PluginManager(PluginContext())
     blocked = mgr2.discover(
         tmp_path,

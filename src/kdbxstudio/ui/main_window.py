@@ -57,6 +57,7 @@ from kdbxstudio.core.database import (
 from kdbxstudio.core.paths import resolve_regular_file
 from kdbxstudio.core.totp import current_totp
 from kdbxstudio.i18n import get_language, set_language, tr
+from kdbxstudio.security.audit_log import log_security_event
 from kdbxstudio.security.session import AutoLockController, ClipboardGuard
 from kdbxstudio.security.store import (
     clear_recent_databases,
@@ -68,6 +69,8 @@ from kdbxstudio.security.store import (
 from kdbxstudio.ui.dialogs.command_palette import CommandPalette, PaletteAction
 from kdbxstudio.ui.dialogs.new_entry_dialog import NewEntryDialog
 from kdbxstudio.ui.dialogs.unlock_dialog import UnlockDialog
+from kdbxstudio.ui.jobs import run_in_thread_pool
+from kdbxstudio.ui.screen_lock import ScreenLockWatcher
 from kdbxstudio.ui.icons import (
     ICON_ADD,
     ICON_AUDIT,
@@ -151,6 +154,8 @@ class MainWindow(QMainWindow):
         )
         self._auto_lock.lock_requested.connect(self._on_auto_lock)
         self._auto_lock.set_enabled(self._settings.auto_lock_enabled)
+        self._screen_lock = ScreenLockWatcher(self._on_auto_lock, parent=self)
+        self._vault_busy = False
 
         self._db_tabs = QTabWidget()
         self._db_tabs.setTabsClosable(True)
@@ -934,22 +939,71 @@ class MainWindow(QMainWindow):
         dialog = UnlockDialog(self, path=path, create_mode=False)
         if dialog.exec() != UnlockDialog.DialogCode.Accepted:
             return
-        try:
-            self._dbm.open(
-                dialog.database_path(),
-                password=dialog.password(),
-                keyfile=dialog.keyfile(),
-            )
-            remember_database(dialog.database_path())
+        self._start_vault_open(dialog, create=False)
+
+    def _consume_unlock_dialog(
+        self, dialog: UnlockDialog
+    ) -> tuple[Path, str | None, Path | None]:
+        path = dialog.database_path()
+        password = dialog.password()
+        keyfile = dialog.keyfile()
+        dialog.clear_secrets()
+        return path, password, keyfile
+
+    def _start_vault_open(self, dialog: UnlockDialog, *, create: bool) -> None:
+        if self._vault_busy:
+            return
+        path, password, keyfile = self._consume_unlock_dialog(dialog)
+        self._vault_busy = True
+        self.setEnabled(False)
+        self.statusBar().showMessage(
+            tr("Creating database…") if create else tr("Unlocking…"), 0
+        )
+
+        def work() -> tuple[KdbxDatabase, Path]:
+            db = KdbxDatabase()
+            if create:
+                db.create(path, password=password, keyfile=keyfile)
+            else:
+                db.open(path, password=password, keyfile=keyfile)
+            return db, path
+
+        def on_ok(result: object) -> None:
+            self._vault_busy = False
+            self.setEnabled(True)
+            db, opened = result  # type: ignore[misc]
+            assert isinstance(db, KdbxDatabase)
+            assert isinstance(opened, Path)
+            self._dbm.adopt(db, opened)
+            remember_database(opened)
             self._rebuild_recent_menu()
-            self.statusBar().showMessage(f"Opened {path.name}", 5000)
-        except InvalidCredentialsError:
-            QMessageBox.critical(
-                self, tr("Unlock failed"), tr("Invalid password or key file.")
+            verb = tr("Created") if create else tr("Opened")
+            self.statusBar().showMessage(f"{verb} {opened.name}", 5000)
+            log_security_event(
+                "vault_created" if create else "vault_unlocked",
+                database=opened.name,
             )
-        except DatabaseError as exc:
-            QMessageBox.critical(self, tr("Open failed"), str(exc))
-        self._auto_lock.activity()
+            self._auto_lock.activity()
+
+        def on_err(message: str) -> None:
+            self._vault_busy = False
+            self.setEnabled(True)
+            lower = message.lower()
+            if "invalid password" in lower or "credentials" in lower:
+                QMessageBox.critical(
+                    self, tr("Unlock failed"), tr("Invalid password or key file.")
+                )
+                log_security_event("vault_unlock_failed", database=path.name)
+            else:
+                title = tr("Create failed") if create else tr("Open failed")
+                QMessageBox.critical(self, title, message)
+                log_security_event(
+                    "vault_create_failed" if create else "vault_open_failed",
+                    database=path.name,
+                )
+            self._auto_lock.activity()
+
+        run_in_thread_pool(work, on_success=on_ok, on_error=on_err, parent=self)
 
     def _clear_recent(self) -> None:
         clear_recent_databases()
@@ -1010,16 +1064,21 @@ class MainWindow(QMainWindow):
         dialog = ChangeCredentialsDialog(self)
         if dialog.exec() != ChangeCredentialsDialog.DialogCode.Accepted:
             return
+        password = dialog.password()
+        keyfile = dialog.keyfile()
+        clear_keyfile = dialog.clear_keyfile()
+        dialog.clear_secrets()
         try:
             self._dbm.change_credentials(
-                password=dialog.password(),
-                keyfile=dialog.keyfile(),
-                clear_keyfile=dialog.clear_keyfile(),
+                password=password,
+                keyfile=keyfile,
+                clear_keyfile=clear_keyfile,
             )
             self._save_with_backup()
             self.statusBar().showMessage(
                 "Master credentials updated and database saved", 5000
             )
+            log_security_event("master_credentials_changed")
         except DatabaseError as exc:
             QMessageBox.critical(self, tr("Credential change failed"), str(exc))
         self._auto_lock.activity()
@@ -1435,41 +1494,13 @@ class MainWindow(QMainWindow):
         dialog = UnlockDialog(self, create_mode=False)
         if dialog.exec() != UnlockDialog.DialogCode.Accepted:
             return
-        try:
-            self._dbm.open(
-                dialog.database_path(),
-                password=dialog.password(),
-                keyfile=dialog.keyfile(),
-            )
-            remember_database(dialog.database_path())
-            self._rebuild_recent_menu()
-            self.statusBar().showMessage(
-                f"Opened {dialog.database_path().name}", 5000
-            )
-        except InvalidCredentialsError:
-            QMessageBox.critical(self, tr("Unlock failed"), tr("Invalid password or key file."))
-        except DatabaseError as exc:
-            QMessageBox.critical(self, tr("Open failed"), str(exc))
-        self._auto_lock.activity()
+        self._start_vault_open(dialog, create=False)
 
     def create_database(self) -> None:
         dialog = UnlockDialog(self, create_mode=True)
         if dialog.exec() != UnlockDialog.DialogCode.Accepted:
             return
-        try:
-            self._dbm.create(
-                dialog.database_path(),
-                password=dialog.password(),
-                keyfile=dialog.keyfile(),
-            )
-            remember_database(dialog.database_path())
-            self._rebuild_recent_menu()
-            self.statusBar().showMessage(
-                f"Created {dialog.database_path().name}", 5000
-            )
-        except DatabaseError as exc:
-            QMessageBox.critical(self, tr("Create failed"), str(exc))
-        self._auto_lock.activity()
+        self._start_vault_open(dialog, create=True)
 
     def _ensure_writable(self) -> bool:
         if self._settings.read_only:
@@ -1605,14 +1636,12 @@ class MainWindow(QMainWindow):
         dialog = UnlockDialog(self, path=path, create_mode=False)
         if dialog.exec() != UnlockDialog.DialogCode.Accepted:
             return
+        db_path, password, keyfile = self._consume_unlock_dialog(dialog)
         try:
             self._dbm.close(session_id)
-            self._dbm.open(
-                dialog.database_path(),
-                password=dialog.password(),
-                keyfile=dialog.keyfile(),
-            )
+            self._dbm.open(db_path, password=password, keyfile=keyfile)
             self.statusBar().showMessage(tr("Database reloaded from disk"), 4000)
+            log_security_event("vault_reloaded", database=db_path.name)
         except (InvalidCredentialsError, DatabaseError) as exc:
             QMessageBox.critical(self, tr("Reload failed"), str(exc))
         self._sync_file_watches()
@@ -2366,7 +2395,9 @@ class MainWindow(QMainWindow):
             if group.uuid == group_uuid and group.is_recycle_bin:
                 recursive = True
                 break
-        entries = self._dbm.list_entries(group_uuid, recursive=recursive)
+        entries = self._dbm.list_entries(
+            group_uuid, recursive=recursive, include_secrets=False
+        )
         self._entry_list.set_entries(entries)
         self._auto_lock.activity()
 
@@ -2453,6 +2484,7 @@ class MainWindow(QMainWindow):
         self._clear_entry_panels()
         self._sync_browser_bridge()
         self.statusBar().showMessage(tr("Databases locked"), 5000)
+        log_security_event("vault_locked", databases=len(paths))
         if self._settings.minimize_on_lock:
             self.showMinimized()
             if self._tray is not None:
@@ -2461,14 +2493,13 @@ class MainWindow(QMainWindow):
             dialog = UnlockDialog(self, path=path, create_mode=False)
             if dialog.exec() != UnlockDialog.DialogCode.Accepted:
                 continue
+            db_path, password, keyfile = self._consume_unlock_dialog(dialog)
             try:
-                self._dbm.open(
-                    dialog.database_path(),
-                    password=dialog.password(),
-                    keyfile=dialog.keyfile(),
-                )
+                self._dbm.open(db_path, password=password, keyfile=keyfile)
+                log_security_event("vault_unlocked", database=db_path.name)
             except (InvalidCredentialsError, DatabaseError) as exc:
                 QMessageBox.critical(self, tr("Unlock failed"), str(exc))
+                log_security_event("vault_unlock_failed", database=db_path.name)
         self._auto_lock.activity()
 
     def _sample_foreign_window_title(self) -> None:
@@ -2698,13 +2729,10 @@ class MainWindow(QMainWindow):
         dialog = UnlockDialog(self, path=source_path, create_mode=False)
         if dialog.exec() != UnlockDialog.DialogCode.Accepted:
             return
+        db_path, password, keyfile = self._consume_unlock_dialog(dialog)
         source = KdbxDatabase()
         try:
-            source.open(
-                dialog.database_path(),
-                password=dialog.password(),
-                keyfile=dialog.keyfile(),
-            )
+            source.open(db_path, password=password, keyfile=keyfile)
             update = QMessageBox.question(
                 self,
                 "Merge options",

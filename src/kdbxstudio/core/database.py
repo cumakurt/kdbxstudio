@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -47,6 +47,13 @@ class EntryView:
     modified: str = ""
     accessed: str = ""
     created: str = ""
+
+
+def redact_entry_secrets(entry: EntryView) -> EntryView:
+    """Return a copy with password and OTP cleared (for list / search UI caches)."""
+    if not entry.password and not entry.otp:
+        return entry
+    return replace(entry, password="", otp="")
 
 
 @dataclass(frozen=True)
@@ -329,12 +336,16 @@ class KdbxDatabase:
         *,
         include_recycle_bin: bool = True,
         recursive: bool | None = None,
+        include_secrets: bool = True,
     ) -> list[EntryView]:
         """List entries.
 
         When *group_uuid* is the Recycle Bin (or *recursive* is True), entries
         from nested trashed subgroups are included — KeePass stores trashed
         groups as folders under the bin, so a non-recursive list looks empty.
+
+        When *include_secrets* is False, password and OTP fields are empty so
+        list/search UI layers do not retain vault secrets in widget models.
         """
         kp = self._require_kp()
         entries = kp.entries
@@ -352,7 +363,10 @@ class KdbxDatabase:
         path_cache: dict[str, str] = {}
         views = [
             self._to_entry_view(
-                entry, recycle_uuid=recycle_uuid, path_cache=path_cache
+                entry,
+                recycle_uuid=recycle_uuid,
+                path_cache=path_cache,
+                include_secrets=include_secrets,
             )
             for entry in entries
         ]
@@ -775,6 +789,7 @@ class KdbxDatabase:
         *,
         recycle_uuid: str | None = None,
         path_cache: dict[str, str] | None = None,
+        include_secrets: bool = True,
     ) -> EntryView:
         group = entry.group
         props = {
@@ -801,11 +816,13 @@ class KdbxDatabase:
             except Exception:
                 return str(value)
 
+        password = (entry.password or "") if include_secrets else ""
+        otp = (entry.otp or "") if include_secrets else ""
         return EntryView(
             uuid=str(entry.uuid),
             title=entry.title or "",
             username=entry.username or "",
-            password=entry.password or "",
+            password=password,
             url=entry.url or "",
             notes=entry.notes or "",
             group_path=(
@@ -815,7 +832,7 @@ class KdbxDatabase:
             in_recycle_bin=self._is_in_recycle_bin(
                 entry, recycle_uuid=recycle_uuid
             ),
-            otp=entry.otp or "",
+            otp=otp,
             expires=expires,
             expiry_time=expiry,
             tags=tags,
@@ -824,3 +841,20 @@ class KdbxDatabase:
             accessed=_iso_time("atime"),
             created=_iso_time("ctime"),
         )
+
+    def iter_attachment_stats(self) -> list[tuple[str, str, int]]:
+        """Return (entry_uuid, filename, size) for all attachments (no payloads)."""
+        kp = self._require_kp()
+        rows: list[tuple[str, str, int]] = []
+        for entry in kp.entries:
+            uuid = str(entry.uuid)
+            for attachment in entry.attachments or []:
+                raw = attachment.binary or b""
+                rows.append(
+                    (
+                        uuid,
+                        str(attachment.filename or ""),
+                        len(raw),
+                    )
+                )
+        return rows

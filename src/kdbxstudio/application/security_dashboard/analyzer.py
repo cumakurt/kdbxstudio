@@ -309,20 +309,14 @@ class SecurityDashboardAnalyzer:
                     if block.encrypted:
                         ssh_encrypted += 1
 
-            if entry.attachment_count > 0:
-                try:
-                    attachments = self._dbm.list_attachments(entry.uuid)
-                except Exception:
-                    attachments = []
-                for att in attachments:
-                    attachment_total += 1
-                    attachment_total_bytes += int(att.size or 0)
-                    att_types[_attachment_ext(att.filename)] += 1
-                    size = int(att.size or 0)
-                    for label, lo, hi in _SIZE_BUCKETS:
-                        if lo <= size < hi:
-                            att_sizes[label] += 1
-                            break
+        for _uuid, filename, size in self._dbm.attachment_stats():
+            attachment_total += 1
+            attachment_total_bytes += int(size or 0)
+            att_types[_attachment_ext(filename)] += 1
+            for label, lo, hi in _SIZE_BUCKETS:
+                if lo <= size < hi:
+                    att_sizes[label] += 1
+                    break
 
         duplicate_groups: list[DuplicateGroup] = []
         duplicate_total = 0

@@ -162,9 +162,6 @@ class PasswordGeneratorDialog(QDialog):
     def _copy(self) -> None:
         if self._clipboard_guard is not None:
             self._clipboard_guard.copy(self._output.text())
-        else:
-            from PySide6.QtGui import QGuiApplication
-
-            clipboard = QGuiApplication.clipboard()
-            if clipboard is not None:
-                clipboard.setText(self._output.text())
+            return
+        # Refuse unguarded clipboard writes for generated secrets.
+        return

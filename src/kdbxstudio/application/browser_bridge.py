@@ -19,12 +19,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from kdbxstudio.core.database import EntryView
-from kdbxstudio.core.paths import default_data_dir
+from kdbxstudio.core.paths import default_data_dir, ensure_private_dir
 
 
 def browser_socket_path() -> Path:
-    root = default_data_dir()
-    root.mkdir(parents=True, exist_ok=True)
+    root = ensure_private_dir(default_data_dir())
     return root / "browser.sock"
 
 

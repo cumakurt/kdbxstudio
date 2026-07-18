@@ -100,16 +100,20 @@ class PluginManager:
         directory: Path | str,
         *,
         sha256_allowlist: tuple[str, ...] | list[str] | None = None,
+        allow_unverified: bool = False,
     ) -> list[str]:
         """Load ``*_plugin.py`` modules that expose ``create_plugin()``.
 
-        When ``sha256_allowlist`` is non-empty, only files whose SHA-256 digests
-        appear in the allowlist are loaded.
+        External directories are fail-closed: when ``sha256_allowlist`` is empty
+        and ``allow_unverified`` is False, nothing is loaded. Pass
+        ``allow_unverified=True`` only for trusted built-in plugin trees.
         """
         root = Path(directory)
         if not root.is_dir():
             return []
         allow = {h.lower() for h in (sha256_allowlist or ())}
+        if not allow and not allow_unverified:
+            return []
         loaded_names: list[str] = []
         for path in sorted(root.glob("*_plugin.py")):
             if allow:

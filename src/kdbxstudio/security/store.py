@@ -8,6 +8,7 @@ import stat
 import tempfile
 from pathlib import Path
 
+from kdbxstudio.core.paths import ensure_private_dir
 from kdbxstudio.i18n import normalize_language
 from kdbxstudio.security.settings import SecuritySettings
 
@@ -29,8 +30,8 @@ def _parse_sha_allowlist(raw: object) -> tuple[str, ...]:
 def default_config_dir() -> Path:
     xdg = os.environ.get("XDG_CONFIG_HOME")
     if xdg:
-        return Path(xdg) / "kdbxstudio"
-    return Path.home() / ".config" / "kdbxstudio"
+        return ensure_private_dir(Path(xdg) / "kdbxstudio")
+    return ensure_private_dir(Path.home() / ".config" / "kdbxstudio")
 
 
 def settings_path(config_dir: Path | None = None) -> Path:
@@ -169,7 +170,7 @@ def save_settings(
     recent: list[str] | None = None,
 ) -> Path:
     target = path or settings_path()
-    target.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(target.parent)
     existing = _read_json(target) or {}
     recent_paths = (
         recent if recent is not None else list(existing.get("recent_databases", []))

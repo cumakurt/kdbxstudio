@@ -9,6 +9,8 @@ import urllib.request
 from collections import OrderedDict
 from pathlib import Path
 
+from kdbxstudio.core.paths import ensure_private_dir
+
 _MAX_CACHE_ENTRIES = 200
 _FLUSH_EVERY = 8
 
@@ -22,8 +24,7 @@ class HibpError(Exception):
 
 
 def _cache_path() -> Path:
-    root = Path.home() / ".cache" / "kdbxstudio" / "hibp"
-    root.mkdir(parents=True, exist_ok=True)
+    root = ensure_private_dir(Path.home() / ".cache" / "kdbxstudio" / "hibp")
     return root / "prefix_cache.json"
 
 
