@@ -7,7 +7,7 @@ name = "kdbxstudio"
 version = "1.0.0"
 description = "Modern Qt6 KDBX password manager for Linux"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "GPL-3.0-or-later" }
 authors = [
   { name = "Cuma KURT", email = "cumakurt@gmail.com" },
@@ -65,7 +65,7 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 mypy_path = "src"
 packages = ["kdbxstudio"]
 warn_unused_ignores = true

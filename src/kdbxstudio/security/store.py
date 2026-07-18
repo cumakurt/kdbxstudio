@@ -228,6 +228,8 @@ def save_settings(
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
         os.chmod(tmp_path, stat.S_IRUSR | stat.S_IWUSR)
         os.replace(tmp_path, target)
     except BaseException:

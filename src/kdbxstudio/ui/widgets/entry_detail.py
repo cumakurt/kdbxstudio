@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QDate, QSize, Qt, Signal
+from PySide6.QtCore import QDate, QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QApplication,
@@ -465,7 +465,7 @@ class EntryDetailWidget(QWidget):
         if row >= 0:
             self._custom.removeRow(row)
 
-    def _show_custom_menu(self, pos) -> None:
+    def _show_custom_menu(self, pos: QPoint) -> None:
         item = self._custom.itemAt(pos)
         if item is not None:
             self._custom.setCurrentItem(item)

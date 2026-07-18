@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Thread
 
-from PySide6.QtCore import QByteArray, QEvent, QObject, QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QByteArray, QEvent, QPoint, QObject, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
@@ -44,7 +44,11 @@ from PySide6.QtWidgets import (
 from kdbxstudio import __version__
 from kdbxstudio.application.audit_engine import AuditEngine, AuditReport
 from kdbxstudio.application.database_manager import DatabaseManager
-from kdbxstudio.application.favicon import cached_favicon, fetch_favicon, prefetch_favicons
+from kdbxstudio.application.favicon import (
+    cached_favicon,
+    fetch_favicon,
+    prefetch_favicons,
+)
 from kdbxstudio.application.plugin_manager import PluginManager
 from kdbxstudio.application.search_engine import EntryFilter, SearchEngine
 from kdbxstudio.application.security_dashboard import SecurityDashboardAnalyzer
@@ -70,8 +74,6 @@ from kdbxstudio.ui.dialogs.command_palette import CommandPalette, PaletteAction
 from kdbxstudio.ui.dialogs.health_fix_wizard import HealthFixWizardDialog
 from kdbxstudio.ui.dialogs.new_entry_dialog import NewEntryDialog
 from kdbxstudio.ui.dialogs.unlock_dialog import UnlockDialog
-from kdbxstudio.ui.jobs import run_in_thread_pool
-from kdbxstudio.ui.screen_lock import ScreenLockWatcher
 from kdbxstudio.ui.icons import (
     ICON_ADD,
     ICON_AUDIT,
@@ -84,8 +86,10 @@ from kdbxstudio.ui.icons import (
     icon_tool_button,
     menu_icon,
 )
-from kdbxstudio.ui.icons.group_icons import clear_group_icon_cache
 from kdbxstudio.ui.icons.entry_type import clear_entry_icon_cache
+from kdbxstudio.ui.icons.group_icons import clear_group_icon_cache
+from kdbxstudio.ui.jobs import run_in_thread_pool
+from kdbxstudio.ui.screen_lock import ScreenLockWatcher
 from kdbxstudio.ui.theme import (
     ACCENT_CHOICES,
     accent_label,
@@ -100,12 +104,12 @@ from kdbxstudio.ui.theme.tokens import THEME_CHOICES, parse_theme, theme_label
 from kdbxstudio.ui.widgets.attachment_preview import AttachmentPreviewWidget
 from kdbxstudio.ui.widgets.empty_workspace import EmptyWorkspaceWidget
 from kdbxstudio.ui.widgets.entry_detail import EntryDetailWidget
-from kdbxstudio.ui.widgets.toast import ToastHost
 from kdbxstudio.ui.widgets.entry_list import EntryListWidget
 from kdbxstudio.ui.widgets.filter_bar import FilterBarWidget
 from kdbxstudio.ui.widgets.group_tree import GroupTreeWidget
 from kdbxstudio.ui.widgets.history_widget import HistoryWidget
 from kdbxstudio.ui.widgets.pem_inspector import PemInspectorWidget
+from kdbxstudio.ui.widgets.toast import ToastHost
 from kdbxstudio.ui.widgets.totp_widget import TotpWidget
 
 
@@ -387,7 +391,7 @@ class MainWindow(QMainWindow):
             self._clipboard.copy(status.code)
             self.statusBar().showMessage(tr("TOTP code copied"), 3000)
 
-    def _on_entry_list_context_menu(self, pos) -> None:
+    def _on_entry_list_context_menu(self, pos: QPoint) -> None:
         self._entry_list.select_row_at(pos)
         has_selection = bool(self._entry_list.selected_entry_uuids())
         entry = self._get_selected_entry() if has_selection else None
@@ -461,7 +465,7 @@ class MainWindow(QMainWindow):
         purge.setEnabled(has_selection)
         menu.exec(self._entry_list.mapToGlobal(pos))
 
-    def _on_group_tree_context_menu(self, pos) -> None:
+    def _on_group_tree_context_menu(self, pos: QPoint) -> None:
         self._group_tree.select_at(pos)
         group_uuid = self._group_tree.selected_group_uuid()
         is_bin = False

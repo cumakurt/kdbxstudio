@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Hashable
 from dataclasses import dataclass
@@ -18,58 +19,66 @@ class _CacheEntry(Generic[V]):
 
 
 class Cache(Generic[K, V]):
-    """Thread-unsafe dict cache with optional per-entry TTL (seconds)."""
+    """Thread-safe dict cache with optional per-entry TTL (seconds)."""
 
     def __init__(self, default_ttl: float | None = None) -> None:
         self._default_ttl = default_ttl
         self._store: dict[K, _CacheEntry[V]] = {}
+        self._lock = threading.Lock()
 
     def get(self, key: K, default: V | None = None) -> V | None:
-        entry = self._store.get(key)
-        if entry is None:
-            return default
-        if entry.expires_at is not None and time.monotonic() >= entry.expires_at:
-            del self._store[key]
-            return default
-        return entry.value
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return default
+            if entry.expires_at is not None and time.monotonic() >= entry.expires_at:
+                del self._store[key]
+                return default
+            return entry.value
 
     def set(self, key: K, value: V, ttl: float | None = None) -> None:
         effective_ttl = self._default_ttl if ttl is None else ttl
         expires_at = (
             None if effective_ttl is None else time.monotonic() + effective_ttl
         )
-        self._store[key] = _CacheEntry(value=value, expires_at=expires_at)
+        with self._lock:
+            self._store[key] = _CacheEntry(value=value, expires_at=expires_at)
 
     def delete(self, key: K) -> None:
-        self._store.pop(key, None)
+        with self._lock:
+            self._store.pop(key, None)
 
     def clear(self) -> None:
-        self._store.clear()
+        with self._lock:
+            self._store.clear()
 
     def __contains__(self, key: object) -> bool:
         if not isinstance(key, Hashable):
             return False
-        entry = self._store.get(key)  # type: ignore[arg-type]
-        if entry is None:
-            return False
-        if entry.expires_at is not None and time.monotonic() >= entry.expires_at:
-            del self._store[key]  # type: ignore[arg-type]
-            return False
-        return True
+        with self._lock:
+            entry = self._store.get(key)  # type: ignore[arg-type]
+            if entry is None:
+                return False
+            if entry.expires_at is not None and time.monotonic() >= entry.expires_at:
+                del self._store[key]  # type: ignore[arg-type]
+                return False
+            return True
 
     def __len__(self) -> int:
         self._purge_expired()
-        return len(self._store)
+        with self._lock:
+            return len(self._store)
 
     def _purge_expired(self) -> None:
         now = time.monotonic()
-        expired = [
-            key
-            for key, entry in self._store.items()
-            if entry.expires_at is not None and now >= entry.expires_at
-        ]
-        for key in expired:
-            del self._store[key]
+        with self._lock:
+            expired = [
+                key
+                for key, entry in self._store.items()
+                if entry.expires_at is not None and now >= entry.expires_at
+            ]
+            for key in expired:
+                del self._store[key]
 
 
 class EntryIndexCache(Cache[str, Any]):
