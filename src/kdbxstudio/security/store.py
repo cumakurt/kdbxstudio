@@ -11,8 +11,19 @@ from pathlib import Path
 from kdbxstudio.i18n import normalize_language
 from kdbxstudio.security.settings import SecuritySettings
 
-_SETTINGS_VERSION = 5
+_SETTINGS_VERSION = 6
 _MAX_RECENT = 12
+
+
+def _parse_sha_allowlist(raw: object) -> tuple[str, ...]:
+    if not isinstance(raw, list):
+        return ()
+    out: list[str] = []
+    for item in raw:
+        text = str(item).strip().lower()
+        if len(text) == 64 and all(c in "0123456789abcdef" for c in text):
+            out.append(text)
+    return tuple(out)
 
 
 def default_config_dir() -> Path:
@@ -47,8 +58,10 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     except (TypeError, ValueError):
         autolock_ms = SecuritySettings.auto_lock_timeout_ms
     theme = str(raw.get("theme", SecuritySettings.theme))
-    if theme not in ("dark", "light", "system"):
-        theme = SecuritySettings.theme
+    from kdbxstudio.ui.theme.tokens import VALID_THEME_IDS, parse_theme
+
+    if theme not in VALID_THEME_IDS:
+        theme = parse_theme(theme).value
     ui_density = str(raw.get("ui_density", SecuritySettings.ui_density))
     if ui_density not in ("compact", "comfortable"):
         ui_density = SecuritySettings.ui_density
@@ -78,6 +91,36 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
         hibp_enabled=bool(raw.get("hibp_enabled", SecuritySettings.hibp_enabled)),
         autotype_sequence=str(
             raw.get("autotype_sequence", SecuritySettings.autotype_sequence)
+        ),
+        autotype_match_window=bool(
+            raw.get(
+                "autotype_match_window",
+                SecuritySettings.autotype_match_window,
+            )
+        ),
+        autotype_initial_delay_ms=max(
+            0,
+            int(
+                raw.get(
+                    "autotype_initial_delay_ms",
+                    SecuritySettings.autotype_initial_delay_ms,
+                )
+            ),
+        ),
+        watch_database_files=bool(
+            raw.get(
+                "watch_database_files",
+                SecuritySettings.watch_database_files,
+            )
+        ),
+        browser_integration_enabled=bool(
+            raw.get(
+                "browser_integration_enabled",
+                SecuritySettings.browser_integration_enabled,
+            )
+        ),
+        plugin_sha256_allowlist=_parse_sha_allowlist(
+            raw.get("plugin_sha256_allowlist", [])
         ),
         check_updates_on_start=bool(
             raw.get(
@@ -125,6 +168,11 @@ def save_settings(
         "ui_density": settings.ui_density,
         "hibp_enabled": settings.hibp_enabled,
         "autotype_sequence": settings.autotype_sequence,
+        "autotype_match_window": settings.autotype_match_window,
+        "autotype_initial_delay_ms": max(0, settings.autotype_initial_delay_ms),
+        "watch_database_files": settings.watch_database_files,
+        "browser_integration_enabled": settings.browser_integration_enabled,
+        "plugin_sha256_allowlist": list(settings.plugin_sha256_allowlist),
         "check_updates_on_start": settings.check_updates_on_start,
         "start_minimized_to_tray": settings.start_minimized_to_tray,
         "language": settings.language,

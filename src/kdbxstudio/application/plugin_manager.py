@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -13,6 +14,14 @@ from kdbxstudio.plugins.sdk import (
     PluginInfo,
     PluginMeta,
 )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class PluginError(Exception):
@@ -86,13 +95,27 @@ class PluginManager:
             )
         return result
 
-    def discover(self, directory: Path | str) -> list[str]:
-        """Load ``*_plugin.py`` modules that expose ``create_plugin()``."""
+    def discover(
+        self,
+        directory: Path | str,
+        *,
+        sha256_allowlist: tuple[str, ...] | list[str] | None = None,
+    ) -> list[str]:
+        """Load ``*_plugin.py`` modules that expose ``create_plugin()``.
+
+        When ``sha256_allowlist`` is non-empty, only files whose SHA-256 digests
+        appear in the allowlist are loaded.
+        """
         root = Path(directory)
         if not root.is_dir():
             return []
+        allow = {h.lower() for h in (sha256_allowlist or ())}
         loaded_names: list[str] = []
         for path in sorted(root.glob("*_plugin.py")):
+            if allow:
+                digest = _sha256_file(path)
+                if digest not in allow:
+                    continue
             name = self._load_from_path(path)
             if name:
                 loaded_names.append(name)

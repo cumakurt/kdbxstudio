@@ -4,7 +4,8 @@
 
 KDBXStudio is a KeePass-compatible desktop vault focused on a calm, keyboard-first
 workspace: multi-database tabs, password health auditing, plugins, and rich entry
-tools (TOTP, attachments, SSH/certificates) — without cloud lock-in.
+tools (TOTP, attachments, SSH/certificates) — without cloud lock-in. Works with the
+stock **KeePassXC-Browser** extension for form fill.
 
 | | |
 |---|---|
@@ -25,6 +26,7 @@ tools (TOTP, attachments, SSH/certificates) — without cloud lock-in.
 - [Why KDBXStudio?](#why-kdbxstudio)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Browser integration](#browser-integration)
 - [Usage](#usage)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Configuration](#configuration)
@@ -75,17 +77,19 @@ search, command palette, certificates tab, password generator, and a sample
 - **CSV import / export** (export warns that secrets leave the vault in clear text)
 - **Merge** another `.kdbx` into the active vault
 - **Emergency sheet** (printable HTML) for offline backup of selected/all entries
+- **External file watch** — prompt to reload when Syncthing / Nextcloud changes the vault on disk
 
 ### Workspace
 
 - Dockable **Groups** tree
-- **Password Health** window (Tools → Password Health…) with severity findings and open-entry actions
-- Entry list + detail split view (resizable), optional **favicon** icons (async fetch)
+- **Password Health** window (Tools → Password Health…) with severity findings, Fix next, and open-entry actions
+- Fast entry list (`QTableView` model) + detail split view (resizable), optional **favicon** icons
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - **Expiry countdown** — visual indicator showing days until entry expires
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
 - System **tray** (show / lock / quit) — closing the window quits the app; tray icon can still show/hide or lock
-- Compact / comfortable density, light / dark / system themes
+- Compact / comfortable density
+- **Theme styles**: Studio Dark/Light, System, plus Nord, Dracula, Tokyo Night, Catppuccin (Mocha/Latte), Solarized Dark, One Dark, Gruvbox Dark
 - **UI language**: English (default) or Turkish — Tools → Settings… → Language
 
 ### Entries & secrets
@@ -93,7 +97,7 @@ search, command palette, certificates tab, password generator, and a sample
 - Title, username, password, URL, notes, custom fields, **tags**, **expiry**
 - **New Entry** dialog collects all common fields (including TOTP) and saves in one step
 - **Password strength meter** — real-time visual feedback (Very Weak → Strong)
-- **Auto-Type** on Linux (`xdotool` / `ydotool` / `wtype`) with configurable sequence
+- **Auto-Type 2.0** on Linux (`xdotool` / `ydotool` / `wtype`): `{DELAY=N}`, active-window match, configurable sequence and initial delay
 - **Move entry** between groups (dialog or drag entry onto a group in the tree)
 - **Multi-select delete** — select one or many entries (`Ctrl`/`Shift`+click, `Ctrl+A`); `Delete` → Recycle Bin, `Shift+Delete` → permanent
 - **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
@@ -112,13 +116,20 @@ search, command palette, certificates tab, password generator, and a sample
 - Inverted-index **full-text search** (includes tags)
 - Filter chips: URL, custom/OTP, weak / empty / duplicates, **expired**, **expiring soon**, Recycle Bin, tag/group text
 - **Password Health** audit: empty, weak, low entropy, duplicates, missing / reused usernames,
-  **expired / expiring soon**, optional **HIBP** (k-anonymity)
-- **Health score** percentage with color-coded progress bar
+  **expired / expiring soon**, optional **HIBP** (k-anonymity, off UI thread)
+- **Health score** percentage with theme-aware progress bar
 - **Expiry warnings** — visual alerts for expired and expiring entries
 - **Database statistics** — total entries, groups, URLs, TOTP, tags, attachments, custom fields
 - Double-click a finding to jump to the entry
 - Plugin hook `search.rank` for ranking tweaks
 - Command Palette jumps to entries and common actions
+
+### Browser & updates
+
+- **KeePassXC-Browser** compatible bridge (NaCl associate, get-logins, set-login, TOTP, groups, lock)
+- Native messaging host install via `./install.sh` or Settings → Install browser host manifests…
+- Optional **update check** against GitHub (Releases → tags → repository version on `main`)
+- Tools → **Check for Updates…** shows installed vs GitHub version and source
 
 ### Security session
 
@@ -128,8 +139,8 @@ search, command palette, certificates tab, password generator, and a sample
 - **Read-only session** mode
 - Best-effort `SecureString` wipe for in-memory master password on close / lock
 - **Atomic settings write** with `chmod 0600` permissions
-- Input validation on all timeout and theme settings
-- Optional **update check** against GitHub Releases
+- Input validation on timeout and theme settings
+- Optional **plugin SHA-256 allowlist** for integrity gating
 
 ### Extensibility & desktop polish
 
@@ -139,7 +150,7 @@ search, command palette, certificates tab, password generator, and a sample
 - Command Palette (`Ctrl+K` / `Ctrl+Shift+P`)
 - Persistable **window layout** (View → Save Layout / Reset Layout)
 - App icon, `.desktop` entry, AppStream metainfo
-- One-shot **`install.sh`**: distro detection, deps, portable **AppImage**
+- One-shot **`install.sh`**: distro detection, deps, portable **AppImage**, browser host manifests
 - Flatpak packaging scaffold
 
 ---
@@ -162,6 +173,8 @@ search, command palette, certificates tab, password generator, and a sample
 | PEM / SSH inspector | ✓ | ✗ | ✗ |
 | Secret templates | ✓ | ✗ | ✗ |
 | Auto-Type (Linux) | ✓ | ✓ | ✗ |
+| KeePassXC-Browser | ✓ | ✓ | ✗ |
+| Theme styles (10+) | ✓ | limited | limited |
 | System tray lock | ✓ | ✓ | ✓ |
 | Read-only mode | ✓ | ✗ | ✗ |
 | Database backup on save | ✓ | ✗ | ✗ |
@@ -170,15 +183,19 @@ search, command palette, certificates tab, password generator, and a sample
 | Flatpak + AppImage | ✓ | ✓ | ✓ |
 | Open source | GPL-3.0 | GPL-2.0 | GPL-3.0 |
 
+Competitive roadmap: [docs/roadmap.md](docs/roadmap.md).
+KeePassXC-Browser setup: [docs/browser-integration.md](docs/browser-integration.md).
+
 ---
 
 ## Requirements
 
 - **OS:** Linux desktop (`x86_64` or `aarch64`)
 - **Python:** 3.11 or newer (for building / development)
-- **Libraries:** `pykeepass`, `PySide6` (Qt6) — pulled by `install.sh` / pip
-- **Network:** first AppImage build downloads `appimagetool` into `.cache/`
+- **Libraries:** `pykeepass`, `PySide6` (Qt6), `PyNaCl` (browser crypto) — pulled by `install.sh` / pip
+- **Network:** first AppImage build downloads `appimagetool` into `.cache/`; optional update check / HIBP / favicons
 - **Optional fonts:** Inter (system UI font if installed)
+- **Optional Auto-Type backends:** `xdotool`, `ydotool`, or `wtype`
 
 ---
 
@@ -196,6 +213,8 @@ chmod +x install.sh
 The installer detects your Linux distribution, installs any missing system
 packages quietly, builds a portable **AppImage** under `dist/`, and (unless
 `--no-desktop`) registers a desktop launcher plus `~/.local/bin/kdbxstudio`.
+When using `--venv` / `--dev`, it also installs KeePassXC-Browser native messaging
+manifests (best-effort).
 
 | Option | Effect |
 |--------|--------|
@@ -225,8 +244,25 @@ kdbxstudio
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+python -m kdbxstudio.browser.install_host   # KeePassXC-Browser manifests
 python -m kdbxstudio
 ```
+
+---
+
+## Browser integration
+
+KDBXStudio speaks the KeePassXC-Browser protocol so the **official extension** can
+fill logins from an unlocked vault.
+
+1. Install native messaging manifests (`install.sh --venv` / Settings button / `python -m kdbxstudio.browser.install_host`).
+2. Install [KeePassXC-Browser](https://keepassxc.org/docs/KeePassXC_GettingStarted.html#_setup_browser_integration).
+3. Unlock a database in KDBXStudio (Settings → Enable KeePassXC-Browser integration).
+4. In the extension, Connect / Associate, then **Save** the vault.
+
+Full guide: [docs/browser-integration.md](docs/browser-integration.md).
+If KeePassXC is also installed, disable its browser integration to avoid conflicting
+`org.keepassxc.keepassxc_browser` manifests.
 
 ---
 
@@ -246,7 +282,9 @@ python -m kdbxstudio
 2. Browse **Groups**, search with the search box (`Ctrl+F`), or Command Palette (`Ctrl+K`).
 3. Edit the entry; Save entry then File → Save to persist the KDBX file.
 4. Open **Tools → Password Health…** for weak / duplicate / empty secrets.
-5. Lock with Tools → Lock All Databases (`Ctrl+L`) when stepping away.
+5. Pick a theme under **View → Theme** (or Settings).
+6. Lock with Tools → Lock All Databases (`Ctrl+L`) when stepping away.
+7. Optionally use **Tools → Check for Updates…** to compare with GitHub.
 
 ### Sample vault (automated)
 
@@ -296,7 +334,7 @@ Notable settings:
 
 | Key | Meaning | Default |
 |-----|---------|---------|
-| `theme` | `dark` \| `light` \| `system` | `dark` |
+| `theme` | Theme id: `system`, `dark`, `light`, `nord`, `dracula`, `tokyo-night`, `catppuccin-mocha`, `catppuccin-latte`, `solarized-dark`, `one-dark`, `gruvbox-dark` | `dark` |
 | `language` | UI language: `en` (default) \| `tr` | `en` |
 | `ui_density` | `compact` \| `comfortable` | `compact` |
 | `clipboard_timeout_ms` | Clipboard auto-clear delay (`0` = never clear; otherwise min 1000) | `15000` |
@@ -306,7 +344,12 @@ Notable settings:
 | `minimize_on_lock` | Minimize (and tray-hide) on lock | `false` |
 | `hibp_enabled` | HIBP k-anonymity checks during audit | `false` |
 | `autotype_sequence` | Auto-Type token sequence | `{USERNAME}{TAB}{PASSWORD}{ENTER}` |
-| `check_updates_on_start` | GitHub Releases update check | `true` |
+| `autotype_match_window` | Match Auto-Type to active window | `true` |
+| `autotype_initial_delay_ms` | Delay before Auto-Type starts | `500` |
+| `watch_database_files` | Watch open vaults for external changes | `true` |
+| `browser_integration_enabled` | KeePassXC-Browser local server | `true` |
+| `plugin_sha256_allowlist` | Optional list of allowed plugin digests | `[]` |
+| `check_updates_on_start` | Compare installed version with GitHub on launch | `true` |
 | `start_minimized_to_tray` | Start hidden in the system tray | `false` |
 | `read_only` | Open databases in read-only mode | `false` |
 | `window_geometry` / `window_state` | Saved layout (base64) | `""` |
@@ -320,8 +363,10 @@ Use **Tools → Settings…** for the interactive dialog.
 
 ```text
 UI            MainWindow, dialogs, widgets, theme (QSS + tokens), icons
-Application   DatabaseManager, SearchEngine, AuditEngine, PluginManager, CSV I/O, templates
+Application   DatabaseManager, SearchEngine, AuditEngine, PluginManager,
+              Browser bridge, file watch, Auto-Type, CSV I/O, update check
 Core          pykeepass wrapper, crypto helpers, cache, TOTP, PEM, password generator
+Browser       KeePassXC-Browser protocol (NaCl), native messaging host
 Security      Settings store (atomic write, chmod 0600), clipboard guard, auto-lock
 Plugins       SDK (isolated callbacks), marketplace catalog, built-in plugins
 ```
@@ -332,13 +377,14 @@ Source layout:
 src/kdbxstudio/
   __main__.py          Application entry
   application/         Session orchestration
+  browser/             KeePassXC-Browser host + protocol
   core/                KDBX and crypto primitives
   security/            Preferences and session guards
   plugins/             SDK + builtins + marketplace
   ui/                  Qt shell, theme, dialogs, widgets
 assets/                Icons, desktop file, AppStream
 packaging/             Flatpak + AppImage helpers
-docs/                  UI specification
+docs/                  Specs, roadmap, browser & packaging notes
 tests/                 Unit and pytest-qt smoke tests
 scripts/               Visual smoke / sample DB helper
 install.sh             AppImage builder / optional venv installer
@@ -362,6 +408,9 @@ mypy
 | Path | Role |
 |------|------|
 | [`docs/ui-specification.md`](docs/ui-specification.md) | Design tokens and UX rules |
+| [`docs/roadmap.md`](docs/roadmap.md) | Competitive roadmap |
+| [`docs/browser-integration.md`](docs/browser-integration.md) | KeePassXC-Browser setup |
+| [`docs/packaging-signing.md`](docs/packaging-signing.md) | Signing / Flathub notes |
 | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | CI: ruff, mypy, pytest |
 | [`.github/workflows/release.yml`](.github/workflows/release.yml) | Release artifacts on `v*` tags |
 
@@ -375,7 +424,7 @@ Browse and activate from **Tools → Plugin Center**.
 
 ## Packaging
 
-See [`packaging/README.md`](packaging/README.md) for full details.
+See [`packaging/README.md`](packaging/README.md) and [`docs/packaging-signing.md`](docs/packaging-signing.md).
 
 ### Flatpak
 
@@ -399,12 +448,17 @@ App ID: `com.kdbxstudio.KDBXStudio` (KDE Platform/SDK 6.7).
 ### Releases
 
 Tag a version (`v1.0.0`, …) to trigger GitHub Actions release artifacts.
+The in-app update checker prefers published Releases, then tags, then the
+version declared on `main`.
 
 ---
 
 ## Documentation
 
 - [UI specification](docs/ui-specification.md) — colors, typography, layout, shortcuts
+- [Roadmap](docs/roadmap.md) — competitive phases and deliverables
+- [Browser integration](docs/browser-integration.md) — KeePassXC-Browser
+- [Packaging & signing](docs/packaging-signing.md) — AppImage / Flatpak trust
 - [COPYRIGHT](COPYRIGHT) — copyright and contact block
 - [Packaging](packaging/README.md) — Flatpak / AppImage notes
 - [`install.sh`](install.sh) — recommended AppImage installer
@@ -424,7 +478,9 @@ Tag a version (`v1.0.0`, …) to trigger GitHub Actions release artifacts.
 - CSV export writes passwords and OTP material in **plain text**; treat export files as highly sensitive.
 - Master password handling uses best-effort memory wipe; Python runtimes cannot guarantee zero residual copies.
 - Plugin callbacks are **isolated** — one plugin error does not affect others.
+- Optional **plugin SHA-256 allowlist** rejects unsigned drop-ins when configured.
 - Favicon downloads are **size-limited** (64 KiB) and fetched asynchronously.
+- Browser association keys are stored in KDBX Meta CustomData (`KPXC_BROWSER_*`); save after Connect.
 - Input validation on all settings values prevents malformed configuration.
 - Prefer a strong master password, optional key file, and regular encrypted backups of your `.kdbx` files.
 

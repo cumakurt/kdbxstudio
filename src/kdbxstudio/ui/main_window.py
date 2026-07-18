@@ -78,11 +78,11 @@ from kdbxstudio.ui.icons import (
     icon_tool_button,
 )
 from kdbxstudio.ui.theme import (
-    ThemeMode,
     apply_theme,
     refresh_theme_for_screen,
     suggested_window_size,
 )
+from kdbxstudio.ui.theme.tokens import THEME_CHOICES, parse_theme, theme_label
 from kdbxstudio.ui.theme.scale import detect_ui_scale
 from kdbxstudio.ui.widgets.attachment_preview import AttachmentPreviewWidget
 from kdbxstudio.ui.widgets.empty_workspace import EmptyWorkspaceWidget
@@ -100,6 +100,7 @@ class MainWindow(QMainWindow):
     _favicon_manual_done = Signal(str, str)  # path_name_or_empty, error_or_empty
     _status_message = Signal(str, int)
     _audit_hibp_done = Signal(object)  # AuditReport
+    _autotype_failed = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -158,9 +159,18 @@ class MainWindow(QMainWindow):
         self._totp = TotpWidget()
         self._audit_dialog = None
         self._audit_hibp_generation = 0
+        self._last_foreign_window_title: str | None = None
+        self._window_title_timer = QTimer(self)
+        self._window_title_timer.setInterval(750)
+        self._window_title_timer.timeout.connect(self._sample_foreign_window_title)
+        self._window_title_timer.start()
+        self._file_watcher = None
+        self._file_watch_ignore: set[str] = set()
+        self._browser_bridge = None
         self._favicon_ready.connect(self._on_favicon_fetched)
         self._favicon_manual_done.connect(self._on_favicon_manual_done)
         self._audit_hibp_done.connect(self._on_audit_hibp_done)
+        self._autotype_failed.connect(self._on_autotype_failed)
         self._status_message.connect(self._show_status_message)
         self._search_box = QLineEdit()
         self._search_box.setPlaceholderText(tr("Search entries…"))
@@ -244,6 +254,11 @@ class MainWindow(QMainWindow):
         self._audit_timer.setInterval(350)
         self._audit_timer.timeout.connect(self._run_debounced_audit)
 
+        from kdbxstudio.application.file_watch import DatabaseFileWatcher
+
+        self._file_watcher = DatabaseFileWatcher(self)
+        self._file_watcher.path_changed.connect(self._on_database_file_changed)
+
         self._bind_shortcuts()
         self._install_idle_filters()
         self._default_geometry = self.saveGeometry()
@@ -255,6 +270,8 @@ class MainWindow(QMainWindow):
         # Start with docks hidden until a database is open.
         self._groups_dock.hide()
         self._auto_lock.activity()
+        self._sync_browser_bridge()
+        self._sync_file_watches()
 
     def _bind_shortcuts(self) -> None:
         for seq in ("Ctrl+K", "Ctrl+Shift+P"):
@@ -444,16 +461,94 @@ class MainWindow(QMainWindow):
             info = check_github_release(__version__)
         except Exception:
             return
+        # Startup: only notify when an update is available (avoid noise).
         if info.newer:
             self._status_message.emit(
-                f"Update available: {info.latest} (you have {info.current})",
+                tr("Update available: {latest} (you have {current})").format(
+                    latest=info.latest,
+                    current=info.current,
+                ),
                 10000,
             )
+
+    def check_for_updates(self, *, interactive: bool = True) -> None:
+        from kdbxstudio.application.update_check import check_github_release
+
+        try:
+            info = check_github_release(__version__)
+        except Exception as exc:
+            if interactive:
+                QMessageBox.warning(self, tr("Update check"), str(exc))
+            return
+
+        source_labels = {
+            "release": tr("GitHub Release"),
+            "tag": tr("GitHub Tag"),
+            "repository": tr("GitHub repository"),
+        }
+        source = source_labels.get(info.source, info.source)
+        detail = tr(
+            "Installed version: {current}\n"
+            "GitHub version: {latest}\n"
+            "Source: {source}"
+        ).format(current=info.current, latest=info.latest, source=source)
+
+        if info.newer:
+            if interactive:
+                answer = QMessageBox.information(
+                    self,
+                    tr("Update available"),
+                    tr(
+                        "A newer version is available on GitHub.\n\n"
+                        "{detail}\n\nOpen the release page?"
+                    ).format(detail=detail),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if answer == QMessageBox.StandardButton.Yes:
+                    QDesktopServices.openUrl(QUrl(info.html_url))
+            else:
+                self.statusBar().showMessage(
+                    tr("Update available: {latest} (you have {current})").format(
+                        latest=info.latest,
+                        current=info.current,
+                    ),
+                    10000,
+                )
+        elif info.equal:
+            if interactive:
+                QMessageBox.information(
+                    self,
+                    tr("Up to date"),
+                    tr(
+                        "KDBXStudio is up to date.\n\n{detail}"
+                    ).format(detail=detail),
+                )
+            else:
+                self.statusBar().showMessage(
+                    tr("KDBXStudio {version} is up to date").format(
+                        version=info.current
+                    ),
+                    4000,
+                )
         else:
-            self._status_message.emit(
-                f"KDBXStudio {__version__} is up to date",
-                4000,
-            )
+            # Local build is ahead of published GitHub version.
+            if interactive:
+                QMessageBox.information(
+                    self,
+                    tr("Up to date"),
+                    tr(
+                        "Your installed version is newer than the version on GitHub.\n\n"
+                        "{detail}"
+                    ).format(detail=detail),
+                )
+            else:
+                self.statusBar().showMessage(
+                    tr("KDBXStudio {version} is up to date").format(
+                        version=info.current
+                    ),
+                    4000,
+                )
+        self._auto_lock.activity()
 
     def _setup_tray(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():
@@ -723,13 +818,11 @@ class MainWindow(QMainWindow):
         view_menu.addAction(reset_layout)
         view_menu.addSeparator()
         theme_menu = view_menu.addMenu(tr("Theme"))
-        for label, value in (
-            ("Dark", "dark"),
-            ("Light", "light"),
-            ("System", "system"),
-        ):
-            action = QAction(tr(label), self)
-            action.triggered.connect(lambda checked=False, v=value: self.set_theme(v))
+        for mode in THEME_CHOICES:
+            action = QAction(tr(theme_label(mode)), self)
+            action.triggered.connect(
+                lambda checked=False, v=mode.value: self.set_theme(v)
+            )
             theme_menu.addAction(action)
         palette_action = QAction(tr("Command Palette…"), self)
         palette_action.setShortcut(QKeySequence("Ctrl+K"))
@@ -1045,16 +1138,15 @@ class MainWindow(QMainWindow):
         self._auto_lock.activity()
 
     def set_theme(self, theme: str) -> None:
-        self._settings = self._settings.with_updates(theme=theme)
+        mode = parse_theme(theme)
+        self._settings = self._settings.with_updates(theme=mode.value)
         save_settings(self._settings)
         app = QApplication.instance()
         if isinstance(app, QApplication):
-            try:
-                mode = ThemeMode(theme)
-            except ValueError:
-                mode = ThemeMode.DARK
             apply_theme(app, mode)
-        self.statusBar().showMessage(f"Theme: {theme}", 2000)
+        self.statusBar().showMessage(
+            tr("Theme: {name}").format(name=tr(theme_label(mode))), 2000
+        )
 
     def open_command_palette(self) -> None:
         actions = [
@@ -1143,24 +1235,15 @@ class MainWindow(QMainWindow):
                 ("settings", "theme"),
                 self.open_security_settings,
             ),
-            PaletteAction(
-                "theme-dark",
-                tr("Theme: Dark"),
-                ("theme", "dark"),
-                lambda: self.set_theme("dark"),
-            ),
-            PaletteAction(
-                "theme-light",
-                tr("Theme: Light"),
-                ("theme", "light"),
-                lambda: self.set_theme("light"),
-            ),
-            PaletteAction(
-                "theme-system",
-                tr("Theme: System"),
-                ("theme", "system"),
-                lambda: self.set_theme("system"),
-            ),
+            *[
+                PaletteAction(
+                    f"theme-{mode.value}",
+                    tr("Theme: {name}").format(name=tr(theme_label(mode))),
+                    ("theme", mode.value),
+                    lambda m=mode: self.set_theme(m.value),
+                )
+                for mode in THEME_CHOICES
+            ],
             PaletteAction(
                 "focus-search",
                 tr("Focus Search"),
@@ -1305,12 +1388,222 @@ class MainWindow(QMainWindow):
         target = session_id or self._dbm.active_id
         if target:
             self._backup_session(target)
+            if self._file_watcher is not None:
+                self._file_watcher.ignore_briefly(target)
         self._dbm.save(session_id)
 
     def _save_all_with_backup(self) -> list[str]:
         for session_id in self._dbm.dirty_session_ids():
             self._backup_session(session_id)
+            if self._file_watcher is not None:
+                self._file_watcher.ignore_briefly(session_id)
         return self._dbm.save_all()
+
+    def _sync_file_watches(self) -> None:
+        if self._file_watcher is None:
+            return
+        if not self._settings.watch_database_files:
+            self._file_watcher.set_paths([])
+            return
+        paths: list[Path] = []
+        for session_id in self._dbm.session_ids():
+            path = Path(session_id)
+            if path.is_file():
+                paths.append(path)
+        self._file_watcher.set_paths(paths)
+
+    def _on_database_file_changed(self, path: str) -> None:
+        if self._dbm.active is None:
+            return
+        session_id = None
+        for sid in self._dbm.session_ids():
+            if str(Path(sid).resolve()) == str(Path(path).resolve()):
+                session_id = sid
+                break
+        if session_id is None:
+            return
+        dirty = self._dbm.display_name(session_id).endswith(" *")
+        # Prefer manager dirty flag when available.
+        try:
+            dirty = self._dbm._get(session_id).is_dirty  # noqa: SLF001
+        except Exception:
+            pass
+        if dirty:
+            choice = QMessageBox.warning(
+                self,
+                tr("Database changed on disk"),
+                tr(
+                    "{path} was modified outside KDBXStudio while you have "
+                    "unsaved changes.\n\n"
+                    "Reload from disk (discard local edits), keep editing, "
+                    "or cancel?"
+                ).format(path=Path(path).name),
+                QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Ignore
+                | QMessageBox.StandardButton.Cancel,
+            )
+            if choice == QMessageBox.StandardButton.Discard:
+                self._reload_session_from_disk(session_id)
+            return
+        choice = QMessageBox.information(
+            self,
+            tr("Database changed on disk"),
+            tr(
+                "{path} was modified outside KDBXStudio "
+                "(for example by Syncthing).\n\nReload it now?"
+            ).format(path=Path(path).name),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if choice == QMessageBox.StandardButton.Yes:
+            self._reload_session_from_disk(session_id)
+
+    def _reload_session_from_disk(self, session_id: str) -> None:
+        from kdbxstudio.ui.dialogs.unlock_dialog import UnlockDialog
+
+        path = Path(session_id)
+        dialog = UnlockDialog(self, path=path, create_mode=False)
+        if dialog.exec() != UnlockDialog.DialogCode.Accepted:
+            return
+        try:
+            self._dbm.close(session_id)
+            self._dbm.open(
+                dialog.database_path(),
+                password=dialog.password(),
+                keyfile=dialog.keyfile(),
+            )
+            self.statusBar().showMessage(tr("Database reloaded from disk"), 4000)
+        except (InvalidCredentialsError, DatabaseError) as exc:
+            QMessageBox.critical(self, tr("Reload failed"), str(exc))
+        self._sync_file_watches()
+        self._sync_browser_bridge()
+
+    def _browser_protocol_context(self):
+        from kdbxstudio.browser.protocol import ProtocolContext
+
+        def get_database():
+            return self._dbm.active
+
+        def get_entries():
+            if self._dbm.active is None:
+                return []
+            return self._dbm.all_entries(include_recycle_bin=False)
+
+        def list_groups():
+            if self._dbm.active is None:
+                return []
+            return self._dbm.list_groups()
+
+        def prompt_associate(label: str) -> str | None:
+            if self._browser_bridge is None:
+                return None
+            return self._browser_bridge.prompt_associate_blocking(label)
+
+        def lock_database() -> None:
+            QTimer.singleShot(0, self._lock_from_browser)
+
+        def ensure_group_path(path: str) -> str:
+            return self._dbm.ensure_group_path(path)
+
+        def add_entry(group_uuid, title, username="", password="", url="", **_kw):
+            return self._dbm.add_entry(
+                group_uuid,
+                title=title,
+                username=username,
+                password=password,
+                url=url,
+            )
+
+        def update_entry(uuid, **kwargs):
+            from kdbxstudio.browser.protocol import _normalize_uuid
+
+            return self._dbm.update_entry(_normalize_uuid(uuid), **kwargs)
+
+        def get_entry(uuid):
+            from kdbxstudio.browser.protocol import _normalize_uuid
+
+            entry = self._dbm.get_entry(_normalize_uuid(uuid))
+            if entry is None:
+                entry = self._dbm.get_entry(uuid)
+            return entry
+
+        return ProtocolContext(
+            get_database=get_database,
+            get_entries=get_entries,
+            list_groups=list_groups,
+            prompt_associate=prompt_associate,
+            lock_database=lock_database,
+            ensure_group_path=ensure_group_path,
+            add_entry=add_entry,
+            update_entry=update_entry,
+            get_entry=get_entry,
+        )
+
+    def _lock_from_browser(self) -> None:
+        """Lock all vaults without prompting for unlock (browser lock-database)."""
+        if not self._dbm.session_ids():
+            self._sync_browser_bridge()
+            return
+        if self._dbm.dirty_session_ids():
+            try:
+                self._save_all_with_backup()
+            except DatabaseError:
+                pass
+        if self._settings.clear_clipboard_on_lock:
+            self._clipboard.cancel()
+            clipboard = QGuiApplication.clipboard()
+            if clipboard is not None:
+                clipboard.clear()
+        self._dbm.close_all()
+        self._clear_entry_panels()
+        self._sync_browser_bridge()
+        self.statusBar().showMessage(tr("Databases locked"), 5000)
+
+    def _sync_browser_bridge(self) -> None:
+        from kdbxstudio.browser.server import BrowserLocalServer
+
+        enabled = getattr(self._settings, "browser_integration_enabled", True)
+        if not enabled or self._dbm.active is None:
+            if self._browser_bridge is not None:
+                self._browser_bridge.stop()
+                self._browser_bridge = None
+            return
+        if self._browser_bridge is None:
+            self._browser_bridge = BrowserLocalServer(
+                self._browser_protocol_context, parent=self
+            )
+            self._browser_bridge.associate_requested.connect(
+                self._on_browser_associate_requested
+            )
+            try:
+                paths = self._browser_bridge.start()
+                if paths:
+                    self.statusBar().showMessage(
+                        tr("Browser integration ready (KeePassXC-Browser)"),
+                        4000,
+                    )
+            except Exception:
+                self._browser_bridge = None
+                return
+        else:
+            self._browser_bridge.refresh_context()
+
+    def _on_browser_associate_requested(self, db_label: str) -> None:
+        if self._browser_bridge is None:
+            return
+        name, ok = QInputDialog.getText(
+            self,
+            tr("Browser association"),
+            tr(
+                "KeePassXC-Browser wants to connect to:\n{db}\n\n"
+                "Give this connection a name (for example: firefox-laptop):"
+            ).format(db=db_label),
+            text="kdbxstudio",
+        )
+        if not ok or not name.strip():
+            self._browser_bridge.provide_associate_id(None)
+            return
+        self._browser_bridge.provide_associate_id(name.strip())
+        self.statusBar().showMessage(tr("Browser associated — remember to Save"), 5000)
 
     def close_database(self) -> None:
         if self._dbm.active is not None and self._dbm.active.is_dirty:
@@ -1332,6 +1625,7 @@ class MainWindow(QMainWindow):
                     return
         self._dbm.close()
         self._clear_entry_panels()
+        self._sync_browser_bridge()
         self.statusBar().showMessage(tr("Database closed"), 3000)
 
     def add_entry(self) -> None:
@@ -1506,15 +1800,13 @@ class MainWindow(QMainWindow):
         self._apply_ui_density()
         app = QApplication.instance()
         if isinstance(app, QApplication):
-            try:
-                mode = ThemeMode(self._settings.theme)
-            except ValueError:
-                mode = ThemeMode.DARK
-            apply_theme(app, mode)
+            apply_theme(app, parse_theme(self._settings.theme))
         set_language(self._settings.language)
         language_changed = get_language() != previous_language
         if language_changed:
             self._retranslate_shell()
+        self._sync_file_watches()
+        self._sync_browser_bridge()
         self.statusBar().showMessage(tr("Settings saved"), 3000)
         if language_changed:
             QMessageBox.information(
@@ -1623,6 +1915,8 @@ class MainWindow(QMainWindow):
         else:
             self._on_group_selected(target)
         self._schedule_audit()
+        self._sync_file_watches()
+        self._sync_browser_bridge()
 
     def _schedule_audit(self) -> None:
         dialog = self._audit_dialog
@@ -1646,7 +1940,35 @@ class MainWindow(QMainWindow):
             dash = self._audit_dialog.dashboard
             dash.refresh_requested.connect(self._refresh_audit)
             dash.finding_activated.connect(self._on_finding_activated)
+            dash.fix_next_requested.connect(self._on_fix_next_finding)
         return self._audit_dialog
+
+    def _on_fix_next_finding(self, kind: str, entry_uuid: str) -> None:
+        self._on_finding_activated(entry_uuid)
+        tips = {
+            "empty_password": tr("Generate or enter a strong password, then Save."),
+            "weak_password": tr("Use Generate for a stronger password, then Save."),
+            "low_entropy": tr("Prefer a longer generated password, then Save."),
+            "pwned_password": tr(
+                "This password appears in breaches — generate a new one."
+            ),
+            "expired": tr("Update the expiry date or renew the credential."),
+            "expiring_soon": tr("Renew before expiry or extend the date."),
+            "duplicate_password": tr(
+                "Replace the shared password with a unique generated one."
+            ),
+        }
+        tip = tips.get(kind, tr("Review and update this entry."))
+        self.statusBar().showMessage(tip, 8000)
+        if kind in {
+            "empty_password",
+            "weak_password",
+            "low_entropy",
+            "pwned_password",
+            "duplicate_password",
+        }:
+            self._entry_tabs.setCurrentWidget(self._entry_detail)
+            self.open_password_generator()
 
     def open_password_health(self) -> None:
         dialog = self._ensure_audit_dialog()
@@ -1950,6 +2272,7 @@ class MainWindow(QMainWindow):
                 clipboard.clear()
         self._dbm.close_all()
         self._clear_entry_panels()
+        self._sync_browser_bridge()
         self.statusBar().showMessage(tr("Databases locked"), 5000)
         if self._settings.minimize_on_lock:
             self.showMinimized()
@@ -1969,16 +2292,29 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, tr("Unlock failed"), str(exc))
         self._auto_lock.activity()
 
+    def _sample_foreign_window_title(self) -> None:
+        from kdbxstudio.application.autotype import active_window_title
+
+        title = active_window_title()
+        if not title:
+            return
+        lower = title.lower()
+        if "kdbxstudio" in lower:
+            return
+        self._last_foreign_window_title = title
+
     def auto_type_selected(self) -> None:
         from kdbxstudio.application.autotype import (
             AutoTypeError,
-            auto_type,
+            active_window_title,
             detect_backend,
+            expand_sequence,
+            find_best_entry_for_window,
+            run_autotype_steps,
         )
 
-        uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
-        if not uuid or self._dbm.active is None:
-            QMessageBox.information(self, tr("Auto-Type"), tr("Select an entry first."))
+        if self._dbm.active is None:
+            QMessageBox.information(self, tr("Auto-Type"), tr("Open a database first."))
             return
         if detect_backend() is None:
             QMessageBox.warning(
@@ -1987,48 +2323,92 @@ class MainWindow(QMainWindow):
                 tr("No Auto-Type backend found. Install xdotool, ydotool, or wtype."),
             )
             return
+
+        uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
+        matched_label = ""
+        if not uuid and self._settings.autotype_match_window:
+            # Prefer last non-app window (hotkey often focuses us first).
+            window_title = self._last_foreign_window_title or active_window_title()
+            match = find_best_entry_for_window(
+                self._dbm.all_entries(include_recycle_bin=False),
+                window_title,
+            )
+            if match is not None:
+                uuid = match.entry.uuid
+                matched_label = f"{match.entry.title} ({match.reason})"
+                self._show_entry(uuid)
+        if not uuid:
+            QMessageBox.information(
+                self,
+                tr("Auto-Type"),
+                tr(
+                    "Select an entry first, or enable window matching in Settings "
+                    "and focus a related application window."
+                ),
+            )
+            return
         entry = self._dbm.get_entry(uuid)
         if entry is None:
             return
-        delay_ms, ok = QInputDialog.getInt(
-            self,
-            tr("Auto-Type"),
-            tr(
-                "Focus the target window, then confirm.\n"
-                "Delay before typing (ms):"
-            ),
-            1500,
-            0,
-            15000,
-            100,
-        )
-        if not ok:
-            return
+        delay_ms = self._settings.autotype_initial_delay_ms
+        if matched_label:
+            self.statusBar().showMessage(
+                tr("Auto-Type match: {label}").format(label=matched_label),
+                3000,
+            )
+        else:
+            delay_ms, ok = QInputDialog.getInt(
+                self,
+                tr("Auto-Type"),
+                tr(
+                    "Focus the target window, then confirm.\n"
+                    "Delay before typing (ms):"
+                ),
+                delay_ms,
+                0,
+                15000,
+                100,
+            )
+            if not ok:
+                return
         totp_code = ""
         if entry.otp:
             status = current_totp(entry.otp)
             totp_code = status.code or ""
+        steps = expand_sequence(
+            self._settings.autotype_sequence,
+            username=entry.username,
+            password=entry.password,
+            totp=totp_code,
+            url=entry.url,
+        )
         self.statusBar().showMessage(tr("Focus target window… Auto-Type starting"), 2000)
         QApplication.processEvents()
-        try:
-            backend = auto_type(
-                self._settings.autotype_sequence,
-                username=entry.username,
-                password=entry.password,
-                totp=totp_code,
-                url=entry.url,
-                initial_delay_ms=delay_ms,
-            )
-            self.statusBar().showMessage(f"Auto-Type completed via {backend}", 4000)
-        except AutoTypeError as exc:
-            QMessageBox.critical(self, tr("Auto-Type failed"), str(exc))
-        except Exception:
-            QMessageBox.critical(
-                self,
-                tr("Auto-Type failed"),
-                tr("Auto-Type failed unexpectedly. Secrets were not shown in this dialog."),
-            )
-        self._auto_lock.activity()
+
+        def _run() -> None:
+            try:
+                backend = run_autotype_steps(steps)
+                self._status_message.emit(
+                    f"Auto-Type completed via {backend}", 4000
+                )
+            except AutoTypeError as exc:
+                self._autotype_failed.emit(str(exc))
+            except Exception:
+                self._autotype_failed.emit(
+                    tr(
+                        "Auto-Type failed unexpectedly. "
+                        "Secrets were not shown in this dialog."
+                    )
+                )
+            self._auto_lock.activity()
+
+        if delay_ms > 0:
+            QTimer.singleShot(delay_ms, _run)
+        else:
+            _run()
+
+    def _on_autotype_failed(self, message: str) -> None:
+        QMessageBox.critical(self, tr("Auto-Type failed"), message)
 
     def move_selected_entry(self) -> None:
         if not self._ensure_writable():
@@ -2226,42 +2606,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, tr("Emergency sheet failed"), str(exc))
         self._auto_lock.activity()
 
-    def check_for_updates(self, *, interactive: bool = True) -> None:
-        from kdbxstudio.application.update_check import check_github_release
-
-        try:
-            info = check_github_release(__version__)
-        except Exception as exc:
-            if interactive:
-                QMessageBox.warning(self, tr("Update check"), str(exc))
-            return
-        if info.newer:
-            if interactive:
-                answer = QMessageBox.information(
-                    self,
-                    tr("Update available"),
-                    f"A newer version is available: {info.latest}\n"
-                    f"You have: {info.current}\n\nOpen release page?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                )
-                if answer == QMessageBox.StandardButton.Yes:
-                    QDesktopServices.openUrl(QUrl(info.html_url))
-            else:
-                self.statusBar().showMessage(
-                    f"Update available: {info.latest}", 10000
-                )
-        elif interactive:
-            QMessageBox.information(
-                self,
-                tr("Up to date"),
-                f"KDBXStudio {info.current} is the latest release.",
-            )
-        else:
-            self.statusBar().showMessage(
-                f"KDBXStudio {__version__} is up to date", 4000
-            )
-        self._auto_lock.activity()
-
     @staticmethod
     def _extract_private_pem(text: str) -> str | None:
         pattern = re.compile(
@@ -2324,12 +2668,14 @@ class MainWindow(QMainWindow):
             (
                 f"<b>KDBXStudio</b> {__version__}<br>"
                 "Modern Qt6 KDBX password manager for Linux.<br>"
+                f"{tr('Version')}: <b>{__version__}</b><br>"
                 "License: <b>GPL-3.0-or-later</b><br><br>"
                 "<b>Cuma KURT</b><br>"
                 '<a href="mailto:cumakurt@gmail.com">cumakurt@gmail.com</a><br>'
                 '<a href="https://www.linkedin.com/in/cuma-kurt-34414917/">'
                 "LinkedIn</a> · "
                 '<a href="https://github.com/cumakurt/kdbxstudio">GitHub</a>'
+                f"<br><br>{tr('Use Tools → Check for Updates… to compare with GitHub.')}"
             ),
         )
 

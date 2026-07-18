@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+
+def default_data_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        return Path(xdg) / "kdbxstudio"
+    return Path.home() / ".local" / "share" / "kdbxstudio"
 
 
 def resolve_regular_file(path: Path | str) -> Path | None:

@@ -20,6 +20,13 @@
 
 - In Qt dialogs, `QPushButton` defaults to `autoDefault=True`; Enter activates Browse instead of Unlock. Set `setAutoDefault(False)` on Browse/… buttons and keep only Ok as default; also wire password `returnPressed` → accept.
 
+## Roadmap foundations (2026-07-18)
+
+- Auto-Type window match must sample the *previous* non-app window; ApplicationShortcuts focus us first.
+- Self-saves must `ignore_briefly` on `QFileSystemWatcher` or Syncthing prompts fire on every Save.
+- `QTableView` has no `setUniformRowHeights` — use header default section size instead.
+- Browser fill needs a running unlocked vault + socket bridge; native host alone is not enough.
+
 ## Perf / correctness (2026-07-18)
 
 - Audit must never call `attachment_count(uuid)` per entry — put `attachment_count` on `EntryView` during list.

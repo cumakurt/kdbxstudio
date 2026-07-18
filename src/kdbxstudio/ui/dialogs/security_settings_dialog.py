@@ -8,8 +8,11 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -67,9 +70,10 @@ class SecuritySettingsDialog(QDialog):
         self._language.setCurrentIndex(lang_index if lang_index >= 0 else 0)
 
         self._theme = QComboBox()
-        self._theme.addItem(tr("Dark"), "dark")
-        self._theme.addItem(tr("Light"), "light")
-        self._theme.addItem(tr("System"), "system")
+        from kdbxstudio.ui.theme.tokens import THEME_CHOICES, theme_label
+
+        for mode in THEME_CHOICES:
+            self._theme.addItem(tr(theme_label(mode)), mode.value)
         index = self._theme.findData(settings.theme)
         self._theme.setCurrentIndex(index if index >= 0 else 0)
 
@@ -84,6 +88,24 @@ class SecuritySettingsDialog(QDialog):
 
         self._autotype = QLineEdit(settings.autotype_sequence)
         self._autotype.setPlaceholderText("{USERNAME}{TAB}{PASSWORD}{ENTER}")
+        self._autotype_match = QCheckBox(
+            tr("Match Auto-Type to active window when no entry is selected")
+        )
+        self._autotype_match.setChecked(settings.autotype_match_window)
+        self._autotype_delay = QSpinBox()
+        self._autotype_delay.setRange(0, 15_000)
+        self._autotype_delay.setSingleStep(100)
+        self._autotype_delay.setSuffix(tr(" ms"))
+        self._autotype_delay.setValue(settings.autotype_initial_delay_ms)
+        self._watch_files = QCheckBox(
+            tr("Watch open database files for external changes")
+        )
+        self._watch_files.setChecked(settings.watch_database_files)
+
+        self._browser = QCheckBox(tr("Enable KeePassXC-Browser integration"))
+        self._browser.setChecked(settings.browser_integration_enabled)
+        self._browser_install = QPushButton(tr("Install browser host manifests…"))
+        self._browser_install.clicked.connect(self._install_browser_host)
 
         form = QFormLayout()
         form.addRow(tr("Language"), self._language)
@@ -98,6 +120,14 @@ class SecuritySettingsDialog(QDialog):
         form.addRow(tr("Theme"), self._theme)
         form.addRow(tr("UI density"), self._density)
         form.addRow(tr("Auto-Type sequence"), self._autotype)
+        form.addRow(tr("Auto-Type delay"), self._autotype_delay)
+        form.addRow("", self._autotype_match)
+        form.addRow("", self._watch_files)
+        form.addRow("", self._browser)
+        browser_row = QHBoxLayout()
+        browser_row.addWidget(self._browser_install)
+        browser_row.addStretch(1)
+        form.addRow("", browser_row)
         form.addRow("", self._read_only)
         form.addRow(
             "",
@@ -119,6 +149,32 @@ class SecuritySettingsDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
 
+    def _install_browser_host(self) -> None:
+        from kdbxstudio.browser.install_host import install
+
+        try:
+            paths = install()
+        except OSError as exc:
+            QMessageBox.critical(
+                self,
+                tr("Browser host"),
+                tr("Could not install native messaging manifests:\n{err}").format(
+                    err=exc
+                ),
+            )
+            return
+        listing = "\n".join(f"  {p}" for p in paths)
+        QMessageBox.information(
+            self,
+            tr("Browser host"),
+            tr(
+                "Installed KeePassXC-Browser native messaging manifests:\n{paths}\n\n"
+                "Unlock a database in KDBXStudio, then Connect in the extension.\n"
+                "If KeePassXC is also installed, disable its browser integration "
+                "to avoid conflicting manifests."
+            ).format(paths=listing),
+        )
+
     def result_settings(self) -> SecuritySettings:
         return SecuritySettings(
             clipboard_timeout_ms=self._clipboard.value() * 1000,
@@ -134,6 +190,11 @@ class SecuritySettingsDialog(QDialog):
             hibp_enabled=self._hibp.isChecked(),
             autotype_sequence=self._autotype.text().strip()
             or SecuritySettings.autotype_sequence,
+            autotype_match_window=self._autotype_match.isChecked(),
+            autotype_initial_delay_ms=self._autotype_delay.value(),
+            watch_database_files=self._watch_files.isChecked(),
+            browser_integration_enabled=self._browser.isChecked(),
+            plugin_sha256_allowlist=self._original.plugin_sha256_allowlist,
             check_updates_on_start=self._updates.isChecked(),
             start_minimized_to_tray=self._tray.isChecked(),
             language=str(self._language.currentData() or "en"),

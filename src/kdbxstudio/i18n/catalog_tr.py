@@ -64,6 +64,20 @@ TR_CATALOG: dict[str, str] = {
     "Dark": "Koyu",
     "Light": "Açık",
     "System": "Sistem",
+    "Studio Dark": "Studio Koyu",
+    "Studio Light": "Studio Açık",
+    "Nord": "Nord",
+    "Dracula": "Dracula",
+    "Tokyo Night": "Tokyo Night",
+    "Catppuccin Mocha": "Catppuccin Mocha",
+    "Catppuccin Latte": "Catppuccin Latte",
+    "Solarized Dark": "Solarized Koyu",
+    "One Dark": "One Dark",
+    "Gruvbox Dark": "Gruvbox Koyu",
+    "Theme: {name}": "Tema: {name}",
+    "Theme: Dark": "Tema: Koyu",
+    "Theme: Light": "Tema: Açık",
+    "Theme: System": "Tema: Sistem",
     "Command Palette…": "Komut Paleti…",
     "About": "Hakkında",
     "Language": "Dil",
@@ -133,6 +147,38 @@ TR_CATALOG: dict[str, str] = {
     "Compact": "Sıkışık",
     "Comfortable": "Rahat",
     "Auto-Type sequence": "Otomatik yazma dizisi",
+    "Watch open database files for external changes": (
+        "Açık veritabanı dosyalarını dış değişiklikler için izle"
+    ),
+    "Enable KeePassXC-Browser integration": (
+        "KeePassXC-Browser entegrasyonunu etkinleştir"
+    ),
+    "Install browser host manifests…": "Tarayıcı host bildirimlerini kur…",
+    "Browser host": "Tarayıcı host",
+    "Could not install native messaging manifests:\n{err}": (
+        "Native messaging bildirimleri kurulamadı:\n{err}"
+    ),
+    "Installed KeePassXC-Browser native messaging manifests:\n{paths}\n\n"
+    "Unlock a database in KDBXStudio, then Connect in the extension.\n"
+    "If KeePassXC is also installed, disable its browser integration "
+    "to avoid conflicting manifests.": (
+        "KeePassXC-Browser native messaging bildirimleri kuruldu:\n{paths}\n\n"
+        "KDBXStudio’da bir veritabanının kilidini açın, ardından eklentide Connect’e basın.\n"
+        "KeePassXC de yüklüyse, çakışan bildirimleri önlemek için onun "
+        "tarayıcı entegrasyonunu kapatın."
+    ),
+    "Browser integration ready (KeePassXC-Browser)": (
+        "Tarayıcı entegrasyonu hazır (KeePassXC-Browser)"
+    ),
+    "Browser association": "Tarayıcı eşleştirmesi",
+    "KeePassXC-Browser wants to connect to:\n{db}\n\n"
+    "Give this connection a name (for example: firefox-laptop):": (
+        "KeePassXC-Browser şuna bağlanmak istiyor:\n{db}\n\n"
+        "Bu bağlantıya bir ad verin (örnek: firefox-laptop):"
+    ),
+    "Browser associated — remember to Save": (
+        "Tarayıcı eşleştirildi — Kaydetmeyi unutmayın"
+    ),
     "Hardware keys (YubiKey challenge-response) are not supported yet "
     "by the underlying KeePass library.": (
         "Donanım anahtarları (YubiKey challenge-response) henüz "
@@ -408,15 +454,37 @@ TR_CATALOG: dict[str, str] = {
     "Update check": "Güncelleme denetimi",
     "Update available": "Güncelleme mevcut",
     "Up to date": "Güncel",
-    "A newer version is available: {latest}\n"
-    "You have: {current}\n\nOpen release page?": (
-        "Daha yeni bir sürüm mevcut: {latest}\n"
-        "Sizin sürümünüz: {current}\n\nSürüm sayfası açılsın mı?"
+    "Update available: {latest} (you have {current})": (
+        "Güncelleme mevcut: {latest} (sizin sürümünüz: {current})"
     ),
-    "KDBXStudio {current} is the latest release.": (
-        "KDBXStudio {current} en son sürümdür."
+    "Installed version: {current}\n"
+    "GitHub version: {latest}\n"
+    "Source: {source}": (
+        "Yüklü sürüm: {current}\n"
+        "GitHub sürümü: {latest}\n"
+        "Kaynak: {source}"
     ),
-    "Update available: {latest}": "Güncelleme mevcut: {latest}",
+    "A newer version is available on GitHub.\n\n"
+    "{detail}\n\nOpen the release page?": (
+        "GitHub’da daha yeni bir sürüm var.\n\n"
+        "{detail}\n\nSürüm sayfası açılsın mı?"
+    ),
+    "KDBXStudio is up to date.\n\n{detail}": (
+        "KDBXStudio güncel.\n\n{detail}"
+    ),
+    "Your installed version is newer than the version on GitHub.\n\n"
+    "{detail}": (
+        "Yüklü sürümünüz GitHub’daki sürümden daha yeni.\n\n"
+        "{detail}"
+    ),
+    "KDBXStudio {version} is up to date": "KDBXStudio {version} güncel",
+    "GitHub Release": "GitHub Release",
+    "GitHub Tag": "GitHub Etiketi",
+    "GitHub repository": "GitHub deposu",
+    "Version": "Sürüm",
+    "Use Tools → Check for Updates… to compare with GitHub.": (
+        "GitHub ile karşılaştırmak için Araçlar → Güncellemeleri Denetle… kullanın."
+    ),
     "SSH Agent": "SSH Agent",
     "Could not extract private key PEM.": (
         "Özel anahtar PEM’si çıkarılamadı."
@@ -428,9 +496,6 @@ TR_CATALOG: dict[str, str] = {
     "Auto-Type Selected Entry": "Seçili Kaydı Otomatik Yaz",
     "Plugin Marketplace…": "Eklenti Mağazası…",
     "Security & Appearance…": "Güvenlik ve Görünüm…",
-    "Theme: Dark": "Tema: Koyu",
-    "Theme: Light": "Tema: Açık",
-    "Theme: System": "Tema: Sistem",
     "Focus Search": "Aramaya Odaklan",
     # ── Misc short phrases ────────────────────────────────────────────
     "Root": "Kök",

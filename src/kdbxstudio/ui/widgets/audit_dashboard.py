@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from kdbxstudio.application.audit_engine import AuditReport
 from kdbxstudio.i18n import tr, trf
+from kdbxstudio.ui.theme.manager import set_widget_tone
 
 
 class AuditDashboardWidget(QWidget):
@@ -26,9 +27,11 @@ class AuditDashboardWidget(QWidget):
 
     refresh_requested = Signal()
     finding_activated = Signal(str)
+    fix_next_requested = Signal(str, str)  # kind, entry_uuid
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._report: AuditReport | None = None
         self._summary = QLabel(tr("No database open"))
         self._summary.setWordWrap(True)
         self._strip = QLabel("")
@@ -76,8 +79,13 @@ class AuditDashboardWidget(QWidget):
         open_btn.setToolTip(tr("Open the selected finding's entry"))
         open_btn.clicked.connect(self._open_current)
 
+        fix_btn = QPushButton(tr("Fix next"))
+        fix_btn.setToolTip(tr("Jump to the next actionable finding"))
+        fix_btn.clicked.connect(self._fix_next)
+
         top = QHBoxLayout()
         top.addWidget(self._summary, stretch=1)
+        top.addWidget(fix_btn)
         top.addWidget(open_btn)
         top.addWidget(refresh)
 
@@ -91,6 +99,7 @@ class AuditDashboardWidget(QWidget):
         layout.addWidget(self._tree, stretch=1)
 
     def clear(self) -> None:
+        self._report = None
         self._summary.setText(tr("No database open"))
         self._strip.clear()
         self._strip.setVisible(False)
@@ -100,6 +109,7 @@ class AuditDashboardWidget(QWidget):
         self._tree.clear()
 
     def show_report(self, report: AuditReport) -> None:
+        self._report = report
         counts = report.severity_counts
         ok = max(
             0,
@@ -123,17 +133,13 @@ class AuditDashboardWidget(QWidget):
 
         health = report.health_score
         self._health_bar.setValue(health)
-        if health >= 80:
-            color = "#22c55e"
-        elif health >= 60:
-            color = "#84cc16"
+        if health >= 60:
+            tone = "success"
         elif health >= 40:
-            color = "#eab308"
+            tone = "warning"
         else:
-            color = "#ef4444"
-        self._health_bar.setStyleSheet(
-            f"QProgressBar::chunk {{ background-color: {color}; }}"
-        )
+            tone = "danger"
+        set_widget_tone(self._health_bar, tone)
         self._health_bar.setVisible(True)
 
         if report.expired > 0 or report.expiring_soon > 0:
@@ -228,6 +234,32 @@ class AuditDashboardWidget(QWidget):
         item = self._tree.currentItem()
         if item is not None:
             self._on_item(item, 0)
+
+    def _fix_next(self) -> None:
+        if self._report is None:
+            return
+        priority = {"critical": 0, "warning": 1, "info": 2}
+        actionable = [
+            f
+            for f in self._report.findings
+            if f.entry_uuid
+            and f.kind
+            in {
+                "empty_password",
+                "weak_password",
+                "low_entropy",
+                "pwned_password",
+                "expired",
+                "expiring_soon",
+                "duplicate_password",
+            }
+        ]
+        if not actionable:
+            return
+        actionable.sort(key=lambda f: priority.get(f.severity, 9))
+        finding = actionable[0]
+        assert finding.entry_uuid is not None
+        self.fix_next_requested.emit(finding.kind, finding.entry_uuid)
 
     def _on_item(self, item: QTreeWidgetItem, _column: int) -> None:
         uuid = item.data(0, int(Qt.ItemDataRole.UserRole))

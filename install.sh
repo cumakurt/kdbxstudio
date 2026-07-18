@@ -420,6 +420,13 @@ setup_venv() {
     spec="${ROOT}[dev]"
   fi
   run_quiet "Installing ${APP_NAME}" python -m pip install -q -e "${spec}"
+
+  # Best-effort KeePassXC-Browser native messaging manifests
+  if python -m kdbxstudio.browser.install_host >>"${LOG_FILE}" 2>&1; then
+    ok "Browser native messaging host manifests installed"
+  else
+    warn "Could not install browser host manifests (run later: python -m kdbxstudio.browser.install_host)"
+  fi
 }
 
 install_desktop_venv() {

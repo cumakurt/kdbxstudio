@@ -190,9 +190,12 @@ Password Health → Tools menu → separate resizable window
 
 ## 12. Theme rules
 
-- Default: follow system if detectable, else **dark** for security tooling familiarity — *implementation default: dark* with explicit Light toggle  
-- Persist `theme` in `settings.json`: `system` | `light` | `dark`  
-- Charts/health colors stay semantic across themes  
+- Default: **Studio Dark** (`dark`); also **Studio Light**, **System**, and community styles  
+- Persist `theme` in `settings.json` as one of:  
+  `system` | `dark` | `light` | `nord` | `dracula` | `tokyo-night` |  
+  `catppuccin-mocha` | `catppuccin-latte` | `solarized-dark` | `one-dark` | `gruvbox-dark`  
+- Charts/health colors stay semantic (`tone`) and remapped per palette  
+- Theme picker: View → Theme, Settings → Theme, Command Palette  
 
 ---
 

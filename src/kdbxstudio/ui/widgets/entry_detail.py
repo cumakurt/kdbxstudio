@@ -35,6 +35,7 @@ from kdbxstudio.ui.icons.entry_type import (
     detect_entry_kind,
     field_icon,
 )
+from kdbxstudio.ui.theme.manager import set_widget_tone
 from kdbxstudio.ui.widgets.notes_preview import NotesPreviewWidget
 
 
@@ -91,16 +92,12 @@ def _estimate_password_strength(password: str) -> tuple[int, str]:
     return score, label
 
 
-def _strength_color(score: int) -> str:
-    if score >= 80:
-        return "#22c55e"
-    elif score >= 60:
-        return "#84cc16"
-    elif score >= 40:
-        return "#eab308"
-    elif score >= 20:
-        return "#f97316"
-    return "#ef4444"
+def _strength_tone(score: int) -> str:
+    if score >= 60:
+        return "success"
+    if score >= 20:
+        return "warning"
+    return "danger"
 
 
 class EntryDetailWidget(QWidget):
@@ -130,7 +127,7 @@ class EntryDetailWidget(QWidget):
         self._strength_bar.setMaximumHeight(16)
         self._strength_bar.setFormat("")
         self._strength_label = QLabel("")
-        self._strength_label.setStyleSheet("font-size: 11px;")
+        set_widget_tone(self._strength_label, "secondary")
         self._url = QLineEdit()
         self._notes = NotesPreviewWidget()
         self._tags = QLineEdit()
@@ -347,35 +344,25 @@ class EntryDetailWidget(QWidget):
                 self._expiry_countdown.setText(
                     trf("⚠ Expired {days} day(s) ago", days=abs(days))
                 )
-                self._expiry_countdown.setStyleSheet(
-                    "color: #ef4444; font-weight: bold;"
-                )
+                set_widget_tone(self._expiry_countdown, "danger")
             elif days == 0:
                 self._expiry_countdown.setText(tr("⚠ Expires today!"))
-                self._expiry_countdown.setStyleSheet(
-                    "color: #f97316; font-weight: bold;"
-                )
+                set_widget_tone(self._expiry_countdown, "warning")
             elif days <= 7:
                 self._expiry_countdown.setText(
                     trf("⏰ Expires in {days} day(s)", days=days)
                 )
-                self._expiry_countdown.setStyleSheet(
-                    "color: #f97316; font-weight: bold;"
-                )
+                set_widget_tone(self._expiry_countdown, "warning")
             elif days <= 30:
                 self._expiry_countdown.setText(
                     trf("📅 Expires in {days} day(s)", days=days)
                 )
-                self._expiry_countdown.setStyleSheet(
-                    "color: #eab308;"
-                )
+                set_widget_tone(self._expiry_countdown, "warning")
             else:
                 self._expiry_countdown.setText(
                     trf("✓ Expires in {days} day(s)", days=days)
                 )
-                self._expiry_countdown.setStyleSheet(
-                    "color: #22c55e;"
-                )
+                set_widget_tone(self._expiry_countdown, "success")
             self._expiry_countdown.setVisible(True)
         except (ValueError, TypeError):
             self._expiry_countdown.setVisible(False)
@@ -494,17 +481,12 @@ class EntryDetailWidget(QWidget):
     def _update_strength(self) -> None:
         password = self._password.text()
         score, label = _estimate_password_strength(password)
-        color = _strength_color(score)
+        tone = _strength_tone(score)
         self._strength_bar.setValue(score)
-        band = score // 25
-        if getattr(self, "_strength_band", None) != band:
-            self._strength_band = band
-            self._strength_bar.setStyleSheet(
-                f"QProgressBar::chunk {{ background-color: {color}; }}"
-            )
-            self._strength_label.setStyleSheet(
-                f"font-size: 11px; color: {color}; font-weight: bold;"
-            )
+        if getattr(self, "_strength_tone", None) != tone:
+            self._strength_tone = tone
+            set_widget_tone(self._strength_bar, tone)
+            set_widget_tone(self._strength_label, tone)
         self._strength_label.setText(label)
 
     def _copy_password(self) -> None:
