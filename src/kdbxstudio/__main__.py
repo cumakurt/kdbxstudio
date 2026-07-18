@@ -22,7 +22,15 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("KDBXStudio")
     settings = load_settings()
     set_language(settings.language)
-    apply_theme(app, parse_theme(settings.theme))
+    apply_theme(
+        app,
+        parse_theme(settings.theme),
+        accent=settings.accent,
+        ui_density=settings.ui_density,
+        ui_scale_percent=settings.ui_scale_percent,
+        font_size=settings.font_size,
+        menu_size=settings.menu_size,
+    )
     window = MainWindow()
     window.show()
     return app.exec()

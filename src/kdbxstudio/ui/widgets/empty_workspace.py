@@ -56,7 +56,7 @@ class EmptyWorkspaceWidget(QWidget):
         actions.addStretch()
 
         recent_label = QLabel(tr("Recent databases"))
-        recent_label.setStyleSheet("font-weight: 600;")
+        recent_label.setObjectName("emptyTitle")
         self._recent = QListWidget()
         self._recent.setAccessibleName(tr("Recent databases"))
         self._recent.setMaximumHeight(140)

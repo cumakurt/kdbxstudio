@@ -11,10 +11,11 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
+    QMenu,
     QTableView,
     QWidget,
 )
@@ -23,8 +24,18 @@ from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.i18n import tr
 from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_kind_icon
+from kdbxstudio.ui.theme.geometry import density_metrics
 
 ENTRY_MIME = "application/x-kdbxstudio-entry"
+
+
+def _row_height() -> int:
+    try:
+        from kdbxstudio.ui.theme.manager import current_density
+
+        return density_metrics(current_density()).row_height
+    except Exception:
+        return 32
 
 
 class EntryTableModel(QAbstractTableModel):
@@ -35,6 +46,8 @@ class EntryTableModel(QAbstractTableModel):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._entries: list[EntryView] = []
+        self._sort_column = 0
+        self._sort_order = Qt.SortOrder.AscendingOrder
 
     def rowCount(self, parent: QModelIndex | None = None) -> int:  # noqa: N802
         if parent is not None and parent.isValid():
@@ -92,10 +105,30 @@ class EntryTableModel(QAbstractTableModel):
             | Qt.ItemFlag.ItemIsDragEnabled
         )
 
+    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder) -> None:  # noqa: N802
+        if column < 0 or column >= len(self.COLUMNS):
+            return
+        self._sort_column = column
+        self._sort_order = order
+        reverse = order == Qt.SortOrder.DescendingOrder
+
+        def key(entry: EntryView) -> str:
+            if column == 0:
+                return (entry.title or "").lower()
+            if column == 1:
+                return (entry.username or "").lower()
+            return (entry.url or "").lower()
+
+        self.layoutAboutToBeChanged.emit()
+        self._entries.sort(key=key, reverse=reverse)
+        self.layoutChanged.emit()
+
     def set_entries(self, entries: list[EntryView]) -> None:
         self.beginResetModel()
         self._entries = list(entries)
         self.endResetModel()
+        if self._entries:
+            self.sort(self._sort_column, self._sort_order)
 
     def entry_at(self, row: int) -> EntryView | None:
         if 0 <= row < len(self._entries):
@@ -134,14 +167,20 @@ class EntryListWidget(QTableView):
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setAlternatingRowColors(True)
         self.verticalHeader().setVisible(False)
-        self.horizontalHeader().setStretchLastSection(True)
-        self.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header = self.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionsClickable(True)
+        header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._header_context_menu)
         self.setIconSize(QSize(16, 16))
-        self.setSortingEnabled(False)
+        self.setSortingEnabled(True)
         self.setDragEnabled(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.verticalHeader().setDefaultSectionSize(28)
+        row_h = _row_height()
+        self.verticalHeader().setDefaultSectionSize(row_h)
+        self.setIconSize(QSize(max(16, row_h - 12), max(16, row_h - 12)))
         self.selectionModel().selectionChanged.connect(self._on_selection)
         QShortcut(QKeySequence.StandardKey.SelectAll, self, self.selectAll)
         QShortcut(QKeySequence(Qt.Key.Key_Delete), self, self.delete_requested.emit)
@@ -150,6 +189,12 @@ class EntryListWidget(QTableView):
             self,
             self.permanent_delete_requested.emit,
         )
+
+    def apply_density(self) -> None:
+        """Refresh row height from the current UI density."""
+        row_h = _row_height()
+        self.verticalHeader().setDefaultSectionSize(row_h)
+        self.setIconSize(QSize(max(16, row_h - 12), max(16, row_h - 12)))
 
     def select_row_at(self, pos: QPoint) -> bool:
         index = self.indexAt(pos)
@@ -181,6 +226,27 @@ class EntryListWidget(QTableView):
             seen.add(text)
             result.append(text)
         return result
+
+    def _header_context_menu(self, pos: QPoint) -> None:
+        menu = QMenu(self)
+        header = self.horizontalHeader()
+        for col, name in enumerate(self.COLUMNS):
+            action = QAction(tr(name), menu)
+            action.setCheckable(True)
+            action.setChecked(not header.isSectionHidden(col))
+            # Keep at least one column visible.
+            visible_count = sum(
+                1 for c in range(len(self.COLUMNS)) if not header.isSectionHidden(c)
+            )
+            if action.isChecked() and visible_count <= 1:
+                action.setEnabled(False)
+
+            def _toggle(checked: bool, column: int = col) -> None:
+                header.setSectionHidden(column, not checked)
+
+            action.toggled.connect(_toggle)
+            menu.addAction(action)
+        menu.exec(header.mapToGlobal(pos))
 
     def _on_selection(self, *_args) -> None:
         uuid = self.selected_entry_uuid()

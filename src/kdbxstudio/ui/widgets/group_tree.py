@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
 
 from kdbxstudio.core.database import GroupView
 from kdbxstudio.i18n import tr
+from kdbxstudio.ui.icons.group_icons import group_icon_for_name
 from kdbxstudio.ui.widgets.entry_list import ENTRY_MIME
 
 
 class GroupTreeWidget(QTreeWidget):
-    """Hierarchical group browser."""
+    """Hierarchical group browser with colorful auto-assigned category icons."""
 
     group_selected = Signal(str)
     entry_drop_requested = Signal(str, str)  # entry_uuid, group_uuid
@@ -21,6 +22,7 @@ class GroupTreeWidget(QTreeWidget):
         super().__init__(parent)
         self.setHeaderLabel(tr("Groups"))
         self.setUniformRowHeights(True)
+        self.setIconSize(QSize(18, 18))
         # Accept entry drops only — do not rearrange groups in the tree.
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
@@ -48,13 +50,20 @@ class GroupTreeWidget(QTreeWidget):
             by_uuid: dict[str, GroupView] = {g.uuid: g for g in groups}
             items: dict[str, QTreeWidgetItem] = {}
 
-            # Build items without parents first
             for group in groups:
                 label = group.name or tr("(unnamed)")
                 if group.is_recycle_bin:
                     label = f"[Bin] {label}"
                 item = QTreeWidgetItem([label])
                 item.setData(0, Qt.ItemDataRole.UserRole, group.uuid)
+                item.setIcon(
+                    0,
+                    group_icon_for_name(
+                        group.name,
+                        is_recycle_bin=group.is_recycle_bin,
+                        size=18,
+                    ),
+                )
                 items[group.uuid] = item
 
             roots: list[QTreeWidgetItem] = []
@@ -66,7 +75,6 @@ class GroupTreeWidget(QTreeWidget):
                 else:
                     roots.append(item)
 
-            # Prefer attaching under true root when present
             if root_uuid in items:
                 self.addTopLevelItem(items[root_uuid])
             else:

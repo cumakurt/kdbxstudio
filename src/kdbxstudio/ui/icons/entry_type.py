@@ -7,10 +7,21 @@ from enum import StrEnum
 from urllib.parse import urlparse
 
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QStyle
 
 from kdbxstudio.core.database import EntryView
-from kdbxstudio.ui.icons import standard_icon  # noqa: F401 — re-export convenience
+from kdbxstudio.ui.icons import icon, standard_icon
+
+__all__ = [
+    "EntryKind",
+    "FieldKind",
+    "detect_entry_kind",
+    "detect_entry_kind_from_view",
+    "entry_kind_icon",
+    "field_icon",
+    "field_icon_name",
+    "category_icon_name",
+    "standard_icon",
+]
 
 
 class EntryKind(StrEnum):
@@ -25,6 +36,15 @@ class EntryKind(StrEnum):
     CLOUD = "cloud"
     DEV = "dev"
     NOTE = "note"
+    SERVER = "server"
+    VPN = "vpn"
+    DOCKER = "docker"
+    KUBERNETES = "kubernetes"
+    LINUX = "linux"
+    WINDOWS = "windows"
+    IDENTITY = "identity"
+    CRYPTO = "crypto"
+    LICENSE = "license"
     GENERIC = "generic"
 
 
@@ -40,6 +60,7 @@ class FieldKind(StrEnum):
     COPY = "copy"
     GENERATE = "generate"
     SAVE = "save"
+    ATTACHMENT = "attachment"
 
 
 _HOST_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
@@ -48,6 +69,8 @@ _HOST_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
     (re.compile(r"(aws|azure|gcp|cloudflare|digitalocean)", re.I), EntryKind.CLOUD),
     (re.compile(r"(paypal|stripe|visa|mastercard|bank|wise)", re.I), EntryKind.BANK),
     (re.compile(r"(postgres|mysql|mongo|redis|sql)", re.I), EntryKind.DATABASE),
+    (re.compile(r"(docker|hub\.docker)", re.I), EntryKind.DOCKER),
+    (re.compile(r"(k8s|kubernetes)", re.I), EntryKind.KUBERNETES),
 )
 
 _TITLE_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
@@ -55,6 +78,15 @@ _TITLE_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
     (re.compile(r"\b(cert|certificate|x\.?509|pem)\b", re.I), EntryKind.CERTIFICATE),
     (re.compile(r"\b(api|token|bearer|secret key)\b", re.I), EntryKind.API),
     (re.compile(r"\b(wifi|wlan|ssid|router)\b", re.I), EntryKind.WIFI),
+    (re.compile(r"\b(vpn|wireguard|openvpn)\b", re.I), EntryKind.VPN),
+    (re.compile(r"\b(docker)\b", re.I), EntryKind.DOCKER),
+    (re.compile(r"\b(kubernetes|k8s)\b", re.I), EntryKind.KUBERNETES),
+    (re.compile(r"\b(linux|ubuntu|debian|fedora)\b", re.I), EntryKind.LINUX),
+    (re.compile(r"\b(windows|win\.?server)\b", re.I), EntryKind.WINDOWS),
+    (re.compile(r"\b(server|vps|host)\b", re.I), EntryKind.SERVER),
+    (re.compile(r"\b(identity|sso|oauth|saml)\b", re.I), EntryKind.IDENTITY),
+    (re.compile(r"\b(crypto|wallet|bitcoin|ethereum)\b", re.I), EntryKind.CRYPTO),
+    (re.compile(r"\b(license|licence|serial)\b", re.I), EntryKind.LICENSE),
     (re.compile(r"\b(card|visa|mastercard|iban|bank)\b", re.I), EntryKind.BANK),
     (re.compile(r"\b(mail|email|inbox)\b", re.I), EntryKind.EMAIL),
     (re.compile(r"\b(note|memo)\b", re.I), EntryKind.NOTE),
@@ -64,66 +96,69 @@ _TITLE_RULES: tuple[tuple[re.Pattern[str], EntryKind], ...] = (
 _PEM_SSH = re.compile(r"BEGIN (OPENSSH |RSA |EC |DSA )?PRIVATE KEY", re.I)
 _PEM_CERT = re.compile(r"BEGIN CERTIFICATE", re.I)
 
-_KIND_STYLE: dict[EntryKind, QStyle.StandardPixmap] = {
-    EntryKind.LOGIN: QStyle.StandardPixmap.SP_ComputerIcon,
-    EntryKind.EMAIL: QStyle.StandardPixmap.SP_MessageBoxInformation,
-    EntryKind.API: QStyle.StandardPixmap.SP_CommandLink,
-    EntryKind.SSH: QStyle.StandardPixmap.SP_ComputerIcon,
-    EntryKind.CERTIFICATE: QStyle.StandardPixmap.SP_DialogApplyButton,
-    EntryKind.BANK: QStyle.StandardPixmap.SP_DriveHDIcon,
-    EntryKind.WIFI: QStyle.StandardPixmap.SP_DriveNetIcon,
-    EntryKind.DATABASE: QStyle.StandardPixmap.SP_DirHomeIcon,
-    EntryKind.CLOUD: QStyle.StandardPixmap.SP_DriveNetIcon,
-    EntryKind.DEV: QStyle.StandardPixmap.SP_FileDialogContentsView,
-    EntryKind.NOTE: QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    EntryKind.GENERIC: QStyle.StandardPixmap.SP_FileIcon,
+_KIND_ICON: dict[EntryKind, str] = {
+    EntryKind.LOGIN: "language",
+    EntryKind.EMAIL: "mail",
+    EntryKind.API: "api",
+    EntryKind.SSH: "terminal",
+    EntryKind.CERTIFICATE: "verified_user",
+    EntryKind.BANK: "account_balance",
+    EntryKind.WIFI: "wifi",
+    EntryKind.DATABASE: "database",
+    EntryKind.CLOUD: "cloud",
+    EntryKind.DEV: "code",
+    EntryKind.NOTE: "sticky_note",
+    EntryKind.SERVER: "dns",
+    EntryKind.VPN: "vpn_lock",
+    EntryKind.DOCKER: "deployed_code",
+    EntryKind.KUBERNETES: "hub",
+    EntryKind.LINUX: "computer",
+    EntryKind.WINDOWS: "window",
+    EntryKind.IDENTITY: "badge",
+    EntryKind.CRYPTO: "currency_bitcoin",
+    EntryKind.LICENSE: "license",
+    EntryKind.GENERIC: "password",
 }
 
-_FIELD_STYLE: dict[FieldKind, QStyle.StandardPixmap] = {
-    FieldKind.TITLE: QStyle.StandardPixmap.SP_FileDialogInfoView,
-    FieldKind.USERNAME: QStyle.StandardPixmap.SP_DialogYesButton,
-    FieldKind.PASSWORD: QStyle.StandardPixmap.SP_DialogNoButton,
-    FieldKind.URL: QStyle.StandardPixmap.SP_DriveNetIcon,
-    FieldKind.NOTES: QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    FieldKind.CUSTOM: QStyle.StandardPixmap.SP_FileDialogListView,
-    FieldKind.OTP: QStyle.StandardPixmap.SP_BrowserReload,
-    FieldKind.SHOW: QStyle.StandardPixmap.SP_FileDialogContentsView,
-    FieldKind.COPY: QStyle.StandardPixmap.SP_DialogOkButton,
-    FieldKind.GENERATE: QStyle.StandardPixmap.SP_BrowserReload,
-    FieldKind.SAVE: QStyle.StandardPixmap.SP_DialogSaveButton,
+_FIELD_ICON: dict[FieldKind, str] = {
+    FieldKind.TITLE: "article",
+    FieldKind.USERNAME: "person",
+    FieldKind.PASSWORD: "password",
+    FieldKind.URL: "link",
+    FieldKind.NOTES: "sticky_note",
+    FieldKind.CUSTOM: "edit",
+    FieldKind.OTP: "pin",
+    FieldKind.SHOW: "visibility",
+    FieldKind.COPY: "content_copy",
+    FieldKind.GENERATE: "refresh",
+    FieldKind.SAVE: "save",
+    FieldKind.ATTACHMENT: "attach_file",
 }
 
-# Password-field glyph set varies by detected entry kind.
-_PASSWORD_BY_KIND: dict[EntryKind, QStyle.StandardPixmap] = {
-    EntryKind.API: QStyle.StandardPixmap.SP_CommandLink,
-    EntryKind.SSH: QStyle.StandardPixmap.SP_ComputerIcon,
-    EntryKind.CERTIFICATE: QStyle.StandardPixmap.SP_DialogApplyButton,
-    EntryKind.BANK: QStyle.StandardPixmap.SP_DriveHDIcon,
-    EntryKind.WIFI: QStyle.StandardPixmap.SP_DriveNetIcon,
-    EntryKind.DATABASE: QStyle.StandardPixmap.SP_DirHomeIcon,
-    EntryKind.EMAIL: QStyle.StandardPixmap.SP_MessageBoxInformation,
-    EntryKind.LOGIN: QStyle.StandardPixmap.SP_DialogNoButton,
-    EntryKind.DEV: QStyle.StandardPixmap.SP_FileDialogContentsView,
-    EntryKind.CLOUD: QStyle.StandardPixmap.SP_DriveNetIcon,
-    EntryKind.NOTE: QStyle.StandardPixmap.SP_FileDialogDetailedView,
-    EntryKind.GENERIC: QStyle.StandardPixmap.SP_DialogNoButton,
+_PASSWORD_BY_KIND: dict[EntryKind, str] = {
+    EntryKind.API: "api",
+    EntryKind.SSH: "terminal",
+    EntryKind.CERTIFICATE: "verified_user",
+    EntryKind.BANK: "account_balance",
+    EntryKind.WIFI: "wifi",
+    EntryKind.DATABASE: "database",
+    EntryKind.EMAIL: "mail",
+    EntryKind.LOGIN: "password",
+    EntryKind.DEV: "code",
+    EntryKind.CLOUD: "cloud",
+    EntryKind.NOTE: "sticky_note",
+    EntryKind.VPN: "vpn_lock",
+    EntryKind.CRYPTO: "key",
+    EntryKind.GENERIC: "password",
 }
 
-_USERNAME_BY_KIND: dict[EntryKind, QStyle.StandardPixmap] = {
-    EntryKind.EMAIL: QStyle.StandardPixmap.SP_MessageBoxInformation,
-    EntryKind.SSH: QStyle.StandardPixmap.SP_ComputerIcon,
-    EntryKind.BANK: QStyle.StandardPixmap.SP_DialogYesButton,
-    EntryKind.API: QStyle.StandardPixmap.SP_CommandLink,
+_USERNAME_BY_KIND: dict[EntryKind, str] = {
+    EntryKind.EMAIL: "mail",
+    EntryKind.SSH: "terminal",
+    EntryKind.BANK: "person",
+    EntryKind.API: "api",
+    EntryKind.IDENTITY: "badge",
 }
-
-
-def _style_icon(pixmap: QStyle.StandardPixmap) -> QIcon:
-    app = QApplication.instance()
-    if isinstance(app, QApplication):
-        style = app.style()
-        if style is not None:
-            return style.standardIcon(pixmap)
-    return QIcon()
 
 
 def detect_entry_kind(
@@ -147,6 +182,10 @@ def detect_entry_kind(
         "secure note": EntryKind.NOTE,
         "note": EntryKind.NOTE,
         "login": EntryKind.LOGIN,
+        "vpn": EntryKind.VPN,
+        "docker": EntryKind.DOCKER,
+        "server": EntryKind.SERVER,
+        "license": EntryKind.LICENSE,
     }
     if type_hint in type_map:
         return type_map[type_hint]
@@ -188,40 +227,30 @@ def detect_entry_kind_from_view(entry: EntryView) -> EntryKind:
     )
 
 
-def entry_kind_icon(kind: EntryKind) -> QIcon:
-    return _style_icon(_KIND_STYLE.get(kind, QStyle.StandardPixmap.SP_FileIcon))
+def category_icon_name(kind: EntryKind) -> str:
+    return _KIND_ICON.get(kind, "password")
 
 
-def field_icon(field: FieldKind, *, entry_kind: EntryKind | None = None) -> QIcon:
-    """Standard icon for a form field; password/username adapt to entry kind."""
+def entry_kind_icon(kind: EntryKind, *, size: int = 18) -> QIcon:
+    return icon(category_icon_name(kind), size=size)
+
+
+def field_icon(
+    field: FieldKind,
+    *,
+    entry_kind: EntryKind | None = None,
+    size: int = 18,
+) -> QIcon:
+    """Outlined icon for a form field; password/username adapt to entry kind."""
     if field is FieldKind.PASSWORD and entry_kind is not None:
-        return _style_icon(
-            _PASSWORD_BY_KIND.get(entry_kind, QStyle.StandardPixmap.SP_DialogNoButton)
-        )
+        return icon(_PASSWORD_BY_KIND.get(entry_kind, "password"), size=size)
     if field is FieldKind.USERNAME and entry_kind is not None:
-        return _style_icon(
-            _USERNAME_BY_KIND.get(
-                entry_kind, QStyle.StandardPixmap.SP_DialogYesButton
-            )
-        )
+        return icon(_USERNAME_BY_KIND.get(entry_kind, "person"), size=size)
     if field is FieldKind.TITLE and entry_kind is not None:
-        return entry_kind_icon(entry_kind)
-    return _style_icon(_FIELD_STYLE.get(field, QStyle.StandardPixmap.SP_FileIcon))
+        return entry_kind_icon(entry_kind, size=size)
+    return icon(_FIELD_ICON.get(field, "edit"), size=size)
 
 
 def field_icon_name(field: FieldKind) -> str:
     """Stable name for tests / accessibility."""
     return field.value
-
-
-# Re-export toolbar helpers used alongside field icons
-__all__ = [
-    "EntryKind",
-    "FieldKind",
-    "detect_entry_kind",
-    "detect_entry_kind_from_view",
-    "entry_kind_icon",
-    "field_icon",
-    "field_icon_name",
-    "standard_icon",
-]

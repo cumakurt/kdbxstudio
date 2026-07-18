@@ -15,10 +15,15 @@ class SecuritySettings:
     clear_clipboard_on_lock: bool = True
     minimize_on_lock: bool = False
     theme: str = "dark"  # ThemeMode value: system | dark | light | nord | …
+    accent: str = "teal"  # AccentId: teal | blue | purple | green | orange | red
     read_only: bool = False
     window_geometry: str = ""  # base64 of QByteArray
     window_state: str = ""  # base64 of QMainWindow.saveState()
     ui_density: str = "compact"  # compact | comfortable
+    ui_scale_percent: int = 100  # 40–150
+    font_size: int = 13  # body font px: 8–18
+    menu_size: str = "medium"  # small | medium | large
+    window_resolution: str = "auto"  # auto | 1024x640 | 1280x800 | …
     hibp_enabled: bool = False
     autotype_sequence: str = "{USERNAME}{TAB}{PASSWORD}{ENTER}"
     autotype_match_window: bool = True

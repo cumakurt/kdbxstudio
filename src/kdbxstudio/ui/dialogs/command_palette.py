@@ -5,11 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
-    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -19,7 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from kdbxstudio.ui.theme import current_ui_scale
+from kdbxstudio.ui.icons import menu_icon
+from kdbxstudio.ui.theme import MotionDuration, current_ui_scale, fade_in
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,8 @@ class PaletteAction:
     keywords: tuple[str, ...]
     callback: Callable[[], None]
     section: str = "Actions"
+    icon: str = "terminal"
+    shortcut: str = ""
 
 
 def score_action(action: PaletteAction, query: str) -> int:
@@ -92,18 +94,7 @@ class CommandPalette(QDialog):
         esc.activated.connect(self.reject)
         self._rebuild_list()
         self._input.setFocus()
-        self._fade_in()
-
-    def _fade_in(self) -> None:
-        effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(effect)
-        anim = QPropertyAnimation(effect, b"opacity", self)
-        anim.setDuration(140)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.start()
-        self._fade_anim = anim
+        self._fade_anim = fade_in(self, duration=MotionDuration.NORMAL)
 
     def _filter(self, text: str) -> None:
         scored: list[tuple[int, PaletteAction]] = []
@@ -118,7 +109,10 @@ class CommandPalette(QDialog):
     def _rebuild_list(self) -> None:
         self._list.clear()
         for action in self._filtered:
-            item = QListWidgetItem(f"{action.section}  ·  {action.title}")
+            label = action.title
+            if action.shortcut:
+                label = f"{action.title}    {action.shortcut}"
+            item = QListWidgetItem(menu_icon(action.icon or "terminal"), label)
             item.setData(Qt.ItemDataRole.UserRole, action.id)
             self._list.addItem(item)
         if self._filtered:

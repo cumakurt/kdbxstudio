@@ -51,10 +51,19 @@ class ChangeCredentialsDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn is not None:
+            ok_btn.setProperty("cssClass", "primary")
+            ok_btn.setDefault(True)
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn is not None:
+            cancel_btn.setProperty("cssClass", "secondary")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 16)
+        layout.setSpacing(16)
         layout.addLayout(form)
         layout.addWidget(buttons)
 

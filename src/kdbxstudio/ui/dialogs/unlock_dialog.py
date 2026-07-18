@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.i18n import tr
-from kdbxstudio.ui.icons import ICON_KEY, ICON_LOCK, ICON_OPEN, standard_icon
+from kdbxstudio.ui.icons import ICON_KEY, ICON_LOCK, ICON_OPEN, icon, standard_icon
 from kdbxstudio.ui.theme import current_ui_scale
 
 
@@ -45,9 +45,8 @@ class UnlockDialog(QDialog):
         super().__init__(parent)
         self._path = path
         self._create_mode = create_mode
-        self.setWindowTitle(
-            tr("Create Database") if create_mode else tr("Unlock Database")
-        )
+        title = tr("Create Database") if create_mode else tr("Unlock Database")
+        self.setWindowTitle(title)
         self.setModal(True)
         scale = current_ui_scale()
         self.setMinimumWidth(scale.px(460))
@@ -109,6 +108,9 @@ class UnlockDialog(QDialog):
             ok_btn.setAutoDefault(True)
             ok_btn.setDefault(True)
             ok_btn.setMinimumWidth(scale.px(120))
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn is not None:
+            cancel_btn.setProperty("cssClass", "secondary")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         # Enter in password fields must unlock/create, not open Browse.
@@ -123,9 +125,18 @@ class UnlockDialog(QDialog):
             scale.px(24), scale.px(24), scale.px(24), scale.px(24)
         )
         card_layout.setSpacing(scale.px(16))
-        heading = QLabel(self.windowTitle())
+
+        heading_row = QHBoxLayout()
+        heading_row.setSpacing(12)
+        icon_label = QLabel()
+        icon_name = "add" if create_mode else ICON_LOCK
+        icon_label.setPixmap(icon(icon_name, size=28, brand=True).pixmap(28, 28))
+        icon_label.setFixedSize(32, 32)
+        heading_row.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+        heading = QLabel(title)
         heading.setObjectName("emptyBrand")
-        card_layout.addWidget(heading)
+        heading_row.addWidget(heading, 1)
+        card_layout.addLayout(heading_row)
         card_layout.addLayout(form)
         card_layout.addWidget(buttons)
 

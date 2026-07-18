@@ -2,7 +2,7 @@
 
 Developer-facing design system for the Qt6 Linux desktop app.
 
-Version target: **1.0.0**
+Version target: **2.0.0** (Premium Desktop)
 
 ---
 
@@ -11,21 +11,35 @@ Version target: **1.0.0**
 1. **Security-first calm** — Dense data without visual noise; secrets never flash.
 2. **Keyboard-native** — Every primary action reachable without the mouse.
 3. **One job per region** — Groups | Entries | Detail | Health stay distinct.
-4. **Brand teal** — Deep teal + gold accent (from app icon), not purple gradients.
+4. **Brand teal default** — Deep teal primary; user-selectable accent on Studio themes.
 5. **8px grid** — Spacing, radii, and control heights snap to 8.
+6. **Premium commercial quality** — No KeePassXC / Win32 form aesthetics; one design language everywhere.
 
 ---
 
 ## 2. Brand & color
 
-### Brand
+### Brand (Studio Dark / Light defaults)
 
 | Token | Light | Dark | Usage |
 |-------|-------|------|-------|
-| `brand.primary` | `#1A5C5E` | `#3D9A9C` | Primary actions, focus |
+| `brand.primary` | `#1A5C5E` | `#3D9A9C` | Primary actions, focus (overridden by accent) |
 | `brand.primaryHover` | `#0F3D3E` | `#5CB3B5` | Hover |
-| `brand.accent` | `#C9A227` | `#E8C547` | Highlights, health “good” |
+| `brand.accent` | `#C9A227` | `#E8C547` | Gold highlight (semantic highlight) |
 | `brand.onPrimary` | `#FFFFFF` | `#0A1F20` | Text on primary |
+
+### User accent
+
+Persisted as `settings.accent`. Overlays `brand.primary` / hover / focus on **every** theme (surfaces stay theme-specific).
+
+| Id | Dark primary | Dark hover | Light primary | Light hover |
+|----|--------------|------------|---------------|-------------|
+| `teal` (default) | `#3D9A9C` | `#5CB3B5` | `#1A5C5E` | `#0F3D3E` |
+| `blue` | `#5B8DEF` | `#7AA3F5` | `#2563EB` | `#1D4ED8` |
+| `purple` | `#A78BFA` | `#C4B5FD` | `#7C3AED` | `#6D28D9` |
+| `green` | `#34D399` | `#6EE7B7` | `#059669` | `#047857` |
+| `orange` | `#FB923C` | `#FDBA74` | `#EA580C` | `#C2410C` |
+| `red` | `#F87171` | `#FCA5A5` | `#DC2626` | `#B91C1C` |
 
 ### Surfaces
 
@@ -38,7 +52,18 @@ Version target: **1.0.0**
 | `border.subtle` | `#C2CECE` | `#2A3A3A` |
 | `border.strong` | `#8FA3A3` | `#455858` |
 
-Depth model (KeePassXC-like): **app** canvas → **elevated** chrome (menu/toolbar/search strip/headers) → **panel** lists → **elevated** detail pane. Separators use `border.strong`; no drop shadows.
+### Depth model
+
+- **Workspace panes:** flat border depth — app → elevated chrome → panel lists → elevated detail.
+- **Cards / dialogs / menus / command palette:** soft elevation (`e1` / `e2`) plus subtle border.
+
+### Elevation
+
+| Level | Dark shadow | Light shadow | Usage |
+|-------|-------------|--------------|--------|
+| `e0` | none | none | Panels, trees, tables |
+| `e1` | `0 1px 3px rgba(0,0,0,0.22)` | `0 1px 3px rgba(0,0,0,0.08)` | Cards, unlock card |
+| `e2` | `0 8px 24px rgba(0,0,0,0.36)` | `0 8px 24px rgba(0,0,0,0.12)` | Dialogs, menus, palette |
 
 ### Text
 
@@ -51,7 +76,7 @@ Depth model (KeePassXC-like): **app** canvas → **elevated** chrome (menu/toolb
 | `text.warning` | `#B54708` | `#FDB022` |
 | `text.success` | `#027A48` | `#32D583` |
 
-### Semantic (Password Health)
+### Semantic severity
 
 | Severity | Color |
 |----------|-------|
@@ -75,38 +100,68 @@ Prefer **Inter** when installed; fall back to `Noto Sans`, then `Sans Serif`.
 | Caption | 11px | 500 | 16 |
 | Mono (secrets) | 13px | 500 | 20 | `JetBrains Mono`, `Ui Mono`, `monospace` |
 
+App default font size: **13px** (body).
+
 ---
 
 ## 4. Spacing & geometry (8px grid)
 
-- Base unit: **8px**
-- Control height: **32px** (compact), **40px** (comfortable)
-- Panel padding: **16px**
-- Gap between panes: **8px**
-- Corner radius: **8px** (controls), **12px** (dialogs)
-- Focus ring: 2px `brand.primary`
+| Token | Value |
+|-------|-------|
+| `space.xs` | 4 |
+| `space.sm` | 8 |
+| `space.md` | 16 |
+| `space.lg` | 24 |
+| `space.xl` | 32 |
+| `radius.sm` | 6 |
+| `radius.md` | 8 |
+| `radius.lg` | 12 |
+| `radius.xl` | 16 |
+| Control height | 32 compact / 40 comfortable |
+| Panel padding | 16 |
+| Pane gap | 8 |
+| Focus ring | 2px `focus_ring` |
+
+`ui_density` (`compact` | `comfortable`) drives control heights and row heights in QSS.
 
 ---
 
 ## 5. Iconography
 
-- Target: **Material Symbols Outlined**, 20px optical size
-- Fallback: Qt standard theme icons + text labels (always pair icon with text in menus)
-- Never rely on color alone for severity (also use labels)
+- **Material Symbols Outlined**, 20px optical (toolbar/menus), 16px compact lists
+- Tint from `text.primary` / `brand.primary`; never hard-coded black-only chrome
+- Fallback: Qt `SP_*` only when a glyph is missing
+- Always pair icon with text in menus; icon-only controls need accessible names
+- Category icons: Server, Cloud, VPN, SSH, Certificate, Docker, Kubernetes, Linux, Windows, API, Database, WiFi, Identity, Crypto, Website, License, Attachment, OTP
 
 ---
 
-## 6. Layout regions
+## 6. Motion
+
+Controlled motion system (120–180ms). No heavy Material ripple.
+
+| Token | Duration | Easing | Usage |
+|-------|----------|--------|-------|
+| `instant` | 0 | — | Tab content |
+| `fast` | 120ms | OutCubic | Hover polish, tooltips |
+| `normal` | 160ms | OutCubic | Fade-in, panel open, palette |
+| `slow` | 180ms | OutCubic | Dialog show |
+
+Helpers: `fade_in`, `slide_in`. Micro-interaction: hover fill + pressed feedback via QSS.
+
+---
+
+## 7. Layout regions
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Menu · Toolbar · DB Tabs · [Search] · [⌘K]                  │
 ├──────────┬────────────────────┬─────────────────────────────┤
 │ Groups   │ Entry list         │ Entry tabs                  │
-│ (dock)   │ + filter bar       │ Entry|TOTP|History|…        │
+│ (dock)   │ + filter chips     │ Entry|TOTP|History|…        │
 └──────────┴────────────────────┴─────────────────────────────┘
 
-Password Health / Security Dashboard → Tools menu → separate resizable window
+Security Dashboard → Tools menu → separate resizable window
 ```
 
 - Min window: 1024×640
@@ -116,96 +171,67 @@ Password Health / Security Dashboard → Tools menu → separate resizable windo
 
 ---
 
-## 7. Component library (Qt mapping)
+## 8. Component contracts
 
-| Component | Qt | Notes |
-|-----------|-----|------|
-| App shell | `QMainWindow` + docks | Already present |
-| DB tabs | `QTabWidget` | Closable |
-| Search field | `QLineEdit` | Universal search |
-| Filter chips | `FilterBarWidget` | Checkbox row → evolve to chips |
-| Entry table | `QTableWidget` | Row select |
-| Command Palette | custom dialog | Ctrl+K / Ctrl+Shift+P |
-| Security Dashboard | `SecurityDashboardDialog` + panel registry | KPI / Gauge / Donut / Bar / HeatMap |
-| Theme toggle | menu / palette | Persisted |
-
----
-
-## 8. Key screens (wireframes)
-
-### 8.1 Unlock / Create
-
-- Centered card 420× max content on `surface.app`
-- Fields: path, password, confirm (create), key file
-- Primary CTA full width; secondary “Browse”
-
-### 8.2 Main workspace
-
-- As layout above
-- Empty state: illustration + “Open or create a database” + recent list
-
-### 8.3 Command Palette
-
-- Modal 560px wide, top-center
-- Fuzzy filter over actions + recent DBs + entry titles (when unlocked)
-- Enter runs; Esc closes; ↑↓ navigate
-
-### 8.4 Security Dashboard (Reports)
-
-- Tools → Security Dashboard… opens a dedicated resizable window (~1280×800)
-- Modular panel grid (2 columns, scrollable) driven by `panel_registry`
-- Header: Security Score gauge (0–100) + KPI strip
-- Panels: password stats, duplicates, age, expiry, entropy, length, categories, OTP, tags, username, URL, certificates, SSH, attachments, favorites, database health, risk matrix, recommendations, findings
-- Charts: custom QPainter widgets (`ui/charts/`) — Gauge, Donut, Bar, HeatMap, KPI cards
-- Double-click finding / Fix next → focus entry in main window
-- Dark and light themes via design tokens + `#securityDashboard*` QSS
-
-### 8.5 Plugin Center
-
-- Tools → Plugin Center → Marketplace (local catalog) + Installed Plugins
-- Built-in catalog is shipped; remote storefront remains out of scope
+| Primitive | Contract |
+|-----------|----------|
+| Button | `cssClass`: `primary` \| `secondary` \| `ghost` \| `danger` |
+| Dialog shell | Icon title + optional subtitle + body + Secondary / Primary footer |
+| Card | `radius.lg` + elevation `e1`; hover → `e2` |
+| Chip / Badge | Filter chips; sidebar counters |
+| Form field | Label + control + helper/error |
+| Password / OTP | Mono + reveal; strength tone |
+| Empty state | Title + supporting text + primary CTA |
+| Menu / context | Icon + label + shortcut; rounded hover; elevation `e2` |
+| DataGrid | Density row height, alternating rows, hover, sticky header, sort, column hide |
+| Sidebar tree | Selection accent bar, hover, modern category icons |
 
 ---
 
-## 9. User flows
+## 9. Key screens
 
-1. **First run** → Create DB → Add entry from template → Copy password  
-2. **Daily unlock** → Recent → Unlock → Search / Ctrl+K → Copy  
-3. **Audit** → Tools → Security Dashboard… → Review score / Jump to weak/duplicate → Fix → Save  
-4. **Lock** → Idle / Tools → Lock → Clipboard clear  
+### 9.1 Unlock / Create
 
----
+Centered card (~420px), elevation `e1`, icon title, primary CTA full width.
 
-## 10. Micro-interactions
+### 9.2 Main workspace
 
-- Clipboard copy: status bar toast 3s; auto-clear per settings  
-- Tab switch: no animation required (instant)  
-- Command Palette: 120ms fade optional (QSS opacity)  
-- TOTP bar: smooth countdown via 500ms timer  
+As layout above. Empty state: title + recent list + Open / Create.
 
----
+### 9.3 Command Palette
 
-## 11. Accessibility
+Modal 560px, top-center, `normal` fade, icon rows + shortcuts, fuzzy filter.
 
-- Contrast ≥ WCAG AA for text/icons  
-- Tab order: search → filters → list → detail  
-- Screen reader: set accessible names on icon-only buttons  
-- Respect system font scaling where possible  
+### 9.4 Security Dashboard
+
+Panel grid, KPI/gauge/charts, card elevation, soft hover.
+
+### 9.5 Settings
+
+Theme + **accent swatches** (Studio only) + density + security options.
 
 ---
 
-## 12. Theme rules
+## 10. Accessibility
 
-- Default: **Studio Dark** (`dark`); also **Studio Light**, **System**, and community styles  
-- Persist `theme` in `settings.json` as one of:  
-  `system` | `dark` | `light` | `nord` | `dracula` | `tokyo-night` |  
-  `catppuccin-mocha` | `catppuccin-latte` | `solarized-dark` | `one-dark` | `gruvbox-dark`  
-- Charts/health colors stay semantic (`tone`) and remapped per palette  
-- Theme picker: View → Theme, Settings → Theme, Command Palette  
+- Contrast ≥ WCAG AA for text/icons
+- Tab order: search → filters → list → detail
+- Icon-only buttons: accessible names
+- Severity: color + label
 
 ---
 
-## 13. Keyboard map (priority)
+## 11. Theme rules
+
+- Default: **Studio Dark** (`dark`)
+- Persist `theme`: `system` | `dark` | `light` | community ids
+- Persist `accent`: `teal` | `blue` | `purple` | `green` | `orange` | `red`
+- Accent overlays brand colors on every theme (surfaces stay theme-specific)
+- Charts use semantic `tone` colors
+
+---
+
+## 12. Keyboard map (priority)
 
 | Shortcut | Action |
 |----------|--------|
@@ -218,22 +244,25 @@ Password Health / Security Dashboard → Tools menu → separate resizable windo
 
 ---
 
-## 14. Implementation map
+## 13. Implementation map
 
 | Spec item | Code |
 |-----------|------|
-| Tokens | `ui/theme/tokens.py` |
+| Color / theme tokens | `ui/theme/tokens.py` |
+| Accent overlay | `ui/theme/accent.py` |
+| Geometry | `ui/theme/geometry.py` |
+| Motion | `ui/theme/motion.py` |
 | QSS | `ui/theme/styles.py` |
 | Apply | `ui/theme/manager.py` |
-| Palette | `ui/dialogs/command_palette.py` |
-| Persist | `security/store.py` + `SecuritySettings` or app settings |
+| Icons | `ui/icons/` |
+| Persist | `security/settings.py` + store |
 
 ---
 
-## 15. Out of scope (later)
+## 14. Out of scope (later)
 
-- Remote Plugin Marketplace storefront / signed plugin feeds (local catalog + SDK only)
-- Motion design system beyond subtle fades (palette ~140ms fade is in)
+- Remote Plugin Marketplace storefront / signed plugin feeds
+- Health fix wizard
 - Cloud sync
-- YubiKey / hardware challenge-response (not exposed by pykeepass today)
-- Flathub publication (manifest scaffold only; submit separately)
+- YubiKey / hardware challenge-response
+- Flathub publication (manifest scaffold only)

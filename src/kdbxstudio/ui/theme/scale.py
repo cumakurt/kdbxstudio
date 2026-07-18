@@ -1,4 +1,4 @@
-"""Fixed, compact UI scale — OS HiDPI handles pixel density."""
+"""UI scale helpers — user scale percent × OS HiDPI."""
 
 from __future__ import annotations
 
@@ -10,22 +10,31 @@ from PySide6.QtGui import QGuiApplication, QScreen
 
 @dataclass(frozen=True)
 class UiScale:
-    """Design px multiplier. Kept at 1.0; Qt devicePixelRatio handles HiDPI."""
+    """Design-px multiplier from Settings → UI scale."""
 
     factor: float = 1.0
 
     def px(self, value: int | float) -> int:
         return max(1, int(round(value * self.factor)))
 
-    def font_px(self, value: int | float = 11) -> int:
-        return max(10, self.px(value))
+    def font_px(self, value: int | float = 13) -> int:
+        return max(8, self.px(value))
 
     def size(self, width: int, height: int) -> QSize:
         return QSize(self.px(width), self.px(height))
 
 
+def ui_scale_from_percent(percent: int | float = 100) -> UiScale:
+    try:
+        pct = float(percent)
+    except (TypeError, ValueError):
+        pct = 100.0
+    factor = max(0.4, min(2.0, pct / 100.0))
+    return UiScale(factor)
+
+
 def detect_ui_scale(screen: QScreen | None = None) -> UiScale:
-    """Always return baseline scale for a calm, compact desktop UI."""
+    """Baseline 100% scale; callers should prefer settings-driven scale."""
     _ = screen
     return UiScale(1.0)
 

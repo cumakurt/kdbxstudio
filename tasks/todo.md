@@ -1,18 +1,29 @@
-# Security Dashboard — 2026-07-18
+# Premium Desktop UI Redesign — 2026-07-18
 
 ## Plan
 
-- [x] EntryView mtime/atime/ctime; password_strength extract; PEM SSH algo + cert not_after
-- [x] security_dashboard package: models, analyzer, scoring, recommendations + unit tests
-- [x] Reusable ui/charts: KPI, Gauge, Donut, Bar/Histogram, HeatMap, badges
-- [x] ViewModel + panel registry + all panels + dialog; theme QSS
-- [x] MainWindow/palette rename; ui-spec; catalog_tr; README; smoke + suite
+- [x] Spec v2 + token/elevation/spacing/typography
+- [x] Accent overlay + settings persist
+- [x] Material-style icon kit + category map (QPainter outlined, no QtSvg)
+- [x] Motion helpers + styles.py rewrite
+- [x] Shell: menus, toolbar, sidebar, grid, chrome
+- [x] Entry detail / empty / unlock / palette polish
+- [x] All dialogs + settings accent UI
+- [x] Dashboard card elevation + chart series cleanup
+- [x] Tests + smoke + review
+- [x] Colorful auto group icons (name heuristics: Internet/Windows/Linux/…)
 
 ## Review
 
-Security Dashboard replaces Password Health as Tools → Security Dashboard… (alias `open_password_health` kept).
+Premium design system v2 shipped:
 
-- Analyzer builds `DashboardSnapshot` (score, buckets, risk, recommendations) on top of `AuditEngine`
-- Custom QPainter charts in `ui/charts/`; modular panels via `panel_registry`
-- EntryView gains `modified` / `accessed` / `created`; PEM inspector adds SSH algo + cert dates
-- Verification: 143 tests passed; ruff clean on new packages
+- **Tokens:** 8px spacing/radius scale, density-aware control heights, typography 13px body
+- **Accent:** Studio Dark/Light accept teal/blue/purple/green/orange/red; community palettes unchanged
+- **Icons:** Outlined QPainter kit (~64 glyphs) for chrome, menus, categories; Qt SP_* fallback only
+- **Group icons:** Colorful badge icons auto-assigned from group names (Internet, Windows, Linux, SSH, Docker, Cloud, …)
+- **Motion:** `fade_in` / `slide_in` 120–180ms OutCubic; command palette uses `MotionDuration.NORMAL`
+- **Shell:** Icon menus/toolbar/context; sidebar selection accent bar; chip filters; density DataGrid
+- **Dialogs:** Shared `DialogShell`; Settings accent swatches; form dialogs primary CTA + spacing
+- **Charts:** Brand-safe series palette (no purple-first)
+
+Verification: group icon heuristics + theme tests green.

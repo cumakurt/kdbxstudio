@@ -58,13 +58,32 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     except (TypeError, ValueError):
         autolock_ms = SecuritySettings.auto_lock_timeout_ms
     theme = str(raw.get("theme", SecuritySettings.theme))
+    from kdbxstudio.ui.theme.accent import VALID_ACCENT_IDS, parse_accent
     from kdbxstudio.ui.theme.tokens import VALID_THEME_IDS, parse_theme
 
     if theme not in VALID_THEME_IDS:
         theme = parse_theme(theme).value
+    accent = str(raw.get("accent", SecuritySettings.accent))
+    if accent not in VALID_ACCENT_IDS:
+        accent = parse_accent(accent).value
     ui_density = str(raw.get("ui_density", SecuritySettings.ui_density))
     if ui_density not in ("compact", "comfortable"):
         ui_density = SecuritySettings.ui_density
+    from kdbxstudio.ui.theme.geometry import (
+        clamp_font_size,
+        clamp_ui_scale_percent,
+        normalize_menu_size,
+        normalize_window_resolution,
+    )
+
+    ui_scale_percent = clamp_ui_scale_percent(
+        raw.get("ui_scale_percent", SecuritySettings.ui_scale_percent)
+    )
+    font_size = clamp_font_size(raw.get("font_size", SecuritySettings.font_size))
+    menu_size = normalize_menu_size(raw.get("menu_size", SecuritySettings.menu_size))
+    window_resolution = normalize_window_resolution(
+        raw.get("window_resolution", SecuritySettings.window_resolution)
+    )
     language = normalize_language(
         str(raw.get("language", SecuritySettings.language))
     )
@@ -84,10 +103,15 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
             raw.get("minimize_on_lock", SecuritySettings.minimize_on_lock)
         ),
         theme=theme,
+        accent=accent,
         read_only=bool(raw.get("read_only", SecuritySettings.read_only)),
         window_geometry=str(raw.get("window_geometry", "")),
         window_state=str(raw.get("window_state", "")),
         ui_density=ui_density,
+        ui_scale_percent=ui_scale_percent,
+        font_size=font_size,
+        menu_size=menu_size,
+        window_resolution=window_resolution,
         hibp_enabled=bool(raw.get("hibp_enabled", SecuritySettings.hibp_enabled)),
         autotype_sequence=str(
             raw.get("autotype_sequence", SecuritySettings.autotype_sequence)
@@ -162,10 +186,15 @@ def save_settings(
         "clear_clipboard_on_lock": settings.clear_clipboard_on_lock,
         "minimize_on_lock": settings.minimize_on_lock,
         "theme": settings.theme,
+        "accent": settings.accent,
         "read_only": settings.read_only,
         "window_geometry": settings.window_geometry,
         "window_state": settings.window_state,
         "ui_density": settings.ui_density,
+        "ui_scale_percent": settings.ui_scale_percent,
+        "font_size": settings.font_size,
+        "menu_size": settings.menu_size,
+        "window_resolution": settings.window_resolution,
         "hibp_enabled": settings.hibp_enabled,
         "autotype_sequence": settings.autotype_sequence,
         "autotype_match_window": settings.autotype_match_window,

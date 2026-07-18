@@ -25,18 +25,19 @@ def chart_colors(widget: QWidget | None = None) -> dict[str, QColor]:
 
 
 def series_palette() -> list[QColor]:
+    """Brand-safe series colors (teal / blue / green / orange / cyan / amber)."""
     c = chart_colors()
     return [
         c["brand"],
+        QColor("#2563EB"),  # blue
         c["success"],
+        QColor("#EA580C"),  # orange
+        QColor("#0891B2"),  # cyan
+        QColor("#D97706"),  # amber
         c["warning"],
         c["danger"],
-        c["secondary"],
-        QColor("#7C3AED"),
-        QColor("#0891B2"),
-        QColor("#DB2777"),
-        QColor("#65A30D"),
-        QColor("#EA580C"),
+        QColor("#0D9488"),  # teal
+        QColor("#65A30D"),  # lime green
     ]
 
 

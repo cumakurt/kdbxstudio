@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
-    QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -14,24 +13,74 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
-    QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio.i18n import language_choices, tr
 from kdbxstudio.security.settings import SecuritySettings
+from kdbxstudio.ui.theme.accent import (
+    ACCENT_CHOICES,
+    AccentId,
+    accent_label,
+    accent_swatch,
+    parse_accent,
+)
+from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
-class SecuritySettingsDialog(QDialog):
+class _AccentSwatch(QWidget):
+    """Clickable accent color chip."""
+
+    clicked = Signal(object)  # AccentId
+
+    def __init__(self, accent: AccentId, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.accent = accent
+        self.setObjectName("accentSwatch")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(tr(accent_label(accent)))
+        self.setFixedSize(28, 28)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._selected = False
+        self._apply_style()
+
+    def _apply_style(self) -> None:
+        color = accent_swatch(self.accent, dark=True)
+        border = "#E8F0F0" if self._selected else "transparent"
+        self.setStyleSheet(
+            f"QWidget#accentSwatch {{ background-color: {color}; "
+            f"border: 2px solid {border}; border-radius: 8px; }}"
+        )
+
+    def set_selected(self, selected: bool) -> None:
+        self._selected = selected
+        self.setProperty("selected", "true" if selected else "false")
+        self._apply_style()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit(self.accent)
+        super().mousePressEvent(event)
+
+
+class SecuritySettingsDialog(DialogShell):
     def __init__(
         self,
         settings: SecuritySettings,
         parent: QWidget | None = None,
+        *,
+        on_accent_preview: object | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(tr("Settings"))
-        self.setModal(True)
+        super().__init__(
+            parent,
+            title=tr("Settings"),
+            subtitle=tr("Security, appearance, and desktop preferences"),
+            icon_name="settings",
+            width=520,
+        )
         self._original = settings
+        self._accent = parse_accent(settings.accent)
+        self._on_accent_preview = on_accent_preview
 
         self._clipboard = QSpinBox()
         self._clipboard.setRange(5, 300)
@@ -83,6 +132,76 @@ class SecuritySettingsDialog(QDialog):
         d_index = self._density.findData(settings.ui_density)
         self._density.setCurrentIndex(d_index if d_index >= 0 else 0)
 
+        self._ui_scale = QComboBox()
+        for pct, label in (
+            (40, tr("40% — Tiny")),
+            (50, tr("50% — Very small")),
+            (60, tr("60% — Small")),
+            (70, tr("70%")),
+            (80, tr("80%")),
+            (90, tr("90% — Compact")),
+            (100, tr("100% — Default")),
+            (110, tr("110% — Comfortable")),
+            (125, tr("125% — Large")),
+            (150, tr("150% — Extra large")),
+        ):
+            self._ui_scale.addItem(label, pct)
+        scale_index = self._ui_scale.findData(settings.ui_scale_percent)
+        self._ui_scale.setCurrentIndex(scale_index if scale_index >= 0 else 6)
+
+        self._font_size = QComboBox()
+        for size, label in (
+            (8, tr("8 px — Tiny")),
+            (9, tr("9 px")),
+            (10, tr("10 px — Very small")),
+            (11, tr("11 px — Small")),
+            (12, tr("12 px")),
+            (13, tr("13 px — Default")),
+            (14, tr("14 px")),
+            (15, tr("15 px")),
+            (16, tr("16 px — Large")),
+            (18, tr("18 px — Extra large")),
+        ):
+            self._font_size.addItem(label, size)
+        font_index = self._font_size.findData(settings.font_size)
+        self._font_size.setCurrentIndex(font_index if font_index >= 0 else 5)
+
+        self._menu_size = QComboBox()
+        self._menu_size.addItem(tr("Small"), "small")
+        self._menu_size.addItem(tr("Medium — Default"), "medium")
+        self._menu_size.addItem(tr("Large"), "large")
+        menu_index = self._menu_size.findData(settings.menu_size)
+        self._menu_size.setCurrentIndex(menu_index if menu_index >= 0 else 1)
+
+        self._window_resolution = QComboBox()
+        for key, label in (
+            ("auto", tr("Auto — Fit screen")),
+            ("1024x640", tr("1024 × 640 — Compact")),
+            ("1280x720", tr("1280 × 720 — HD")),
+            ("1280x800", tr("1280 × 800 — Default")),
+            ("1440x900", tr("1440 × 900")),
+            ("1600x900", tr("1600 × 900 — Large")),
+            ("1920x1080", tr("1920 × 1080 — Full HD")),
+        ):
+            self._window_resolution.addItem(label, key)
+        res_index = self._window_resolution.findData(settings.window_resolution)
+        self._window_resolution.setCurrentIndex(res_index if res_index >= 0 else 0)
+
+        accent_host = QWidget()
+        accent_row = QHBoxLayout(accent_host)
+        accent_row.setContentsMargins(0, 0, 0, 0)
+        accent_row.setSpacing(8)
+        self._swatches: list[_AccentSwatch] = []
+        for accent in ACCENT_CHOICES:
+            swatch = _AccentSwatch(accent, accent_host)
+            swatch.set_selected(accent == self._accent)
+            swatch.clicked.connect(self._select_accent)
+            accent_row.addWidget(swatch)
+            self._swatches.append(swatch)
+        accent_row.addStretch(1)
+        accent_hint = QLabel(tr("Tints buttons, selection, and focus across all themes"))
+        accent_hint.setObjectName("dialogSubtitle")
+
         self._read_only = QCheckBox(tr("Open databases in read-only mode"))
         self._read_only.setChecked(settings.read_only)
 
@@ -105,9 +224,12 @@ class SecuritySettingsDialog(QDialog):
         self._browser = QCheckBox(tr("Enable KeePassXC-Browser integration"))
         self._browser.setChecked(settings.browser_integration_enabled)
         self._browser_install = QPushButton(tr("Install browser host manifests…"))
+        self._browser_install.setProperty("cssClass", "secondary")
         self._browser_install.clicked.connect(self._install_browser_host)
 
         form = QFormLayout()
+        form.setSpacing(10)
+        form.setHorizontalSpacing(16)
         form.addRow(tr("Language"), self._language)
         form.addRow(tr("Clipboard clear after"), self._clipboard)
         form.addRow(tr("Auto-lock after"), self._autolock)
@@ -118,7 +240,13 @@ class SecuritySettingsDialog(QDialog):
         form.addRow("", self._updates)
         form.addRow("", self._tray)
         form.addRow(tr("Theme"), self._theme)
+        form.addRow(tr("Accent"), accent_host)
+        form.addRow("", accent_hint)
         form.addRow(tr("UI density"), self._density)
+        form.addRow(tr("UI scale"), self._ui_scale)
+        form.addRow(tr("Font size"), self._font_size)
+        form.addRow(tr("Menu size"), self._menu_size)
+        form.addRow(tr("Window resolution"), self._window_resolution)
         form.addRow(tr("Auto-Type sequence"), self._autotype)
         form.addRow(tr("Auto-Type delay"), self._autotype_delay)
         form.addRow("", self._autotype_match)
@@ -139,15 +267,15 @@ class SecuritySettingsDialog(QDialog):
             ),
         )
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
+        self.body.addLayout(form)
+        self.set_primary_text(tr("Save"))
 
-        layout = QVBoxLayout(self)
-        layout.addLayout(form)
-        layout.addWidget(buttons)
+    def _select_accent(self, accent: AccentId) -> None:
+        self._accent = accent
+        for swatch in self._swatches:
+            swatch.set_selected(swatch.accent == accent)
+        if callable(self._on_accent_preview):
+            self._on_accent_preview(accent.value)
 
     def _install_browser_host(self) -> None:
         from kdbxstudio.browser.install_host import install
@@ -183,10 +311,15 @@ class SecuritySettingsDialog(QDialog):
             clear_clipboard_on_lock=self._clear_on_lock.isChecked(),
             minimize_on_lock=self._minimize_on_lock.isChecked(),
             theme=str(self._theme.currentData()),
+            accent=self._accent.value,
             read_only=self._read_only.isChecked(),
             window_geometry=self._original.window_geometry,
             window_state=self._original.window_state,
             ui_density=str(self._density.currentData()),
+            ui_scale_percent=int(self._ui_scale.currentData() or 100),
+            font_size=int(self._font_size.currentData() or 13),
+            menu_size=str(self._menu_size.currentData() or "medium"),
+            window_resolution=str(self._window_resolution.currentData() or "auto"),
             hibp_enabled=self._hibp.isChecked(),
             autotype_sequence=self._autotype.text().strip()
             or SecuritySettings.autotype_sequence,

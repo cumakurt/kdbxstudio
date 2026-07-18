@@ -76,15 +76,21 @@ from kdbxstudio.ui.icons import (
     ICON_PALETTE,
     ICON_PLUGIN,
     ICON_SAVE,
+    clear_icon_cache,
     icon_tool_button,
+    menu_icon,
 )
+from kdbxstudio.ui.icons.group_icons import clear_group_icon_cache
 from kdbxstudio.ui.theme import (
+    ACCENT_CHOICES,
+    accent_label,
     apply_theme,
+    parse_accent,
     refresh_theme_for_screen,
     suggested_window_size,
 )
-from kdbxstudio.ui.theme.tokens import THEME_CHOICES, parse_theme, theme_label
 from kdbxstudio.ui.theme.scale import detect_ui_scale
+from kdbxstudio.ui.theme.tokens import THEME_CHOICES, parse_theme, theme_label
 from kdbxstudio.ui.widgets.attachment_preview import AttachmentPreviewWidget
 from kdbxstudio.ui.widgets.empty_workspace import EmptyWorkspaceWidget
 from kdbxstudio.ui.widgets.entry_detail import EntryDetailWidget
@@ -363,18 +369,32 @@ class MainWindow(QMainWindow):
         multi = len(self._entry_list.selected_entry_uuids()) > 1
 
         menu = QMenu(self)
-        menu.addAction(tr("Add Entry…"), self.add_entry)
-        menu.addAction(tr("New from Template…"), self.add_entry_from_template)
+        menu.addAction(
+            menu_icon("person_add"), tr("Add Entry…"), self.add_entry
+        )
+        menu.addAction(
+            menu_icon("article"),
+            tr("New from Template…"),
+            self.add_entry_from_template,
+        )
         menu.addSeparator()
 
         copy_user = menu.addAction(
-            tr("Copy Username"), self._quick_copy_username
+            menu_icon("content_copy"),
+            tr("Copy Username"),
+            self._quick_copy_username,
         )
         copy_pass = menu.addAction(
-            tr("Copy Password"), self._quick_copy_password
+            menu_icon("content_copy"),
+            tr("Copy Password"),
+            self._quick_copy_password,
         )
-        copy_url = menu.addAction(tr("Copy URL"), self._quick_copy_url)
-        copy_totp = menu.addAction(tr("Copy TOTP"), self._quick_copy_totp)
+        copy_url = menu.addAction(
+            menu_icon("content_copy"), tr("Copy URL"), self._quick_copy_url
+        )
+        copy_totp = menu.addAction(
+            menu_icon("content_copy"), tr("Copy TOTP"), self._quick_copy_totp
+        )
         for action in (copy_user, copy_pass, copy_url, copy_totp):
             action.setEnabled(bool(entry) and not multi)
         if entry is not None and not multi:
@@ -384,9 +404,17 @@ class MainWindow(QMainWindow):
             copy_totp.setEnabled(bool(entry.otp))
 
         menu.addSeparator()
-        autotype = menu.addAction(tr("Auto-Type"), self.auto_type_selected)
-        move = menu.addAction(tr("Move to Group…"), self.move_selected_entry)
-        favicon = menu.addAction(tr("Fetch Favicon"), self.fetch_selected_favicon)
+        autotype = menu.addAction(
+            menu_icon("auto_fix_fill"), tr("Auto-Type"), self.auto_type_selected
+        )
+        move = menu.addAction(
+            menu_icon("drive_file_move"),
+            tr("Move to Group…"),
+            self.move_selected_entry,
+        )
+        favicon = menu.addAction(
+            menu_icon("image"), tr("Fetch Favicon"), self.fetch_selected_favicon
+        )
         for action in (autotype, move, favicon):
             action.setEnabled(has_selection)
         if multi:
@@ -395,10 +423,14 @@ class MainWindow(QMainWindow):
 
         menu.addSeparator()
         recycle = menu.addAction(
-            tr("Move to Recycle Bin"), lambda: self.delete_entry(False)
+            menu_icon("delete"),
+            tr("Move to Recycle Bin"),
+            lambda: self.delete_entry(False),
         )
         purge = menu.addAction(
-            tr("Delete Permanently"), lambda: self.delete_entry(True)
+            menu_icon("delete"),
+            tr("Delete Permanently"),
+            lambda: self.delete_entry(True),
         )
         recycle.setEnabled(has_selection)
         purge.setEnabled(has_selection)
@@ -415,19 +447,31 @@ class MainWindow(QMainWindow):
                     break
 
         menu = QMenu(self)
-        add_group = menu.addAction(tr("Add Group…"), self.add_group)
-        add_entry = menu.addAction(tr("Add Entry…"), self.add_entry)
+        add_group = menu.addAction(
+            menu_icon("folder"), tr("Add Group…"), self.add_group
+        )
+        add_entry = menu.addAction(
+            menu_icon("person_add"), tr("Add Entry…"), self.add_entry
+        )
         add_template = menu.addAction(
-            tr("New from Template…"), self.add_entry_from_template
+            menu_icon("article"),
+            tr("New from Template…"),
+            self.add_entry_from_template,
         )
         menu.addSeparator()
-        rename = menu.addAction(tr("Rename Group…"), self.rename_group)
+        rename = menu.addAction(
+            menu_icon("edit"), tr("Rename Group…"), self.rename_group
+        )
         delete = menu.addAction(
-            tr("Move Group to Recycle Bin"), self.delete_group
+            menu_icon("delete"),
+            tr("Move Group to Recycle Bin"),
+            self.delete_group,
         )
         menu.addSeparator()
         empty_bin = menu.addAction(
-            tr("Empty Recycle Bin…"), self.empty_recycle_bin
+            menu_icon("delete_sweep"),
+            tr("Empty Recycle Bin…"),
+            self.empty_recycle_bin,
         )
 
         has_group = group_uuid is not None
@@ -574,14 +618,14 @@ class MainWindow(QMainWindow):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
         menu = QMenu(self)
-        show_action = QAction(tr("Show"), self)
+        show_action = QAction(menu_icon("folder_open"), tr("Show"), self)
         show_action.triggered.connect(self._tray_show)
         menu.addAction(show_action)
-        lock_action = QAction(tr("Lock"), self)
+        lock_action = QAction(menu_icon("lock"), tr("Lock"), self)
         lock_action.triggered.connect(self._on_auto_lock)
         menu.addAction(lock_action)
         menu.addSeparator()
-        quit_action = QAction(tr("Quit"), self)
+        quit_action = QAction(menu_icon("close"), tr("Quit"), self)
         quit_action.triggered.connect(self._tray_quit)
         menu.addAction(quit_action)
 
@@ -692,193 +736,155 @@ class MainWindow(QMainWindow):
         self.resizeDocks([groups_dock], [170], Qt.Orientation.Horizontal)
 
     def _build_menus(self) -> None:
+        def act(
+            text: str,
+            slot: object,
+            *,
+            shortcut: QKeySequence | str | None = None,
+            icon_name: str | None = None,
+        ) -> QAction:
+            action = QAction(text, self)
+            if icon_name:
+                action.setIcon(menu_icon(icon_name))
+            if shortcut is not None:
+                if isinstance(shortcut, str):
+                    action.setShortcut(QKeySequence(shortcut))
+                else:
+                    action.setShortcut(shortcut)
+            action.triggered.connect(slot)
+            return action
+
         file_menu = self.menuBar().addMenu(tr("&File"))
-        open_action = QAction(tr("Open…"), self)
-        open_action.setShortcut(QKeySequence.StandardKey.Open)
-        open_action.triggered.connect(self.open_database)
-        file_menu.addAction(open_action)
-
-        create_action = QAction(tr("New Database…"), self)
-        create_action.setShortcut(QKeySequence.StandardKey.New)
-        create_action.triggered.connect(self.create_database)
-        file_menu.addAction(create_action)
-
-        save_action = QAction(tr("Save"), self)
-        save_action.setShortcut(QKeySequence.StandardKey.Save)
-        save_action.triggered.connect(self.save_database)
-        file_menu.addAction(save_action)
-
-        export_action = QAction(tr("Export CSV…"), self)
-        export_action.triggered.connect(self.export_csv)
-        file_menu.addAction(export_action)
-
-        import_action = QAction(tr("Import CSV…"), self)
-        import_action.triggered.connect(self.import_csv)
-        file_menu.addAction(import_action)
-
-        props_action = QAction(tr("Database Properties…"), self)
-        props_action.triggered.connect(self.show_database_properties)
-        file_menu.addAction(props_action)
-
-        creds_action = QAction(tr("Change Master Password…"), self)
-        creds_action.triggered.connect(self.change_master_password)
-        file_menu.addAction(creds_action)
-
-        close_action = QAction(tr("Close"), self)
-        close_action.triggered.connect(self.close_database)
-        file_menu.addAction(close_action)
+        file_menu.addAction(
+            act(tr("Open…"), self.open_database, shortcut=QKeySequence.StandardKey.Open, icon_name="folder_open")
+        )
+        file_menu.addAction(
+            act(tr("New Database…"), self.create_database, shortcut=QKeySequence.StandardKey.New, icon_name="note_add")
+        )
+        file_menu.addAction(
+            act(tr("Save"), self.save_database, shortcut=QKeySequence.StandardKey.Save, icon_name="save")
+        )
+        file_menu.addAction(act(tr("Export CSV…"), self.export_csv, icon_name="upload"))
+        file_menu.addAction(act(tr("Import CSV…"), self.import_csv, icon_name="download"))
+        file_menu.addAction(act(tr("Database Properties…"), self.show_database_properties, icon_name="info"))
+        file_menu.addAction(act(tr("Change Master Password…"), self.change_master_password, icon_name="key"))
+        file_menu.addAction(act(tr("Close"), self.close_database, icon_name="close"))
 
         self._recent_menu = file_menu.addMenu(tr("Open Recent"))
+        self._recent_menu.setIcon(menu_icon("history"))
         self._rebuild_recent_menu()
 
         file_menu.addSeparator()
-        quit_action = QAction(tr("Quit"), self)
-        quit_action.setShortcut(QKeySequence.StandardKey.Quit)
-        quit_action.triggered.connect(self._tray_quit)
-        file_menu.addAction(quit_action)
+        file_menu.addAction(
+            act(tr("Quit"), self._tray_quit, shortcut=QKeySequence.StandardKey.Quit, icon_name="logout")
+        )
 
         entry_menu = self.menuBar().addMenu(tr("&Entry"))
-        add_action = QAction(tr("Add Entry…"), self)
-        add_action.triggered.connect(self.add_entry)
-        entry_menu.addAction(add_action)
-
-        template_action = QAction(tr("New from Template…"), self)
-        template_action.triggered.connect(self.add_entry_from_template)
-        entry_menu.addAction(template_action)
-
-        delete_action = QAction(tr("Move to Recycle Bin"), self)
-        delete_action.setShortcut(QKeySequence(Qt.Key.Key_Delete))
-        delete_action.triggered.connect(lambda: self.delete_entry(False))
+        entry_menu.addAction(act(tr("Add Entry…"), self.add_entry, icon_name="person_add"))
+        entry_menu.addAction(act(tr("New from Template…"), self.add_entry_from_template, icon_name="article"))
+        delete_action = act(
+            tr("Move to Recycle Bin"),
+            lambda: self.delete_entry(False),
+            shortcut=QKeySequence(Qt.Key.Key_Delete),
+            icon_name="delete",
+        )
         entry_menu.addAction(delete_action)
-
-        purge_action = QAction(tr("Delete Permanently"), self)
-        purge_action.setShortcut(QKeySequence("Shift+Delete"))
-        purge_action.triggered.connect(lambda: self.delete_entry(True))
+        purge_action = act(
+            tr("Delete Permanently"),
+            lambda: self.delete_entry(True),
+            shortcut="Shift+Delete",
+            icon_name="delete_sweep",
+        )
         entry_menu.addAction(purge_action)
-
         entry_menu.addSeparator()
-        autotype_action = QAction(tr("Auto-Type"), self)
+        autotype_action = act(tr("Auto-Type"), self.auto_type_selected, icon_name="auto_fix_fill")
         autotype_action.setShortcuts(
             [QKeySequence("Ctrl+Shift+V"), QKeySequence("Ctrl+Alt+A")]
         )
-        autotype_action.triggered.connect(self.auto_type_selected)
         entry_menu.addAction(autotype_action)
-
-        move_action = QAction(tr("Move to Group…"), self)
-        move_action.triggered.connect(self.move_selected_entry)
-        entry_menu.addAction(move_action)
-
-        favicon_action = QAction(tr("Fetch Favicon"), self)
-        favicon_action.triggered.connect(self.fetch_selected_favicon)
-        entry_menu.addAction(favicon_action)
+        entry_menu.addAction(act(tr("Move to Group…"), self.move_selected_entry, icon_name="drive_file_move"))
+        entry_menu.addAction(act(tr("Fetch Favicon"), self.fetch_selected_favicon, icon_name="image"))
 
         group_menu = self.menuBar().addMenu(tr("&Group"))
-        add_group = QAction(tr("Add Group…"), self)
-        add_group.triggered.connect(self.add_group)
-        group_menu.addAction(add_group)
-        rename_group = QAction(tr("Rename Group…"), self)
-        rename_group.setShortcut(QKeySequence(Qt.Key.Key_F2))
-        rename_group.triggered.connect(self.rename_group)
+        group_menu.addAction(act(tr("Add Group…"), self.add_group, icon_name="folder"))
+        rename_group = act(tr("Rename Group"), self.rename_group, shortcut=QKeySequence(Qt.Key.Key_F2), icon_name="edit")
         group_menu.addAction(rename_group)
-        delete_group = QAction(tr("Move Group to Recycle Bin"), self)
-        delete_group.triggered.connect(self.delete_group)
-        group_menu.addAction(delete_group)
+        group_menu.addAction(act(tr("Move Group to Recycle Bin"), self.delete_group, icon_name="delete"))
 
         tools_menu = self.menuBar().addMenu(tr("&Tools"))
-        audit_action = QAction(tr("Security Dashboard…"), self)
-        audit_action.triggered.connect(self.open_security_dashboard)
-        tools_menu.addAction(audit_action)
-
-        empty_bin = QAction(tr("Empty Recycle Bin…"), self)
-        empty_bin.triggered.connect(self.empty_recycle_bin)
-        tools_menu.addAction(empty_bin)
+        tools_menu.addAction(act(tr("Security Dashboard…"), self.open_security_dashboard, icon_name="dashboard"))
+        tools_menu.addAction(act(tr("Empty Recycle Bin…"), self.empty_recycle_bin, icon_name="delete_sweep"))
 
         plugins_menu = tools_menu.addMenu(tr("Plugin Center"))
-        plugins_action = QAction(tr("Marketplace…"), self)
-        plugins_action.triggered.connect(self.open_plugins)
-        plugins_menu.addAction(plugins_action)
+        plugins_menu.setIcon(menu_icon("extension"))
+        plugins_menu.addAction(act(tr("Marketplace…"), self.open_plugins, icon_name="extension"))
+        plugins_menu.addAction(act(tr("Installed Plugins…"), self.open_installed_plugins, icon_name="extension"))
 
-        plugins_mgr = QAction(tr("Installed Plugins…"), self)
-        plugins_mgr.triggered.connect(self.open_installed_plugins)
-        plugins_menu.addAction(plugins_mgr)
-
-        generator_action = QAction(tr("Password Generator…"), self)
-        generator_action.triggered.connect(self.open_password_generator)
-        tools_menu.addAction(generator_action)
-
+        tools_menu.addAction(act(tr("Password Generator…"), self.open_password_generator, icon_name="password"))
         tools_menu.addSeparator()
-        merge_action = QAction(tr("Merge Database…"), self)
-        merge_action.triggered.connect(self.merge_database)
-        tools_menu.addAction(merge_action)
-
-        emergency_action = QAction(tr("Emergency Sheet…"), self)
-        emergency_action.triggered.connect(self.export_emergency_sheet)
-        tools_menu.addAction(emergency_action)
-
-        updates_action = QAction(tr("Check for Updates…"), self)
-        updates_action.triggered.connect(self.check_for_updates)
-        tools_menu.addAction(updates_action)
-
-        ssh_action = QAction(tr("Add Selected PEM to SSH Agent"), self)
-        ssh_action.triggered.connect(self.add_selected_pem_to_agent)
-        tools_menu.addAction(ssh_action)
-
+        tools_menu.addAction(act(tr("Merge Database…"), self.merge_database, icon_name="merge"))
+        tools_menu.addAction(act(tr("Emergency Sheet…"), self.export_emergency_sheet, icon_name="description"))
+        tools_menu.addAction(act(tr("Check for Updates…"), self.check_for_updates, icon_name="system_update"))
+        tools_menu.addAction(act(tr("Add Selected PEM to SSH Agent"), self.add_selected_pem_to_agent, icon_name="vpn_key"))
         tools_menu.addSeparator()
-        lock_action = QAction(tr("Lock All Databases"), self)
-        lock_action.setShortcut(QKeySequence("Ctrl+L"))
-        lock_action.triggered.connect(self._on_auto_lock)
-        tools_menu.addAction(lock_action)
-
-        security_action = QAction(tr("Settings…"), self)
-        security_action.triggered.connect(self.open_security_settings)
-        tools_menu.addAction(security_action)
+        tools_menu.addAction(
+            act(tr("Lock All Databases"), self._on_auto_lock, shortcut="Ctrl+L", icon_name="lock")
+        )
+        tools_menu.addAction(act(tr("Settings…"), self.open_security_settings, icon_name="settings"))
 
         view_menu = self.menuBar().addMenu(tr("&View"))
         view_menu.addAction(self._groups_dock.toggleViewAction())
         view_menu.addSeparator()
-        save_layout = QAction(tr("Save Layout"), self)
-        save_layout.triggered.connect(self.save_layout)
-        view_menu.addAction(save_layout)
-        reset_layout = QAction(tr("Reset Layout"), self)
-        reset_layout.triggered.connect(self.reset_layout)
-        view_menu.addAction(reset_layout)
+        view_menu.addAction(act(tr("Save Layout"), self.save_layout, icon_name="save"))
+        view_menu.addAction(act(tr("Reset Layout"), self.reset_layout, icon_name="refresh"))
         view_menu.addSeparator()
         theme_menu = view_menu.addMenu(tr("Theme"))
+        theme_menu.setIcon(menu_icon("contrast"))
         for mode in THEME_CHOICES:
-            action = QAction(tr(theme_label(mode)), self)
-            action.triggered.connect(
-                lambda checked=False, v=mode.value: self.set_theme(v)
+            action = act(
+                tr(theme_label(mode)),
+                lambda checked=False, v=mode.value: self.set_theme(v),
+                icon_name="contrast",
             )
             theme_menu.addAction(action)
-        palette_action = QAction(tr("Command Palette…"), self)
-        palette_action.setShortcut(QKeySequence("Ctrl+K"))
-        palette_action.triggered.connect(self.open_command_palette)
-        view_menu.addAction(palette_action)
+        accent_menu = view_menu.addMenu(tr("Accent"))
+        accent_menu.setIcon(menu_icon("palette"))
+        for accent in ACCENT_CHOICES:
+            action = act(
+                tr(accent_label(accent)),
+                lambda *_args, a=accent.value: self.set_accent(a),
+                icon_name="palette",
+            )
+            accent_menu.addAction(action)
+        view_menu.addAction(
+            act(tr("Command Palette…"), self.open_command_palette, shortcut="Ctrl+K", icon_name="terminal")
+        )
 
         help_menu = self.menuBar().addMenu(tr("&Help"))
-        about_action = QAction(tr("About"), self)
-        about_action.triggered.connect(self._about)
-        help_menu.addAction(about_action)
+        help_menu.addAction(act(tr("About"), self._about, icon_name="info"))
 
     def _build_toolbar(self) -> None:
         toolbar = QToolBar(tr("Main"))
         toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(22, 22))
+        toolbar.setIconSize(QSize(20, 20))
         self.addToolBar(toolbar)
         self._main_toolbar = toolbar
 
         def add_icon(name: str, tip: str, slot: object) -> None:
-            button = icon_tool_button(name, tip, toolbar, size=22)
+            button = icon_tool_button(name, tip, toolbar, size=20)
             button.clicked.connect(slot)
             toolbar.addWidget(button)
 
         add_icon(ICON_OPEN, tr("Open database"), self.open_database)
         add_icon(ICON_SAVE, tr("Save database"), self.save_database)
+        toolbar.addSeparator()
         add_icon(ICON_ADD, tr("Add entry"), self.add_entry)
+        toolbar.addSeparator()
         add_icon(ICON_PALETTE, tr("Command palette"), self.open_command_palette)
         add_icon(ICON_AUDIT, tr("Security Dashboard"), self.open_security_dashboard)
         add_icon(ICON_PLUGIN, tr("Plugin marketplace"), self.open_plugins)
+        toolbar.addSeparator()
         add_icon(ICON_LOCK, tr("Lock all databases"), self._on_auto_lock)
 
     def _apply_window_icon(self) -> None:
@@ -1168,99 +1174,187 @@ class MainWindow(QMainWindow):
         mode = parse_theme(theme)
         self._settings = self._settings.with_updates(theme=mode.value)
         save_settings(self._settings)
-        app = QApplication.instance()
-        if isinstance(app, QApplication):
-            apply_theme(app, mode)
+        self._apply_appearance()
         self.statusBar().showMessage(
             tr("Theme: {name}").format(name=tr(theme_label(mode))), 2000
         )
 
+    def set_accent(self, accent: str) -> None:
+        aid = parse_accent(accent)
+        self._settings = self._settings.with_updates(accent=aid.value)
+        save_settings(self._settings)
+        self._apply_appearance()
+        self.statusBar().showMessage(
+            tr("Accent: {name}").format(name=tr(accent_label(aid))), 2000
+        )
+
+    def _preview_accent(self, accent: str) -> None:
+        """Live-preview accent from Settings without persisting until Save."""
+        self._apply_appearance(accent_override=parse_accent(accent))
+
+    def _apply_appearance(self, *, accent_override: object | None = None) -> None:
+        """Re-apply theme/accent/scale/font/menu and refresh chrome icons."""
+        clear_icon_cache()
+        clear_group_icon_cache()
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            apply_theme(
+                app,
+                parse_theme(self._settings.theme),
+                accent=accent_override
+                if accent_override is not None
+                else self._settings.accent,
+                ui_density=self._settings.ui_density,
+                ui_scale_percent=self._settings.ui_scale_percent,
+                font_size=self._settings.font_size,
+                menu_size=self._settings.menu_size,
+                force=True,
+            )
+        self._rebuild_toolbar_icons()
+        self._apply_chrome_scale()
+        # Rebuild group icons after cache clear (fixed palette; ensures fresh pixmaps).
+        if self._dbm.active is not None:
+            selected = self._group_tree.selected_group_uuid()
+            groups = self._dbm.list_groups()
+            root = self._dbm.root_group_uuid()
+            self._group_tree.set_groups(groups, root, select_uuid=selected or root)
+
+    def _rebuild_toolbar_icons(self) -> None:
+        """Recreate toolbar buttons so outlined icons pick up the new brand tint."""
+        if self._main_toolbar is None:
+            return
+        self.removeToolBar(self._main_toolbar)
+        self._main_toolbar.deleteLater()
+        self._main_toolbar = None
+        self._build_toolbar()
+
     def open_command_palette(self) -> None:
         actions = [
             PaletteAction(
-                "open", tr("Open Database…"), ("file", "open"), self.open_database
+                "open",
+                tr("Open Database…"),
+                ("file", "open"),
+                self.open_database,
+                icon="folder_open",
             ),
             PaletteAction(
-                "new", tr("New Database…"), ("create", "new"), self.create_database
+                "new",
+                tr("New Database…"),
+                ("create", "new"),
+                self.create_database,
+                icon="add",
             ),
-            PaletteAction("save", tr("Save"), ("save",), self.save_database),
             PaletteAction(
-                "lock", tr("Lock All"), ("lock", "security"), self._on_auto_lock
+                "save",
+                tr("Save"),
+                ("save",),
+                self.save_database,
+                icon="save",
             ),
             PaletteAction(
-                "add-entry", tr("Add Entry…"), ("entry", "add"), self.add_entry
+                "lock",
+                tr("Lock All"),
+                ("lock", "security"),
+                self._on_auto_lock,
+                icon="lock",
+            ),
+            PaletteAction(
+                "add-entry",
+                tr("Add Entry…"),
+                ("entry", "add"),
+                self.add_entry,
+                icon="person_add",
             ),
             PaletteAction(
                 "template",
                 tr("New from Template…"),
                 ("template",),
                 self.add_entry_from_template,
+                icon="article",
             ),
             PaletteAction(
                 "generate",
                 tr("Password Generator…"),
                 ("password", "generate"),
                 self.open_password_generator,
+                icon="password",
             ),
             PaletteAction(
                 "audit",
                 tr("Security Dashboard…"),
                 ("audit", "health", "findings", "security", "dashboard", "reports"),
                 self.open_security_dashboard,
+                icon="dashboard",
             ),
             PaletteAction(
-                "import", tr("Import CSV…"), ("import", "csv"), self.import_csv
+                "import",
+                tr("Import CSV…"),
+                ("import", "csv"),
+                self.import_csv,
+                icon="download",
             ),
             PaletteAction(
-                "export", tr("Export CSV…"), ("export", "csv"), self.export_csv
+                "export",
+                tr("Export CSV…"),
+                ("export", "csv"),
+                self.export_csv,
+                icon="upload",
             ),
             PaletteAction(
                 "autotype",
                 tr("Auto-Type Selected Entry"),
                 ("autotype", "type"),
                 self.auto_type_selected,
+                icon="auto_fix_fill",
             ),
             PaletteAction(
                 "merge",
                 tr("Merge Database…"),
                 ("merge", "import"),
                 self.merge_database,
+                icon="merge",
             ),
             PaletteAction(
                 "emergency",
                 tr("Emergency Sheet…"),
                 ("emergency", "print", "sheet"),
                 self.export_emergency_sheet,
+                icon="description",
             ),
             PaletteAction(
                 "updates",
                 tr("Check for Updates…"),
                 ("update", "version"),
                 self.check_for_updates,
+                icon="system_update",
             ),
             PaletteAction(
                 "move-entry",
                 tr("Move Entry to Group…"),
                 ("move", "group"),
                 self.move_selected_entry,
+                icon="drive_file_move",
             ),
             PaletteAction(
                 "favicon",
                 tr("Fetch Favicon"),
                 ("favicon", "icon"),
                 self.fetch_selected_favicon,
+                icon="image",
             ),
             PaletteAction(
                 "plugins",
                 tr("Plugin Marketplace…"),
                 ("plugin", "market"),
                 self.open_plugins,
+                icon="extension",
             ),
             PaletteAction(
                 "settings",
                 tr("Security & Appearance…"),
                 ("settings", "theme"),
                 self.open_security_settings,
+                icon="settings",
             ),
             *[
                 PaletteAction(
@@ -1268,14 +1362,26 @@ class MainWindow(QMainWindow):
                     tr("Theme: {name}").format(name=tr(theme_label(mode))),
                     ("theme", mode.value),
                     lambda m=mode: self.set_theme(m.value),
+                    icon="contrast",
                 )
                 for mode in THEME_CHOICES
+            ],
+            *[
+                PaletteAction(
+                    f"accent-{accent.value}",
+                    tr("Accent: {name}").format(name=tr(accent_label(accent))),
+                    ("accent", "color", "palette", accent.value),
+                    lambda a=accent: self.set_accent(a.value),
+                    icon="palette",
+                )
+                for accent in ACCENT_CHOICES
             ],
             PaletteAction(
                 "focus-search",
                 tr("Focus Search"),
                 ("search", "find"),
                 lambda: self._search_box.setFocus(),
+                icon="search",
             ),
         ]
         for path in load_recent_databases()[:8]:
@@ -1290,6 +1396,7 @@ class MainWindow(QMainWindow):
                     ("recent", path.name.lower()),
                     _open,
                     section="Recent",
+                    icon="history",
                 )
             )
         if self._dbm.active is not None:
@@ -1311,6 +1418,7 @@ class MainWindow(QMainWindow):
                         ),
                         _jump,
                         section="Entries",
+                        icon="person",
                     )
                 )
         dialog = CommandPalette(actions, self)
@@ -1833,8 +1941,14 @@ class MainWindow(QMainWindow):
         )
 
         previous_language = get_language()
-        dialog = SecuritySettingsDialog(self._settings, self)
+        dialog = SecuritySettingsDialog(
+            self._settings,
+            self,
+            on_accent_preview=lambda a: self._preview_accent(a),
+        )
         if dialog.exec() != SecuritySettingsDialog.DialogCode.Accepted:
+            # Restore appearance if user cancelled after live accent preview.
+            self._apply_appearance()
             return
         self._settings = dialog.result_settings()
         save_settings(self._settings)
@@ -1842,9 +1956,8 @@ class MainWindow(QMainWindow):
         self._auto_lock.set_timeout(self._settings.auto_lock_timeout_ms)
         self._auto_lock.set_enabled(self._settings.auto_lock_enabled)
         self._apply_ui_density()
-        app = QApplication.instance()
-        if isinstance(app, QApplication):
-            apply_theme(app, parse_theme(self._settings.theme))
+        self._apply_appearance()
+        self._apply_window_resolution()
         set_language(self._settings.language)
         language_changed = get_language() != previous_language
         if language_changed:
@@ -2826,31 +2939,61 @@ class MainWindow(QMainWindow):
     def _fit_to_screen(self, *, initial: bool = False) -> None:
         screen = self.screen() or QGuiApplication.primaryScreen()
         size = suggested_window_size(screen, scale=detect_ui_scale(screen))
-        self.setMinimumSize(900, 560)
+        self.setMinimumSize(640, 400)
         if initial and not self._settings.window_geometry:
-            self.resize(size)
-            if screen is not None:
-                geo = screen.availableGeometry()
-                self.move(
-                    geo.x() + max(0, (geo.width() - size.width()) // 2),
-                    geo.y() + max(0, (geo.height() - size.height()) // 2),
-                )
+            if not self._apply_window_resolution():
+                self.resize(size)
+                if screen is not None:
+                    geo = screen.availableGeometry()
+                    self.move(
+                        geo.x() + max(0, (geo.width() - size.width()) // 2),
+                        geo.y() + max(0, (geo.height() - size.height()) // 2),
+                    )
+
+    def _apply_window_resolution(self) -> bool:
+        """Resize main window to the configured resolution preset.
+
+        Returns True when a fixed preset was applied.
+        """
+        from kdbxstudio.ui.theme.geometry import window_size_for_resolution
+
+        preset = window_size_for_resolution(self._settings.window_resolution)
+        if preset is None:
+            return False
+        width, height = preset
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            width = min(width, max(640, avail.width() - 32))
+            height = min(height, max(400, avail.height() - 32))
+            self.resize(width, height)
+            self.move(
+                avail.x() + max(0, (avail.width() - width) // 2),
+                avail.y() + max(0, (avail.height() - height) // 2),
+            )
+        else:
+            self.resize(width, height)
+        return True
 
     def _apply_chrome_scale(self) -> None:
-        self.setMinimumSize(900, 560)
+        from kdbxstudio.ui.theme.manager import current_font_size, current_ui_scale
+
+        scale = current_ui_scale()
+        self.setMinimumSize(scale.px(640), scale.px(400))
+        icon = scale.px(20)
         if self._main_toolbar is not None:
-            self._main_toolbar.setIconSize(QSize(22, 22))
+            self._main_toolbar.setIconSize(QSize(icon, icon))
             for child in self._main_toolbar.findChildren(QToolButton):
-                child.setIconSize(QSize(22, 22))
-                child.setFixedSize(30, 30)
+                child.setIconSize(QSize(icon, icon))
+                child.setFixedSize(icon + 10, icon + 10)
         if hasattr(self, "_groups_dock"):
-            self._groups_dock.setMinimumWidth(140)
-            self._groups_dock.setMaximumWidth(280)
+            self._groups_dock.setMinimumWidth(scale.px(140))
+            self._groups_dock.setMaximumWidth(scale.px(280))
         menu = self.menuBar()
         if menu is not None:
             menu.setNativeMenuBar(False)
             font = menu.font()
-            font.setPixelSize(11)
+            font.setPixelSize(scale.font_px(current_font_size()))
             menu.setFont(font)
 
     def _connect_screen_signals(self) -> None:

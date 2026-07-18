@@ -38,9 +38,15 @@ class DatabasePropertiesDialog(QDialog):
         )
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        close_btn = buttons.button(QDialogButtonBox.StandardButton.Close)
+        if close_btn is not None:
+            close_btn.setProperty("cssClass", "primary")
+            close_btn.setDefault(True)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 16)
+        layout.setSpacing(16)
         layout.addLayout(form)
         layout.addWidget(buttons)

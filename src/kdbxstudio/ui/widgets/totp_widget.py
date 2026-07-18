@@ -26,9 +26,7 @@ class TotpWidget(QWidget):
         self._otp_value = ""
         self._last_code = ""
         self._code = QLabel("------")
-        self._code.setStyleSheet(
-            "font-size: 18px; font-weight: 600; letter-spacing: 1px;"
-        )
+        self._code.setObjectName("totpCode")
         self._label = QLabel("No TOTP configured")
         self._remaining = QProgressBar()
         self._remaining.setTextVisible(True)
