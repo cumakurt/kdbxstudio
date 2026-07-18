@@ -52,22 +52,22 @@ Copyright (C) 2026 Cuma KURT.
 
 ## Screenshots
 
-Captured from the sample vault (`scripts/smoke_visual.py`, Studio Dark + teal accent, English).
-The workspace shot shows colorful **group category icons** and **site favicons** on entries.
+Fresh captures from the sample vault (`scripts/smoke_visual.py`, Studio Dark + teal accent, English).
+Each shot highlights the current premium UI: colorful group icons, site favicons, outlined chrome icons, Security Dashboard, and dialog polish.
 
-| Welcome | Workspace |
+| Welcome — empty shell & accent toolbar | Workspace — category groups + site favicons |
 | --- | --- |
 | ![Welcome](assets/screenshots/01-welcome.png) | ![Workspace](assets/screenshots/02-workspace.png) |
 
-| Search | Command palette |
+| Search — filter chips & favicon results | Command palette — outlined action icons |
 | --- | --- |
 | ![Search](assets/screenshots/03-search.png) | ![Command palette](assets/screenshots/04-command-palette.png) |
 
-| Security Dashboard | Password generator |
+| Security Dashboard — score, KPIs, charts | Password generator — presets & entropy |
 | --- | --- |
 | ![Security Dashboard](assets/screenshots/05-security-dashboard.png) | ![Password generator](assets/screenshots/06-password-generator.png) |
 
-Regenerate locally:
+Regenerate all README screenshots locally:
 
 ```bash
 QT_QPA_PLATFORM=offscreen python scripts/smoke_visual.py
