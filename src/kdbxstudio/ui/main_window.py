@@ -182,23 +182,41 @@ class MainWindow(QMainWindow):
         self._filter_bar.filter_changed.connect(self._on_filter_changed)
 
         self._entry_tabs = QTabWidget()
+        self._entry_tabs.setObjectName("entryDetailPane")
         self._entry_tabs.addTab(self._entry_detail, tr("Entry"))
         self._entry_tabs.addTab(self._totp, tr("TOTP"))
         self._entry_tabs.addTab(self._history, tr("History"))
         self._entry_tabs.addTab(self._attachments, tr("Attachments"))
         self._entry_tabs.addTab(self._pem, tr("Certificates / SSH"))
 
+        self._db_tabs.setObjectName("dbTabs")
+        self._entry_list.setObjectName("entryListPane")
+        self._group_tree.setObjectName("groupTreePane")
+        self._group_tree.setAlternatingRowColors(True)
+
         workspace = QWidget()
+        workspace.setObjectName("workspaceRoot")
         center_layout = QVBoxLayout(workspace)
         self._workspace_layout = center_layout
         self._workspace_widget = workspace
         self._db_tabs.setMaximumHeight(28)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
         center_layout.addWidget(self._db_tabs)
-        center_layout.addWidget(self._search_box)
-        center_layout.addWidget(self._filter_bar)
+
+        chrome = QWidget()
+        chrome.setObjectName("workspaceChrome")
+        chrome_layout = QVBoxLayout(chrome)
+        chrome_layout.setContentsMargins(8, 6, 8, 6)
+        chrome_layout.setSpacing(4)
+        chrome_layout.addWidget(self._search_box)
+        chrome_layout.addWidget(self._filter_bar)
+        center_layout.addWidget(chrome)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setObjectName("workspaceSplitter")
         splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(4)
+        splitter.setHandleWidth(5)
         splitter.addWidget(self._entry_list)
         splitter.addWidget(self._entry_tabs)
         splitter.setStretchFactor(0, 2)
@@ -624,12 +642,18 @@ class MainWindow(QMainWindow):
     def _apply_ui_density(self) -> None:
         if self._workspace_layout is None:
             return
+        # Keep panes flush (KeePassXC-like); density only pads the search/filter chrome.
+        self._workspace_layout.setContentsMargins(0, 0, 0, 0)
+        self._workspace_layout.setSpacing(0)
+        chrome = self._workspace_widget.findChild(QWidget, "workspaceChrome")
+        if chrome is None or chrome.layout() is None:
+            return
         if self._settings.ui_density == "comfortable":
-            self._workspace_layout.setContentsMargins(12, 8, 12, 8)
-            self._workspace_layout.setSpacing(6)
+            chrome.layout().setContentsMargins(12, 8, 12, 8)
+            chrome.layout().setSpacing(6)
         else:
-            self._workspace_layout.setContentsMargins(6, 2, 6, 2)
-            self._workspace_layout.setSpacing(2)
+            chrome.layout().setContentsMargins(8, 6, 8, 6)
+            chrome.layout().setSpacing(4)
 
     def _focus_search(self) -> None:
         self._stack.setCurrentIndex(1 if self._dbm.active else 0)

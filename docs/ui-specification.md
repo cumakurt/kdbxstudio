@@ -31,12 +31,14 @@ Version target: **1.0.0**
 
 | Token | Light | Dark |
 |-------|-------|------|
-| `surface.app` | `#F4F7F7` | `#0E1616` |
+| `surface.app` | `#E8EEEE` | `#0B1212` |
 | `surface.panel` | `#FFFFFF` | `#152020` |
-| `surface.elevated` | `#FFFFFF` | `#1C2A2A` |
-| `surface.sunken` | `#E8EEEE` | `#0A1212` |
-| `border.subtle` | `#D0DADB` | `#2A3A3A` |
-| `border.strong` | `#A8B8B8` | `#3D5050` |
+| `surface.elevated` | `#F2F6F6` | `#1E2C2C` |
+| `surface.sunken` | `#DCE4E4` | `#080E0E` |
+| `border.subtle` | `#C2CECE` | `#2A3A3A` |
+| `border.strong` | `#8FA3A3` | `#455858` |
+
+Depth model (KeePassXC-like): **app** canvas → **elevated** chrome (menu/toolbar/search strip/headers) → **panel** lists → **elevated** detail pane. Separators use `border.strong`; no drop shadows.
 
 ### Text
 

@@ -1,16 +1,19 @@
-# README screenshots — 2026-07-18
+# KeePassXC-like visual depth — 2026-07-18
 
 ## Plan
 
-- [x] Sample vault in `scripts/smoke_visual.py` (Work/Personal + weak/dupe/empty/SSH)
-- [x] Capture welcome, workspace, search, palette, health, generator
-- [x] Export to `assets/screenshots/` (English Studio Dark, isolated XDG config)
-- [x] Embed images in README Screenshots section
+- [x] Differentiate light `surface_elevated` from `surface_panel` (tokens + ui-spec)
+- [x] QSS: pane roles, chrome strips, stronger splitters, dock framing, focus borders
+- [x] ObjectNames on workspace regions (toolbar strip, search/filter, panes)
+- [x] Verify offscreen smoke + theme tests; regenerate README shots
 
 ## Review
 
-- Script forces `XDG_CONFIG_HOME` temp settings (`language=en`, `theme=dark`)
-- Workspace shot selects **Work** group (Root has no direct entries)
-- Command palette: stop fade + opacity 1, then `grab(palette)` (window grab missed overlay)
-- Regenerate: `QT_QPA_PLATFORM=offscreen python scripts/smoke_visual.py`
-- Sample password: `demo-pass-123` (artifacts only, gitignored)
+Depth via **surface steps + borders** (no drop shadows):
+
+- App canvas → elevated chrome (menu/toolbar/search) → panel lists → elevated detail
+- 3px splitter handles with hover accent; dock title elevated + strong border
+- Flush pane layout; density only pads `#workspaceChrome`
+- Light Studio / Catppuccin Latte: elevated ≠ panel
+
+Verification: `tests/test_theme_palette.py` 15 passed; full suite + `smoke_visual.py` OK.

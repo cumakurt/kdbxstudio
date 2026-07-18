@@ -30,6 +30,18 @@ def test_tokens_light_dark_differ() -> None:
     assert light.text_danger != dark.text_danger
     assert light.is_dark is False
     assert dark.is_dark is True
+    # Light elevation must step above panel so chrome/cards read depth.
+    assert light.surface_elevated != light.surface_panel
+    assert light.surface_app != light.surface_panel
+
+
+def test_stylesheet_has_pane_depth_hooks() -> None:
+    css = build_stylesheet(tokens_for(ThemeMode.DARK))
+    assert "QWidget#workspaceChrome" in css
+    assert "QTableView#entryListPane" in css
+    assert "QTabWidget#entryDetailPane::pane" in css
+    assert "QSplitter::handle:horizontal" in css
+    assert "width: 3px" in css
 
 
 def test_at_least_five_named_styles() -> None:

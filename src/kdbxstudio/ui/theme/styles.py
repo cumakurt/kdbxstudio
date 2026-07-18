@@ -1,4 +1,4 @@
-"""QSS builders — compact, calm desktop chrome."""
+"""QSS builders — KeePassXC-like pane depth via borders and surface steps."""
 
 from __future__ import annotations
 
@@ -36,6 +36,12 @@ QMainWindow, QDialog, QMessageBox {{
   color: {t.text_primary};
 }}
 
+QMainWindow::separator {{
+  background: {t.border_strong};
+  width: 1px;
+  height: 1px;
+}}
+
 QWidget {{
   color: {t.text_primary};
 }}
@@ -54,6 +60,7 @@ QGroupBox {{
   border-radius: {px(4)};
   margin-top: {px(8)};
   padding-top: {px(6)};
+  background-color: {t.surface_panel};
 }}
 
 QGroupBox::title {{
@@ -69,9 +76,9 @@ QLabel {{
 }}
 
 QMenuBar {{
-  background-color: {t.surface_panel};
+  background-color: {t.surface_elevated};
   color: {t.text_primary};
-  border-bottom: 1px solid {t.border_subtle};
+  border-bottom: 1px solid {t.border_strong};
   padding: 0 {px(2)};
   font-size: {body}px;
   spacing: 0;
@@ -90,9 +97,9 @@ QMenuBar::item:selected, QMenuBar::item:pressed {{
 }}
 
 QMenu {{
-  background-color: {t.surface_panel};
+  background-color: {t.surface_elevated};
   color: {t.text_primary};
-  border: 1px solid {t.border_subtle};
+  border: 1px solid {t.border_strong};
   padding: {px(3)};
   font-size: {body}px;
 }}
@@ -118,15 +125,20 @@ QMenu::separator {{
 }}
 
 QToolBar {{
-  background-color: {t.surface_panel};
-  border-bottom: 1px solid {t.border_subtle};
+  background-color: {t.surface_elevated};
+  border-bottom: 1px solid {t.border_strong};
   spacing: {px(4)};
   padding: {px(4)};
   min-height: {px(36)};
 }}
 
-QToolButton, QPushButton {{
+QToolBar#mainToolbar {{
   background-color: {t.surface_elevated};
+  border-bottom: 1px solid {t.border_strong};
+}}
+
+QToolButton, QPushButton {{
+  background-color: {t.surface_panel};
   color: {t.text_primary};
   border: 1px solid {t.border_subtle};
   border-radius: {px(4)};
@@ -186,9 +198,9 @@ QSpinBox:disabled, QComboBox:disabled, QDateEdit:disabled {{
 }}
 
 QComboBox QAbstractItemView {{
-  background-color: {t.surface_panel};
+  background-color: {t.surface_elevated};
   color: {t.text_primary};
-  border: 1px solid {t.border_subtle};
+  border: 1px solid {t.border_strong};
   selection-background-color: {t.brand_primary};
   selection-color: {t.brand_on_primary};
 }}
@@ -217,7 +229,7 @@ QCalendarWidget QAbstractItemView:enabled {{
 QTabWidget::pane {{
   border: 1px solid {t.border_subtle};
   background-color: {t.surface_panel};
-  border-radius: {px(4)};
+  border-radius: 0;
   top: -1px;
 }}
 
@@ -226,8 +238,8 @@ QTabBar::tab {{
   color: {t.text_secondary};
   border: 1px solid {t.border_subtle};
   border-bottom: none;
-  border-top-left-radius: {px(4)};
-  border-top-right-radius: {px(4)};
+  border-top-left-radius: {px(3)};
+  border-top-right-radius: {px(3)};
   padding: {px(3)} {px(8)};
   margin-right: 1px;
   font-size: {body}px;
@@ -244,16 +256,54 @@ QTabBar::tab:disabled {{
   color: {t.text_muted};
 }}
 
+QTabWidget#dbTabs::pane {{
+  border: none;
+  background-color: transparent;
+  top: 0;
+}}
+
+QTabWidget#dbTabs QTabBar::tab {{
+  background-color: {t.surface_sunken};
+  border: 1px solid {t.border_subtle};
+  border-bottom: none;
+}}
+
+QTabWidget#dbTabs QTabBar::tab:selected {{
+  background-color: {t.surface_panel};
+  border-bottom: 2px solid {t.brand_primary};
+}}
+
+QTabWidget#entryDetailPane::pane {{
+  border: 1px solid {t.border_strong};
+  border-left: none;
+  background-color: {t.surface_elevated};
+  border-radius: 0;
+}}
+
+QTabWidget#entryDetailPane QTabBar::tab:selected {{
+  background-color: {t.surface_elevated};
+}}
+
 QDockWidget {{
   color: {t.text_primary};
   titlebar-close-icon: none;
   font-size: {body}px;
+  border: 1px solid {t.border_strong};
 }}
 
 QDockWidget::title {{
+  background-color: {t.surface_elevated};
+  border: none;
+  border-bottom: 1px solid {t.border_strong};
+  padding: {px(4)} {px(6)};
+  text-align: left;
+}}
+
+QTreeWidget#groupTreePane {{
+  border: none;
+  border-radius: 0;
   background-color: {t.surface_panel};
-  border: 1px solid {t.border_subtle};
-  padding: {px(3)} {px(5)};
+  alternate-background-color: {t.surface_sunken};
 }}
 
 QTreeWidget, QTableWidget, QListWidget,
@@ -262,18 +312,40 @@ QTreeView, QTableView, QListView, QAbstractItemView {{
   alternate-background-color: {t.surface_sunken};
   color: {t.text_primary};
   border: 1px solid {t.border_subtle};
-  border-radius: {px(4)};
+  border-radius: 0;
   gridline-color: {t.border_subtle};
   font-size: {body}px;
   outline: 0;
+}}
+
+QTableView#entryListPane {{
+  border: 1px solid {t.border_strong};
+  border-right: none;
+  border-radius: 0;
+  background-color: {t.surface_panel};
+}}
+
+QAbstractItemView:focus {{
+  border: 1px solid {t.focus_ring};
+}}
+
+QTableView#entryListPane:focus {{
+  border: 1px solid {t.focus_ring};
+  border-right: none;
+}}
+
+QTreeWidget#groupTreePane:focus {{
+  border: none;
+  outline: 1px solid {t.focus_ring};
 }}
 
 QHeaderView::section {{
   background-color: {t.surface_elevated};
   color: {t.text_secondary};
   border: none;
-  border-bottom: 1px solid {t.border_subtle};
-  padding: {px(3)} {px(5)};
+  border-right: 1px solid {t.border_subtle};
+  border-bottom: 1px solid {t.border_strong};
+  padding: {px(4)} {px(5)};
   font-size: {caption}px;
 }}
 
@@ -297,21 +369,32 @@ QTreeView::item:hover, QTableView::item:hover, QListView::item:hover {{
 }}
 
 QSplitter::handle {{
-  background-color: {t.border_subtle};
+  background-color: {t.border_strong};
+}}
+
+QSplitter::handle:hover {{
+  background-color: {t.brand_primary};
 }}
 
 QSplitter::handle:horizontal {{
-  width: 1px;
+  width: 3px;
+  margin: 0;
 }}
 
 QSplitter::handle:vertical {{
-  height: 1px;
+  height: 3px;
+  margin: 0;
+}}
+
+QSplitter#workspaceSplitter::handle:horizontal {{
+  width: 3px;
+  background-color: {t.border_strong};
 }}
 
 QStatusBar {{
-  background-color: {t.surface_panel};
+  background-color: {t.surface_elevated};
   color: {t.text_secondary};
-  border-top: 1px solid {t.border_subtle};
+  border-top: 1px solid {t.border_strong};
   font-size: {caption}px;
   min-height: {px(18)};
   max-height: {px(22)};
@@ -395,7 +478,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
 QToolTip {{
   background-color: {t.surface_elevated};
   color: {t.text_primary};
-  border: 1px solid {t.border_subtle};
+  border: 1px solid {t.border_strong};
   padding: {px(3)} {px(5)};
   font-size: {caption}px;
 }}
@@ -419,9 +502,18 @@ QToolButton[cssClass="chip"]:hover {{
   border-color: {t.brand_primary};
 }}
 
+QWidget#workspaceRoot {{
+  background-color: {t.surface_app};
+}}
+
+QWidget#workspaceChrome {{
+  background-color: {t.surface_elevated};
+  border-bottom: 1px solid {t.border_strong};
+}}
+
 QWidget#unlockCard, QWidget#emptyCard {{
   background-color: {t.surface_elevated};
-  border: 1px solid {t.border_subtle};
+  border: 1px solid {t.border_strong};
   border-radius: {px(8)};
   max-width: {px(420)};
 }}
@@ -443,9 +535,19 @@ QLabel#emptySubtitle {{
 
 QLabel#auditSummaryStrip {{
   color: {t.text_secondary};
-  padding: {px(3)} {px(5)};
+  padding: {px(4)} {px(6)};
   background-color: {t.surface_sunken};
+  border: 1px solid {t.border_subtle};
   border-radius: {px(4)};
+  font-size: {caption}px;
+}}
+
+QLabel#entryKindBadge {{
+  background-color: {t.surface_sunken};
+  color: {t.text_secondary};
+  border: 1px solid {t.border_subtle};
+  border-radius: {px(4)};
+  padding: 1px {px(6)};
   font-size: {caption}px;
 }}
 
