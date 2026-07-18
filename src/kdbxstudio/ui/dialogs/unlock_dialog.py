@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kdbxstudio.i18n import tr
 from kdbxstudio.ui.icons import ICON_KEY, ICON_LOCK, ICON_OPEN, standard_icon
 from kdbxstudio.ui.theme import current_ui_scale
 
@@ -44,7 +45,9 @@ class UnlockDialog(QDialog):
         super().__init__(parent)
         self._path = path
         self._create_mode = create_mode
-        self.setWindowTitle("Create Database" if create_mode else "Unlock Database")
+        self.setWindowTitle(
+            tr("Create Database") if create_mode else tr("Unlock Database")
+        )
         self.setModal(True)
         scale = current_ui_scale()
         self.setMinimumWidth(scale.px(460))
@@ -52,7 +55,7 @@ class UnlockDialog(QDialog):
         self._path_edit = QLineEdit(str(path) if path else "")
         self._path_edit.setReadOnly(not create_mode and path is not None)
         _lead(self._path_edit, ICON_OPEN)
-        browse = QPushButton("Browse…")
+        browse = QPushButton(tr("Browse…"))
         browse.clicked.connect(self._browse_path)
 
         path_row = QHBoxLayout()
@@ -61,34 +64,34 @@ class UnlockDialog(QDialog):
 
         self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
-        self._password.setPlaceholderText("Master password")
+        self._password.setPlaceholderText(tr("Master password"))
         _lead(self._password, ICON_LOCK)
 
         self._confirm = QLineEdit()
         self._confirm.setEchoMode(QLineEdit.EchoMode.Password)
-        self._confirm.setPlaceholderText("Confirm password")
+        self._confirm.setPlaceholderText(tr("Confirm password"))
         self._confirm.setVisible(create_mode)
         _lead(self._confirm, ICON_LOCK)
 
         self._keyfile = QLineEdit()
-        self._keyfile.setPlaceholderText("Optional key file")
+        self._keyfile.setPlaceholderText(tr("Optional key file"))
         _lead(self._keyfile, ICON_KEY)
-        key_browse = QPushButton("…")
+        key_browse = QPushButton(tr("…"))
         key_browse.clicked.connect(self._browse_keyfile)
         key_row = QHBoxLayout()
         key_row.addWidget(self._keyfile)
         key_row.addWidget(key_browse)
 
-        self._show_password = QCheckBox("Show password")
+        self._show_password = QCheckBox(tr("Show password"))
         self._show_password.toggled.connect(self._toggle_password)
 
         form = QFormLayout()
         form.setSpacing(8)
-        form.addRow("Database", path_row)
-        form.addRow("Password", self._password)
+        form.addRow(tr("Database"), path_row)
+        form.addRow(tr("Password"), self._password)
         if create_mode:
-            form.addRow("Confirm", self._confirm)
-        form.addRow("Key file", key_row)
+            form.addRow(tr("Confirm"), self._confirm)
+        form.addRow(tr("Key file"), key_row)
         form.addRow("", self._show_password)
 
         buttons = QDialogButtonBox(
@@ -96,7 +99,7 @@ class UnlockDialog(QDialog):
         )
         ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
         if ok_btn is not None:
-            ok_btn.setText("Create" if create_mode else "Unlock")
+            ok_btn.setText(tr("Create") if create_mode else tr("Unlock"))
             ok_btn.setProperty("cssClass", "primary")
             ok_btn.setDefault(True)
             ok_btn.setMinimumWidth(scale.px(120))
@@ -147,16 +150,16 @@ class UnlockDialog(QDialog):
         if self._create_mode:
             path, _ = QFileDialog.getSaveFileName(
                 self,
-                "Create KDBX Database",
+                tr("Create KDBX Database"),
                 str(Path.home()),
-                "KeePass Database (*.kdbx)",
+                tr("KeePass Database (*.kdbx)"),
             )
         else:
             path, _ = QFileDialog.getOpenFileName(
                 self,
-                "Open KDBX Database",
+                tr("Open KDBX Database"),
                 str(Path.home()),
-                "KeePass Database (*.kdbx)",
+                tr("KeePass Database (*.kdbx)"),
             )
         if path:
             self._path_edit.setText(path)
@@ -164,28 +167,30 @@ class UnlockDialog(QDialog):
     def _browse_keyfile(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Key File",
+            tr("Select Key File"),
             str(Path.home()),
-            "All Files (*)",
+            tr("All Files (*)"),
         )
         if path:
             self._keyfile.setText(path)
 
     def _accept(self) -> None:
         if not self._path_edit.text().strip():
-            QMessageBox.warning(self, "Missing path", "Choose a database path.")
+            QMessageBox.warning(
+                self, tr("Missing path"), tr("Choose a database path.")
+            )
             return
         if self._create_mode:
             if not self._password.text() and not self._keyfile.text().strip():
                 QMessageBox.warning(
                     self,
-                    "Missing credentials",
-                    "Provide a password and/or a key file.",
+                    tr("Missing credentials"),
+                    tr("Provide a password and/or a key file."),
                 )
                 return
             if self._password.text() != self._confirm.text():
                 QMessageBox.warning(
-                    self, "Password mismatch", "Passwords do not match."
+                    self, tr("Password mismatch"), tr("Passwords do not match.")
                 )
                 return
         self.accept()

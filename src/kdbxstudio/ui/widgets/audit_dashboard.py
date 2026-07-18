@@ -1,11 +1,14 @@
-"""Password Health Dashboard dock widget."""
+"""Password Health Dashboard widget."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QMenu,
     QProgressBar,
     QPushButton,
     QTreeWidget,
@@ -15,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.application.audit_engine import AuditReport
+from kdbxstudio.i18n import tr, trf
 
 
 class AuditDashboardWidget(QWidget):
@@ -25,7 +29,7 @@ class AuditDashboardWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._summary = QLabel("No database open")
+        self._summary = QLabel(tr("No database open"))
         self._summary.setWordWrap(True)
         self._strip = QLabel("")
         self._strip.setObjectName("auditSummaryStrip")
@@ -35,8 +39,8 @@ class AuditDashboardWidget(QWidget):
         self._health_bar.setRange(0, 100)
         self._health_bar.setValue(0)
         self._health_bar.setTextVisible(True)
-        self._health_bar.setMaximumHeight(20)
-        self._health_bar.setFormat("Health: %p%")
+        self._health_bar.setMinimumHeight(22)
+        self._health_bar.setFormat(tr("Health: %p%"))
         self._health_bar.setVisible(False)
 
         self._stats_label = QLabel("")
@@ -49,19 +53,36 @@ class AuditDashboardWidget(QWidget):
         self._expiry_warning.setVisible(False)
 
         self._tree = QTreeWidget()
-        self._tree.setHeaderLabels(["Severity", "Finding"])
+        self._tree.setHeaderLabels([tr("Severity"), tr("Finding")])
         self._tree.setRootIsDecorated(False)
+        self._tree.setAlternatingRowColors(True)
+        self._tree.setSortingEnabled(True)
+        self._tree.setSelectionMode(
+            QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self._tree.setUniformRowHeights(True)
+        header = self._tree.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._tree.itemDoubleClicked.connect(self._on_item)
+        self._tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._tree.customContextMenuRequested.connect(self._show_tree_menu)
 
-        refresh = QPushButton("Refresh audit")
-        refresh.setAccessibleName("Refresh password audit")
+        refresh = QPushButton(tr("Refresh audit"))
+        refresh.setAccessibleName(tr("Refresh password audit"))
         refresh.clicked.connect(self.refresh_requested.emit)
+
+        open_btn = QPushButton(tr("Open entry"))
+        open_btn.setToolTip(tr("Open the selected finding's entry"))
+        open_btn.clicked.connect(self._open_current)
 
         top = QHBoxLayout()
         top.addWidget(self._summary, stretch=1)
+        top.addWidget(open_btn)
         top.addWidget(refresh)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(top)
         layout.addWidget(self._strip)
         layout.addWidget(self._health_bar)
@@ -70,7 +91,7 @@ class AuditDashboardWidget(QWidget):
         layout.addWidget(self._tree, stretch=1)
 
     def clear(self) -> None:
-        self._summary.setText("No database open")
+        self._summary.setText(tr("No database open"))
         self._strip.clear()
         self._strip.setVisible(False)
         self._health_bar.setVisible(False)
@@ -88,10 +109,15 @@ class AuditDashboardWidget(QWidget):
             - report.low_entropy,
         )
         self._strip.setText(
-            f"Critical: {counts['critical']}  ·  "
-            f"Warning: {counts['warning']}  ·  "
-            f"Info: {counts['info']}  ·  "
-            f"Healthy: {ok}"
+            tr(
+                "Critical: {critical}  ·  Warning: {warning}  ·  "
+                "Info: {info}  ·  Healthy: {ok}"
+            ).format(
+                critical=counts["critical"],
+                warning=counts["warning"],
+                info=counts["info"],
+                ok=ok,
+            )
         )
         self._strip.setVisible(True)
 
@@ -113,47 +139,73 @@ class AuditDashboardWidget(QWidget):
         if report.expired > 0 or report.expiring_soon > 0:
             parts = []
             if report.expired > 0:
-                parts.append(f"<b>{report.expired}</b> expired")
+                parts.append(
+                    trf("<b>{n}</b> expired", n=report.expired)
+                )
             if report.expiring_soon > 0:
-                parts.append(f"<b>{report.expiring_soon}</b> expiring soon")
+                parts.append(
+                    trf("<b>{n}</b> expiring soon", n=report.expiring_soon)
+                )
             self._expiry_warning.setText(
-                f"⚠ {' and '.join(parts)} entry/entries need attention"
+                tr("⚠ {parts} entry/entries need attention").format(
+                    parts=tr(" and ").join(parts)
+                )
             )
             self._expiry_warning.setVisible(True)
         else:
             self._expiry_warning.setVisible(False)
 
         stats_lines = [
-            f"<b>{report.total_entries}</b> entries across "
-            f"<b>{report.total_groups}</b> groups",
+            trf(
+                "<b>{entries}</b> entries across <b>{groups}</b> groups",
+                entries=report.total_entries,
+                groups=report.total_groups,
+            ),
         ]
         if report.entries_with_url > 0:
             stats_lines.append(
-                f"🌐 {report.entries_with_url} with URLs"
+                trf("🌐 {n} with URLs", n=report.entries_with_url)
             )
         if report.entries_with_otp > 0:
-            stats_lines.append(f"🔑 {report.entries_with_otp} with TOTP")
+            stats_lines.append(
+                trf("🔑 {n} with TOTP", n=report.entries_with_otp)
+            )
         if report.entries_with_tags > 0:
-            stats_lines.append(f"🏷 {report.entries_with_tags} with tags")
+            stats_lines.append(
+                trf("🏷 {n} with tags", n=report.entries_with_tags)
+            )
         if report.entries_with_attachments > 0:
             stats_lines.append(
-                f"📎 {report.entries_with_attachments} with attachments"
+                trf(
+                    "📎 {n} with attachments",
+                    n=report.entries_with_attachments,
+                )
             )
         if report.entries_with_custom_fields > 0:
             stats_lines.append(
-                f"📋 {report.entries_with_custom_fields} with custom fields"
+                trf(
+                    "📋 {n} with custom fields",
+                    n=report.entries_with_custom_fields,
+                )
             )
         self._stats_label.setText(" · ".join(stats_lines))
         self._stats_label.setVisible(True)
 
         self._summary.setText(
-            f"Entries: {report.total_entries} · "
-            f"Empty: {report.empty_passwords} · "
-            f"Weak: {report.weak_passwords} · "
-            f"Low entropy: {report.low_entropy} · "
-            f"Duplicates: {report.duplicates} · "
-            f"Findings: {len(report.findings)}"
+            tr(
+                "Entries: {total} · Empty: {empty} · Weak: {weak} · "
+                "Low entropy: {entropy} · Duplicates: {dupes} · "
+                "Findings: {findings}"
+            ).format(
+                total=report.total_entries,
+                empty=report.empty_passwords,
+                weak=report.weak_passwords,
+                entropy=report.low_entropy,
+                dupes=report.duplicates,
+                findings=len(report.findings),
+            )
         )
+        self._tree.setSortingEnabled(False)
         self._tree.clear()
         severity_order = {"critical": 0, "warning": 1, "info": 2}
         sorted_findings = sorted(
@@ -161,18 +213,41 @@ class AuditDashboardWidget(QWidget):
             key=lambda f: severity_order.get(f.severity, 3),
         )
         for finding in sorted_findings:
-            item = QTreeWidgetItem([finding.severity, finding.message])
+            item = QTreeWidgetItem(
+                [tr(finding.severity), finding.message]
+            )
             if finding.entry_uuid:
                 item.setData(0, int(Qt.ItemDataRole.UserRole), finding.entry_uuid)
-            if finding.severity == "critical":
-                item.setForeground(
-                    0,
-                    self.palette().color(self.foregroundRole()),
-                )
+            item.setToolTip(1, finding.message)
             self._tree.addTopLevelItem(item)
+        self._tree.setSortingEnabled(True)
+        self._tree.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self._tree.resizeColumnToContents(0)
+
+    def _open_current(self) -> None:
+        item = self._tree.currentItem()
+        if item is not None:
+            self._on_item(item, 0)
 
     def _on_item(self, item: QTreeWidgetItem, _column: int) -> None:
         uuid = item.data(0, int(Qt.ItemDataRole.UserRole))
         if uuid:
             self.finding_activated.emit(str(uuid))
+
+    def _show_tree_menu(self, pos) -> None:
+        item = self._tree.itemAt(pos)
+        if item is not None:
+            self._tree.setCurrentItem(item)
+        menu = QMenu(self)
+        open_entry = menu.addAction(tr("Open entry"))
+        uuid = None
+        if item is not None:
+            uuid = item.data(0, int(Qt.ItemDataRole.UserRole))
+        open_entry.setEnabled(bool(uuid))
+        if uuid:
+            open_entry.triggered.connect(
+                lambda: self.finding_activated.emit(str(uuid))
+            )
+        menu.addSeparator()
+        menu.addAction(tr("Refresh audit"), self.refresh_requested.emit)
+        menu.exec(self._tree.mapToGlobal(pos))

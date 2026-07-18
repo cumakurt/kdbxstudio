@@ -23,6 +23,7 @@ class SecuritySettings:
     autotype_sequence: str = "{USERNAME}{TAB}{PASSWORD}{ENTER}"
     check_updates_on_start: bool = True
     start_minimized_to_tray: bool = False
+    language: str = "en"  # en | tr
 
     def with_updates(self, **kwargs: object) -> SecuritySettings:
         return replace(self, **kwargs)  # type: ignore[arg-type]

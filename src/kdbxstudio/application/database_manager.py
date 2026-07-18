@@ -319,6 +319,11 @@ class DatabaseManager:
     ) -> list[AttachmentView]:
         return self._get(session_id).list_attachments(entry_uuid)
 
+    def attachment_count(
+        self, entry_uuid: str, session_id: str | None = None
+    ) -> int:
+        return self._get(session_id).attachment_count(entry_uuid)
+
     def add_attachment(
         self,
         entry_uuid: str,
@@ -353,6 +358,25 @@ class DatabaseManager:
         self._get(session_id).delete_entry(entry_uuid, permanent=permanent)
         self._invalidate(session_id or self._active_id)
         self._notify()
+
+    def delete_entries(
+        self,
+        entry_uuids: list[str],
+        session_id: str | None = None,
+        *,
+        permanent: bool = False,
+    ) -> int:
+        """Delete many entries with a single UI notify."""
+        if not entry_uuids:
+            return 0
+        db = self._get(session_id)
+        removed = 0
+        for entry_uuid in entry_uuids:
+            db.delete_entry(entry_uuid, permanent=permanent)
+            removed += 1
+        self._invalidate(session_id or self._active_id)
+        self._notify()
+        return removed
 
     def empty_recycle_bin(self, session_id: str | None = None) -> int:
         count = self._get(session_id).empty_recycle_bin()

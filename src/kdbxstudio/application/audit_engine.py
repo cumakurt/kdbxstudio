@@ -131,8 +131,7 @@ class AuditEngine:
             if entry.otp:
                 with_otp += 1
             try:
-                attachments = self._dbm.list_attachments(entry.uuid)
-                if attachments:
+                if self._dbm.attachment_count(entry.uuid) > 0:
                     with_attachments += 1
             except Exception:
                 pass

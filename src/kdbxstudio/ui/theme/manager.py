@@ -11,6 +11,7 @@ from kdbxstudio.ui.theme.tokens import ThemeMode, ThemeTokens, tokens_for
 
 _current_scale: UiScale = UiScale(1.0)
 _current_mode: ThemeMode = ThemeMode.DARK
+_theme_applied: bool = False
 
 
 def current_ui_scale() -> UiScale:
@@ -50,10 +51,17 @@ def apply_theme(
     scale: UiScale | None = None,
     screen: QScreen | None = None,
 ) -> ThemeTokens:
-    global _current_scale, _current_mode
+    global _current_scale, _current_mode, _theme_applied
     resolved = resolve_mode(mode)
-    _current_mode = resolved
     ui_scale = scale if scale is not None else detect_ui_scale(screen)
+    if (
+        _theme_applied
+        and resolved == _current_mode
+        and abs(ui_scale.factor - _current_scale.factor) < 0.01
+    ):
+        return tokens_for(resolved)
+    _theme_applied = True
+    _current_mode = resolved
     _current_scale = ui_scale
     tokens = tokens_for(resolved)
     app.setStyleSheet(build_stylesheet(tokens, ui_scale))

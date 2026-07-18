@@ -102,15 +102,15 @@ Prefer **Inter** when installed; fall back to `Noto Sans`, then `Sans Serif`.
 ├──────────┬────────────────────┬─────────────────────────────┤
 │ Groups   │ Entry list         │ Entry tabs                  │
 │ (dock)   │ + filter bar       │ Entry|TOTP|History|…        │
-├──────────┴────────────────────┴─────────────────────────────┤
-│ Password Health (dock)                                      │
-└─────────────────────────────────────────────────────────────┘
+└──────────┴────────────────────┴─────────────────────────────┘
+
+Password Health → Tools menu → separate resizable window
 ```
 
 - Min window: 1024×640
 - Groups dock default width: 240
 - Entry list flex 2, detail flex 3
-- Health dock default height: 180
+- Password Health dialog default size: 880×600
 
 ---
 
@@ -150,8 +150,9 @@ Prefer **Inter** when installed; fall back to `Noto Sans`, then `Sans Serif`.
 
 ### 8.4 Password Health
 
-- Summary strip + findings list
-- Double-click → focus entry
+- Tools → Password Health… opens a dedicated resizable window
+- Summary strip + sortable findings list
+- Double-click / Open entry → focus entry in main window
 
 ### 8.5 Plugin Center
 
@@ -164,7 +165,7 @@ Prefer **Inter** when installed; fall back to `Noto Sans`, then `Sans Serif`.
 
 1. **First run** → Create DB → Add entry from template → Copy password  
 2. **Daily unlock** → Recent → Unlock → Search / Ctrl+K → Copy  
-3. **Audit** → Health dock refresh → Jump to weak/duplicate → Fix → Save  
+3. **Audit** → Tools → Password Health… → Jump to weak/duplicate → Fix → Save  
 4. **Lock** → Idle / Tools → Lock → Clipboard clear  
 
 ---

@@ -390,10 +390,11 @@ class KdbxDatabase:
             entry.otp = otp
         if tags is not None:
             entry.tags = list(tags)
-        if expires is not None:
-            entry.expires = expires
         if expiry_time is not None:
             entry.expiry_time = expiry_time
+        if expires is not None:
+            entry.expires = expires
+        elif expiry_time is not None:
             entry.expires = True
         if custom_properties is not None:
             existing = dict(entry.custom_properties or {})
@@ -548,6 +549,11 @@ class KdbxDatabase:
                 )
             )
         return result
+
+    def attachment_count(self, entry_uuid: str) -> int:
+        """Count attachments without copying binary payloads into memory."""
+        entry = self._find_entry(entry_uuid)
+        return len(entry.attachments or [])
 
     def add_attachment(
         self, entry_uuid: str, filename: str, data: bytes

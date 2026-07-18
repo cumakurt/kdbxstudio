@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.application.search_engine import EntryFilter
+from kdbxstudio.i18n import tr
 
 
 def _chip(label: str) -> QToolButton:
@@ -33,23 +34,23 @@ class FilterBarWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._group = QLineEdit()
-        self._group.setPlaceholderText("Group contains…")
-        self._group.setAccessibleName("Group path filter")
+        self._group.setPlaceholderText(tr("Group contains…"))
+        self._group.setAccessibleName(tr("Group path filter"))
         self._group.returnPressed.connect(self._emit)
 
         self._tag = QLineEdit()
-        self._tag.setPlaceholderText("Tag…")
-        self._tag.setAccessibleName("Tag filter")
+        self._tag.setPlaceholderText(tr("Tag…"))
+        self._tag.setAccessibleName(tr("Tag filter"))
         self._tag.returnPressed.connect(self._emit)
 
-        self._has_url = _chip("URL")
-        self._has_custom = _chip("Custom/OTP")
-        self._weak = _chip("Weak")
-        self._empty = _chip("Empty")
-        self._dupes = _chip("Dupes")
-        self._expired = _chip("Expired")
-        self._expiring = _chip("Expiring")
-        self._recycle = _chip("Recycle")
+        self._has_url = _chip(tr("URL"))
+        self._has_custom = _chip(tr("Custom/OTP"))
+        self._weak = _chip(tr("Weak"))
+        self._empty = _chip(tr("Empty"))
+        self._dupes = _chip(tr("Dupes"))
+        self._expired = _chip(tr("Expired"))
+        self._expiring = _chip(tr("Expiring"))
+        self._recycle = _chip(tr("Recycle"))
 
         self._chips = (
             self._has_url,
@@ -64,14 +65,14 @@ class FilterBarWidget(QWidget):
         for chip, tip in zip(
             self._chips,
             (
-                "Has URL",
-                "Has custom fields or OTP",
-                "Weak passwords",
-                "Empty passwords",
-                "Duplicates",
-                "Past expiry date",
-                "Expiring within 30 days",
-                "Recycle Bin only",
+                tr("Has URL"),
+                tr("Has custom fields or OTP"),
+                tr("Weak passwords"),
+                tr("Empty passwords"),
+                tr("Duplicates"),
+                tr("Past expiry date"),
+                tr("Expiring within 30 days"),
+                tr("Recycle Bin only"),
             ),
             strict=True,
         ):
@@ -79,15 +80,15 @@ class FilterBarWidget(QWidget):
             chip.setAccessibleName(tip)
             chip.toggled.connect(self._emit)
 
-        apply_btn = QPushButton("Apply")
+        apply_btn = QPushButton(tr("Apply"))
         apply_btn.clicked.connect(self._emit)
-        clear_btn = QPushButton("Clear")
+        clear_btn = QPushButton(tr("Clear"))
         clear_btn.clicked.connect(self.clear)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        layout.addWidget(QLabel("Filter"))
+        layout.addWidget(QLabel(tr("Filter")))
         layout.addWidget(self._group, stretch=1)
         layout.addWidget(self._tag)
         for chip in self._chips:

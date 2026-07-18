@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kdbxstudio.i18n import language_choices, tr
 from kdbxstudio.security.settings import SecuritySettings
 
 
@@ -25,77 +26,86 @@ class SecuritySettingsDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Settings")
+        self.setWindowTitle(tr("Settings"))
         self.setModal(True)
         self._original = settings
 
         self._clipboard = QSpinBox()
         self._clipboard.setRange(5, 300)
-        self._clipboard.setSuffix(" s")
+        self._clipboard.setSuffix(tr(" s"))
         self._clipboard.setValue(max(1, settings.clipboard_timeout_ms // 1000))
 
         self._autolock = QSpinBox()
         self._autolock.setRange(1, 180)
-        self._autolock.setSuffix(" min")
+        self._autolock.setSuffix(tr(" min"))
         self._autolock.setValue(max(1, settings.auto_lock_timeout_ms // 60_000))
 
-        self._autolock_enabled = QCheckBox("Enable idle auto-lock")
+        self._autolock_enabled = QCheckBox(tr("Enable idle auto-lock"))
         self._autolock_enabled.setChecked(settings.auto_lock_enabled)
 
-        self._clear_on_lock = QCheckBox("Clear clipboard on lock")
+        self._clear_on_lock = QCheckBox(tr("Clear clipboard on lock"))
         self._clear_on_lock.setChecked(settings.clear_clipboard_on_lock)
 
-        self._minimize_on_lock = QCheckBox("Minimize window on lock")
+        self._minimize_on_lock = QCheckBox(tr("Minimize window on lock"))
         self._minimize_on_lock.setChecked(settings.minimize_on_lock)
 
         self._hibp = QCheckBox(
-            "Check passwords against Have I Been Pwned (k-anonymity)"
+            tr("Check passwords against Have I Been Pwned (k-anonymity)")
         )
         self._hibp.setChecked(settings.hibp_enabled)
 
-        self._updates = QCheckBox("Check for updates on startup")
+        self._updates = QCheckBox(tr("Check for updates on startup"))
         self._updates.setChecked(settings.check_updates_on_start)
 
-        self._tray = QCheckBox("Start minimized to tray")
+        self._tray = QCheckBox(tr("Start minimized to tray"))
         self._tray.setChecked(settings.start_minimized_to_tray)
 
+        self._language = QComboBox()
+        for code, label in language_choices():
+            self._language.addItem(label, code)
+        lang_index = self._language.findData(settings.language)
+        self._language.setCurrentIndex(lang_index if lang_index >= 0 else 0)
+
         self._theme = QComboBox()
-        self._theme.addItem("Dark", "dark")
-        self._theme.addItem("Light", "light")
-        self._theme.addItem("System", "system")
+        self._theme.addItem(tr("Dark"), "dark")
+        self._theme.addItem(tr("Light"), "light")
+        self._theme.addItem(tr("System"), "system")
         index = self._theme.findData(settings.theme)
         self._theme.setCurrentIndex(index if index >= 0 else 0)
 
         self._density = QComboBox()
-        self._density.addItem("Compact", "compact")
-        self._density.addItem("Comfortable", "comfortable")
+        self._density.addItem(tr("Compact"), "compact")
+        self._density.addItem(tr("Comfortable"), "comfortable")
         d_index = self._density.findData(settings.ui_density)
         self._density.setCurrentIndex(d_index if d_index >= 0 else 0)
 
-        self._read_only = QCheckBox("Open databases in read-only mode")
+        self._read_only = QCheckBox(tr("Open databases in read-only mode"))
         self._read_only.setChecked(settings.read_only)
 
         self._autotype = QLineEdit(settings.autotype_sequence)
         self._autotype.setPlaceholderText("{USERNAME}{TAB}{PASSWORD}{ENTER}")
 
         form = QFormLayout()
-        form.addRow("Clipboard clear after", self._clipboard)
-        form.addRow("Auto-lock after", self._autolock)
+        form.addRow(tr("Language"), self._language)
+        form.addRow(tr("Clipboard clear after"), self._clipboard)
+        form.addRow(tr("Auto-lock after"), self._autolock)
         form.addRow("", self._autolock_enabled)
         form.addRow("", self._clear_on_lock)
         form.addRow("", self._minimize_on_lock)
         form.addRow("", self._hibp)
         form.addRow("", self._updates)
         form.addRow("", self._tray)
-        form.addRow("Theme", self._theme)
-        form.addRow("UI density", self._density)
-        form.addRow("Auto-Type sequence", self._autotype)
+        form.addRow(tr("Theme"), self._theme)
+        form.addRow(tr("UI density"), self._density)
+        form.addRow(tr("Auto-Type sequence"), self._autotype)
         form.addRow("", self._read_only)
         form.addRow(
             "",
             QLabel(
-                "Hardware keys (YubiKey challenge-response) are not supported yet "
-                "by the underlying KeePass library."
+                tr(
+                    "Hardware keys (YubiKey challenge-response) are not supported yet "
+                    "by the underlying KeePass library."
+                )
             ),
         )
 
@@ -126,4 +136,5 @@ class SecuritySettingsDialog(QDialog):
             or SecuritySettings.autotype_sequence,
             check_updates_on_start=self._updates.isChecked(),
             start_minimized_to_tray=self._tray.isChecked(),
+            language=str(self._language.currentData() or "en"),
         )

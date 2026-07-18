@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDragMoveEvent, QDropEvent
 from PySide6.QtWidgets import QAbstractItemView, QTreeWidget, QTreeWidgetItem
 
 from kdbxstudio.core.database import GroupView
+from kdbxstudio.i18n import tr
 from kdbxstudio.ui.widgets.entry_list import ENTRY_MIME
 
 
@@ -18,12 +19,21 @@ class GroupTreeWidget(QTreeWidget):
 
     def __init__(self, parent: QTreeWidget | None = None) -> None:
         super().__init__(parent)
-        self.setHeaderLabel("Groups")
+        self.setHeaderLabel(tr("Groups"))
         self.setUniformRowHeights(True)
         # Accept entry drops only — do not rearrange groups in the tree.
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.itemSelectionChanged.connect(self._on_selection)
+
+    def select_at(self, pos: QPoint) -> bool:
+        """Select the group item under *pos*."""
+        item = self.itemAt(pos)
+        if item is None:
+            return False
+        self.setCurrentItem(item)
+        return True
 
     def set_groups(self, groups: list[GroupView], root_uuid: str) -> None:
         self.clear()
@@ -32,7 +42,7 @@ class GroupTreeWidget(QTreeWidget):
 
         # Build items without parents first
         for group in groups:
-            label = group.name or "(unnamed)"
+            label = group.name or tr("(unnamed)")
             if group.is_recycle_bin:
                 label = f"[Bin] {label}"
             item = QTreeWidgetItem([label])

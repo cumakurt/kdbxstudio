@@ -89,9 +89,9 @@ QMenu::separator {{
 QToolBar {{
   background-color: {t.surface_panel};
   border-bottom: 1px solid {t.border_subtle};
-  spacing: {px(2)};
-  padding: {px(2)};
-  min-height: {px(28)};
+  spacing: {px(4)};
+  padding: {px(4)};
+  min-height: {px(36)};
 }}
 
 QToolButton, QPushButton {{

@@ -78,20 +78,24 @@ search, command palette, certificates tab, password generator, and a sample
 
 ### Workspace
 
-- Dockable **Groups** tree and **Password Health** panel
+- Dockable **Groups** tree
+- **Password Health** window (Tools → Password Health…) with severity findings and open-entry actions
 - Entry list + detail split view (resizable), optional **favicon** icons (async fetch)
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - **Expiry countdown** — visual indicator showing days until entry expires
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
+- System **tray** (show / lock / quit) — closing the window quits the app; tray icon can still show/hide or lock
 - Compact / comfortable density, light / dark / system themes
-- System **tray** (show / lock / quit), minimize-on-lock
+- **UI language**: English (default) or Turkish — Tools → Settings… → Language
 
 ### Entries & secrets
 
 - Title, username, password, URL, notes, custom fields, **tags**, **expiry**
+- **New Entry** dialog collects all common fields (including TOTP) and saves in one step
 - **Password strength meter** — real-time visual feedback (Very Weak → Strong)
 - **Auto-Type** on Linux (`xdotool` / `ydotool` / `wtype`) with configurable sequence
 - **Move entry** between groups (dialog or drag entry onto a group in the tree)
+- **Multi-select delete** — select one or many entries (`Ctrl`/`Shift`+click, `Ctrl+A`); `Delete` → Recycle Bin, `Shift+Delete` → permanent
 - **Contextual icons**: URL / title / PEM / template type → login, email, API, SSH, bank, Wi‑Fi, …
 - Field-leading icons; action icons for Show / Copy / Generate / Save
 - **Markdown / JSON** notes preview (valid HTML with `<ul>` lists)
@@ -241,7 +245,7 @@ python -m kdbxstudio
 1. Open a recent vault or use File → Open.
 2. Browse **Groups**, search with the search box (`Ctrl+F`), or Command Palette (`Ctrl+K`).
 3. Edit the entry; Save entry then File → Save to persist the KDBX file.
-4. Check **Password Health** for weak / duplicate / empty secrets.
+4. Open **Tools → Password Health…** for weak / duplicate / empty secrets.
 5. Lock with Tools → Lock All Databases (`Ctrl+L`) when stepping away.
 
 ### Sample vault (automated)
@@ -272,7 +276,9 @@ Demo file written to `artifacts/visual/sample.kdbx` (password: `demo-pass-123`).
 | `Ctrl+Shift+U` | Quick copy URL |
 | `Ctrl+T` | Quick copy TOTP code |
 | `Ctrl+Shift+V` / `Ctrl+Alt+A` | Auto-Type selected entry |
-| `Shift+Delete` | Move selected entry to Recycle Bin |
+| `Delete` | Move selected entr(y/ies) to Recycle Bin |
+| `Shift+Delete` | Permanently delete selected entr(y/ies) |
+| `Ctrl+A` | Select all entries in the list |
 | `F2` | Rename selected group |
 | `Ctrl+Q` | Quit (standard) |
 
@@ -291,6 +297,7 @@ Notable settings:
 | Key | Meaning | Default |
 |-----|---------|---------|
 | `theme` | `dark` \| `light` \| `system` | `dark` |
+| `language` | UI language: `en` (default) \| `tr` | `en` |
 | `ui_density` | `compact` \| `comfortable` | `compact` |
 | `clipboard_timeout_ms` | Clipboard auto-clear delay (`0` = never clear; otherwise min 1000) | `15000` |
 | `auto_lock_timeout_ms` | Idle lock delay (min: 0 = disabled) | `300000` |

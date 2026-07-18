@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kdbxstudio.i18n import tr
+
 
 class EmptyWorkspaceWidget(QWidget):
     """First-run / locked overview: open, create, recent databases."""
@@ -28,22 +30,22 @@ class EmptyWorkspaceWidget(QWidget):
         super().__init__(parent)
         self.setObjectName("emptyWorkspace")
 
-        title = QLabel("KDBXStudio")
+        title = QLabel(tr("KDBXStudio"))
         title.setObjectName("emptyBrand")
 
-        subtitle = QLabel("Open or create a database to get started.")
+        subtitle = QLabel(tr("Open or create a database to get started."))
         subtitle.setObjectName("emptySubtitle")
         subtitle.setWordWrap(True)
 
-        open_btn = QPushButton("Open Database…")
+        open_btn = QPushButton(tr("Open Database…"))
         open_btn.setProperty("cssClass", "primary")
         open_btn.setDefault(True)
         open_btn.clicked.connect(self.open_requested.emit)
 
-        create_btn = QPushButton("Create Database…")
+        create_btn = QPushButton(tr("Create Database…"))
         create_btn.clicked.connect(self.create_requested.emit)
 
-        palette_btn = QPushButton("Command Palette (Ctrl+K)")
+        palette_btn = QPushButton(tr("Command Palette (Ctrl+K)"))
         palette_btn.clicked.connect(self.palette_requested.emit)
 
         actions = QHBoxLayout()
@@ -53,10 +55,10 @@ class EmptyWorkspaceWidget(QWidget):
         actions.addWidget(palette_btn)
         actions.addStretch()
 
-        recent_label = QLabel("Recent databases")
+        recent_label = QLabel(tr("Recent databases"))
         recent_label.setStyleSheet("font-weight: 600;")
         self._recent = QListWidget()
-        self._recent.setAccessibleName("Recent databases")
+        self._recent.setAccessibleName(tr("Recent databases"))
         self._recent.setMaximumHeight(140)
         self._recent.itemActivated.connect(self._on_recent)
 
@@ -83,7 +85,7 @@ class EmptyWorkspaceWidget(QWidget):
         self._paths = list(paths)
         self._recent.clear()
         if not paths:
-            item = QListWidgetItem("No recent databases")
+            item = QListWidgetItem(tr("No recent databases"))
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self._recent.addItem(item)
             return

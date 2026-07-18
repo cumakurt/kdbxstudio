@@ -9,11 +9,17 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
+_CACHE_DIR: Path | None = None
+_FAVICON_HIT: dict[str, Path | None] = {}
+
 
 def cache_dir() -> Path:
-    root = Path.home() / ".cache" / "kdbxstudio" / "favicons"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+    global _CACHE_DIR
+    if _CACHE_DIR is None:
+        root = Path.home() / ".cache" / "kdbxstudio" / "favicons"
+        root.mkdir(parents=True, exist_ok=True)
+        _CACHE_DIR = root
+    return _CACHE_DIR
 
 
 def normalize_host(url: str) -> str | None:
@@ -41,8 +47,12 @@ def cached_favicon(url: str) -> Path | None:
     host = normalize_host(url)
     if host is None:
         return None
+    if host in _FAVICON_HIT:
+        return _FAVICON_HIT[host]
     path = favicon_path_for_host(host)
-    return path if path.is_file() and path.stat().st_size > 0 else None
+    hit = path if path.is_file() and path.stat().st_size > 0 else None
+    _FAVICON_HIT[host] = hit
+    return hit
 
 
 def fetch_favicon(
@@ -68,4 +78,5 @@ def fetch_favicon(
     if not data or len(data) > max_bytes:
         return None
     dest.write_bytes(data)
+    _FAVICON_HIT[host] = dest
     return dest

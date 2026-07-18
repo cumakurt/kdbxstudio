@@ -9,15 +9,18 @@ from datetime import UTC, datetime
 from PySide6.QtCore import QDate, QSize, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QApplication,
+    QButtonGroup,
     QDateEdit,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QProgressBar,
     QPushButton,
+    QRadioButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -25,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.core.database import EntryView
+from kdbxstudio.i18n import tr, trf
 from kdbxstudio.ui.icons.entry_type import (
     EntryKind,
     FieldKind,
@@ -44,7 +48,7 @@ def _leading_icon(edit: QLineEdit, icon_kind: FieldKind) -> QAction:
 def _estimate_password_strength(password: str) -> tuple[int, str]:
     """Return (score 0-100, label) for a password."""
     if not password:
-        return 0, "Empty"
+        return 0, tr("Empty")
     score = 0
     length = len(password)
     if length >= 8:
@@ -75,15 +79,15 @@ def _estimate_password_strength(password: str) -> tuple[int, str]:
         score += 5
     score = min(100, score)
     if score >= 80:
-        label = "Strong"
+        label = tr("Strong")
     elif score >= 60:
-        label = "Good"
+        label = tr("Good")
     elif score >= 40:
-        label = "Fair"
+        label = tr("Fair")
     elif score >= 20:
-        label = "Weak"
+        label = tr("Weak")
     else:
-        label = "Very Weak"
+        label = tr("Very Weak")
     return score, label
 
 
@@ -130,21 +134,29 @@ class EntryDetailWidget(QWidget):
         self._url = QLineEdit()
         self._notes = NotesPreviewWidget()
         self._tags = QLineEdit()
-        self._tags.setPlaceholderText("Comma-separated tags")
-        self._expires = QCheckBox("Expires")
+        self._tags.setPlaceholderText(tr("Comma-separated tags"))
+        self._never_expires = QRadioButton(tr("Never expires"))
+        self._has_expiry = QRadioButton(tr("Expires on"))
+        self._never_expires.setChecked(True)
+        self._expiry_mode = QButtonGroup(self)
+        self._expiry_mode.addButton(self._never_expires)
+        self._expiry_mode.addButton(self._has_expiry)
+
         self._expiry_date = QDateEdit()
         self._expiry_date.setCalendarPopup(True)
         self._expiry_date.setDisplayFormat("yyyy-MM-dd")
         self._expiry_date.setDate(QDate.currentDate().addYears(1))
+        self._expiry_date.setMinimumDate(QDate(1970, 1, 1))
         self._expiry_date.setEnabled(False)
-        self._expires.toggled.connect(self._expiry_date.setEnabled)
+        self._has_expiry.toggled.connect(self._on_expiry_mode_toggled)
 
         self._expiry_countdown = QLabel("")
         self._expiry_countdown.setWordWrap(True)
         self._expiry_countdown.setVisible(False)
 
         expiry_row = QHBoxLayout()
-        expiry_row.addWidget(self._expires)
+        expiry_row.addWidget(self._never_expires)
+        expiry_row.addWidget(self._has_expiry)
         expiry_row.addWidget(self._expiry_date, stretch=1)
 
         self._title_icon = _leading_icon(self._title, FieldKind.TITLE)
@@ -158,25 +170,27 @@ class EntryDetailWidget(QWidget):
         self._password.textChanged.connect(self._update_strength)
 
         self._custom = QTableWidget(0, 2)
-        self._custom.setHorizontalHeaderLabels(["Key", "Value"])
+        self._custom.setHorizontalHeaderLabels([tr("Key"), tr("Value")])
         self._custom.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
         self._custom.verticalHeader().setVisible(False)
+        self._custom.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._custom.customContextMenuRequested.connect(self._show_custom_menu)
 
-        copy_btn = QPushButton("Copy")
+        copy_btn = QPushButton(tr("Copy"))
         copy_btn.setIcon(field_icon(FieldKind.COPY))
         copy_btn.setIconSize(QSize(14, 14))
-        copy_btn.setToolTip("Copy password")
+        copy_btn.setToolTip(tr("Copy password"))
         copy_btn.clicked.connect(self._copy_password)
 
-        self._show_btn = QPushButton("Show")
+        self._show_btn = QPushButton(tr("Show"))
         self._show_btn.setIcon(field_icon(FieldKind.SHOW))
         self._show_btn.setIconSize(QSize(14, 14))
         self._show_btn.setCheckable(True)
         self._show_btn.toggled.connect(self._toggle_password)
 
-        gen_btn = QPushButton("Generate")
+        gen_btn = QPushButton(tr("Generate"))
         gen_btn.setIcon(field_icon(FieldKind.GENERATE))
         gen_btn.setIconSize(QSize(14, 14))
         gen_btn.clicked.connect(self.generate_password_requested.emit)
@@ -197,11 +211,11 @@ class EntryDetailWidget(QWidget):
         title_row.addWidget(self._kind_badge)
         title_row.addWidget(self._title, stretch=1)
 
-        add_prop = QPushButton("Add field")
+        add_prop = QPushButton(tr("Add field"))
         add_prop.setIcon(field_icon(FieldKind.CUSTOM))
         add_prop.setIconSize(QSize(14, 14))
         add_prop.clicked.connect(self._add_custom_row)
-        del_prop = QPushButton("Remove field")
+        del_prop = QPushButton(tr("Remove field"))
         del_prop.clicked.connect(self._remove_custom_row)
         prop_btns = QHBoxLayout()
         prop_btns.addWidget(add_prop)
@@ -210,19 +224,19 @@ class EntryDetailWidget(QWidget):
 
         form = QFormLayout()
         form.setSpacing(6)
-        form.addRow("Title", title_row)
-        form.addRow("Username", self._username)
-        form.addRow("Password", pwd_row)
-        form.addRow("Strength", strength_row)
-        form.addRow("URL", self._url)
-        form.addRow("Tags", self._tags)
-        form.addRow("Expiry", expiry_row)
+        form.addRow(tr("Title"), title_row)
+        form.addRow(tr("Username"), self._username)
+        form.addRow(tr("Password"), pwd_row)
+        form.addRow(tr("Strength"), strength_row)
+        form.addRow(tr("URL"), self._url)
+        form.addRow(tr("Tags"), self._tags)
+        form.addRow(tr("Expiry"), expiry_row)
         form.addRow("", self._expiry_countdown)
-        form.addRow("Notes", self._notes)
-        form.addRow("Custom fields", self._custom)
+        form.addRow(tr("Notes"), self._notes)
+        form.addRow(tr("Custom fields"), self._custom)
         form.addRow("", prop_btns)
 
-        save_btn = QPushButton("Save entry")
+        save_btn = QPushButton(tr("Save entry"))
         save_btn.setIcon(field_icon(FieldKind.SAVE))
         save_btn.setIconSize(QSize(14, 14))
         save_btn.clicked.connect(self._emit_save)
@@ -241,14 +255,15 @@ class EntryDetailWidget(QWidget):
             self._password,
             self._url,
             self._tags,
-            self._expires,
+            self._never_expires,
+            self._has_expiry,
             self._expiry_date,
             self._notes,
             self._custom,
         ):
             widget.setEnabled(enabled)
         if enabled:
-            self._expiry_date.setEnabled(self._expires.isChecked())
+            self._expiry_date.setEnabled(self._has_expiry.isChecked())
 
     def clear(self) -> None:
         self._entry_uuid = None
@@ -260,7 +275,8 @@ class EntryDetailWidget(QWidget):
         self._password.clear()
         self._url.clear()
         self._tags.clear()
-        self._expires.setChecked(False)
+        self._never_expires.setChecked(True)
+        self._expiry_date.setDate(QDate.currentDate().addYears(1))
         self._expiry_countdown.setVisible(False)
         self._title.blockSignals(False)
         self._url.blockSignals(False)
@@ -280,11 +296,16 @@ class EntryDetailWidget(QWidget):
         self._password.setText(entry.password)
         self._url.setText(entry.url)
         self._tags.setText(", ".join(entry.tags))
-        self._expires.setChecked(entry.expires)
+        if entry.expires:
+            self._has_expiry.setChecked(True)
+        else:
+            self._never_expires.setChecked(True)
         if entry.expiry_time:
             date = QDate.fromString(entry.expiry_time[:10], "yyyy-MM-dd")
             if date.isValid():
                 self._expiry_date.setDate(date)
+        elif not entry.expires:
+            self._expiry_date.setDate(QDate.currentDate().addYears(1))
         self._title.blockSignals(False)
         self._url.blockSignals(False)
         self._username.blockSignals(False)
@@ -300,6 +321,11 @@ class EntryDetailWidget(QWidget):
         self._apply_kind_icons(kind)
         self._update_expiry_countdown(entry)
         self.set_enabled(True)
+
+    def _on_expiry_mode_toggled(self, has_expiry: bool) -> None:
+        self._expiry_date.setEnabled(has_expiry and self._never_expires.isEnabled())
+        if has_expiry and self._has_expiry.isEnabled():
+            self._expiry_date.setFocus()
 
     def _update_expiry_countdown(self, entry: EntryView) -> None:
         if not entry.expires or not entry.expiry_time:
@@ -317,33 +343,33 @@ class EntryDetailWidget(QWidget):
             days = delta.days
             if days < 0:
                 self._expiry_countdown.setText(
-                    f"⚠ Expired {abs(days)} day(s) ago"
+                    trf("⚠ Expired {days} day(s) ago", days=abs(days))
                 )
                 self._expiry_countdown.setStyleSheet(
                     "color: #ef4444; font-weight: bold;"
                 )
             elif days == 0:
-                self._expiry_countdown.setText("⚠ Expires today!")
+                self._expiry_countdown.setText(tr("⚠ Expires today!"))
                 self._expiry_countdown.setStyleSheet(
                     "color: #f97316; font-weight: bold;"
                 )
             elif days <= 7:
                 self._expiry_countdown.setText(
-                    f"⏰ Expires in {days} day(s)"
+                    trf("⏰ Expires in {days} day(s)", days=days)
                 )
                 self._expiry_countdown.setStyleSheet(
                     "color: #f97316; font-weight: bold;"
                 )
             elif days <= 30:
                 self._expiry_countdown.setText(
-                    f"📅 Expires in {days} day(s)"
+                    trf("📅 Expires in {days} day(s)", days=days)
                 )
                 self._expiry_countdown.setStyleSheet(
                     "color: #eab308;"
                 )
             else:
                 self._expiry_countdown.setText(
-                    f"✓ Expires in {days} day(s)"
+                    trf("✓ Expires in {days} day(s)", days=days)
                 )
                 self._expiry_countdown.setStyleSheet(
                     "color: #22c55e;"
@@ -374,21 +400,21 @@ class EntryDetailWidget(QWidget):
         self._url_icon.setIcon(field_icon(FieldKind.URL, entry_kind=kind))
         # Password placeholder hint by kind
         hints = {
-            EntryKind.API: "API key / token",
-            EntryKind.SSH: "Passphrase (optional)",
-            EntryKind.BANK: "Card number",
-            EntryKind.WIFI: "Wi-Fi password",
-            EntryKind.CERTIFICATE: "Key passphrase",
-            EntryKind.DATABASE: "Database password",
+            EntryKind.API: tr("API key / token"),
+            EntryKind.SSH: tr("Passphrase (optional)"),
+            EntryKind.BANK: tr("Card number"),
+            EntryKind.WIFI: tr("Wi-Fi password"),
+            EntryKind.CERTIFICATE: tr("Key passphrase"),
+            EntryKind.DATABASE: tr("Database password"),
         }
-        self._password.setPlaceholderText(hints.get(kind, "Password"))
+        self._password.setPlaceholderText(hints.get(kind, tr("Password")))
         user_hints = {
-            EntryKind.EMAIL: "Email address",
-            EntryKind.SSH: "SSH user / comment",
-            EntryKind.BANK: "Cardholder name",
-            EntryKind.API: "Client id (optional)",
+            EntryKind.EMAIL: tr("Email address"),
+            EntryKind.SSH: tr("SSH user / comment"),
+            EntryKind.BANK: tr("Cardholder name"),
+            EntryKind.API: tr("Client id (optional)"),
         }
-        self._username.setPlaceholderText(user_hints.get(kind, "Username"))
+        self._username.setPlaceholderText(user_hints.get(kind, tr("Username")))
 
     def _load_custom(self, props: dict[str, str]) -> None:
         self._custom.setRowCount(0)
@@ -420,6 +446,33 @@ class EntryDetailWidget(QWidget):
         if row >= 0:
             self._custom.removeRow(row)
 
+    def _show_custom_menu(self, pos) -> None:
+        item = self._custom.itemAt(pos)
+        if item is not None:
+            self._custom.setCurrentItem(item)
+        row = self._custom.currentRow()
+        has_row = row >= 0
+        menu = QMenu(self)
+        menu.addAction(tr("Add field"), self._add_custom_row)
+        remove = menu.addAction(tr("Remove field"), self._remove_custom_row)
+        remove.setEnabled(has_row)
+        menu.addSeparator()
+        copy_key = menu.addAction(tr("Copy key"), lambda: self._copy_custom_cell(0))
+        copy_val = menu.addAction(tr("Copy value"), lambda: self._copy_custom_cell(1))
+        copy_key.setEnabled(has_row)
+        copy_val.setEnabled(has_row)
+        menu.exec(self._custom.mapToGlobal(pos))
+
+    def _copy_custom_cell(self, column: int) -> None:
+        row = self._custom.currentRow()
+        if row < 0:
+            return
+        cell = self._custom.item(row, column)
+        text = cell.text() if cell else ""
+        clipboard = QApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(text)
+
     def set_password(self, password: str) -> None:
         self._password.setText(password)
 
@@ -427,7 +480,7 @@ class EntryDetailWidget(QWidget):
         self._password.setEchoMode(
             QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         )
-        self._show_btn.setText("Hide" if checked else "Show")
+        self._show_btn.setText(tr("Hide") if checked else tr("Show"))
 
     def _update_strength(self) -> None:
         password = self._password.text()
@@ -454,7 +507,7 @@ class EntryDetailWidget(QWidget):
             if part.strip()
         )
         expiry_iso = ""
-        if self._expires.isChecked():
+        if self._has_expiry.isChecked():
             expiry_iso = self._expiry_date.date().toString(Qt.DateFormat.ISODate)
         self.save_requested.emit(
             {
@@ -466,7 +519,7 @@ class EntryDetailWidget(QWidget):
                 "notes": self._notes.toPlainText(),
                 "custom_properties": self._custom_as_dict(),
                 "tags": tags,
-                "expires": self._expires.isChecked(),
+                "expires": self._has_expiry.isChecked(),
                 "expiry_time": expiry_iso,
             }
         )

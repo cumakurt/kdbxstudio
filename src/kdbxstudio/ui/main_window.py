@@ -35,26 +35,17 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon,
     QTabWidget,
     QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from kdbxstudio import __version__
 from kdbxstudio.application.audit_engine import AuditEngine
-from kdbxstudio.application.autotype import AutoTypeError, auto_type, detect_backend
 from kdbxstudio.application.database_manager import DatabaseManager
-from kdbxstudio.application.emergency_sheet import render_emergency_html
-from kdbxstudio.application.export import export_entries_csv
 from kdbxstudio.application.favicon import cached_favicon, fetch_favicon
-from kdbxstudio.application.merge import merge_databases
 from kdbxstudio.application.plugin_manager import PluginManager
 from kdbxstudio.application.search_engine import EntryFilter, SearchEngine
-from kdbxstudio.application.ssh_agent import (
-    SshAgentError,
-    add_private_key,
-    agent_available,
-)
-from kdbxstudio.application.update_check import check_github_release
 from kdbxstudio.core.database import (
     DatabaseError,
     EntryView,
@@ -62,8 +53,8 @@ from kdbxstudio.core.database import (
     KdbxDatabase,
 )
 from kdbxstudio.core.paths import resolve_regular_file
-from kdbxstudio.core.pem_inspector import inspect_pem_text
 from kdbxstudio.core.totp import current_totp
+from kdbxstudio.i18n import get_language, set_language, tr
 from kdbxstudio.security.session import AutoLockController, ClipboardGuard
 from kdbxstudio.security.store import (
     clear_recent_databases,
@@ -72,14 +63,8 @@ from kdbxstudio.security.store import (
     remember_database,
     save_settings,
 )
-from kdbxstudio.ui.dialogs.change_credentials_dialog import ChangeCredentialsDialog
 from kdbxstudio.ui.dialogs.command_palette import CommandPalette, PaletteAction
-from kdbxstudio.ui.dialogs.database_properties_dialog import DatabasePropertiesDialog
-from kdbxstudio.ui.dialogs.password_generator_dialog import PasswordGeneratorDialog
-from kdbxstudio.ui.dialogs.plugin_dialog import PluginDialog
-from kdbxstudio.ui.dialogs.plugin_marketplace_dialog import PluginMarketplaceDialog
-from kdbxstudio.ui.dialogs.security_settings_dialog import SecuritySettingsDialog
-from kdbxstudio.ui.dialogs.template_dialog import TemplateDialog
+from kdbxstudio.ui.dialogs.new_entry_dialog import NewEntryDialog
 from kdbxstudio.ui.dialogs.unlock_dialog import UnlockDialog
 from kdbxstudio.ui.icons import (
     ICON_ADD,
@@ -99,7 +84,6 @@ from kdbxstudio.ui.theme import (
 )
 from kdbxstudio.ui.theme.scale import detect_ui_scale
 from kdbxstudio.ui.widgets.attachment_preview import AttachmentPreviewWidget
-from kdbxstudio.ui.widgets.audit_dashboard import AuditDashboardWidget
 from kdbxstudio.ui.widgets.empty_workspace import EmptyWorkspaceWidget
 from kdbxstudio.ui.widgets.entry_detail import EntryDetailWidget
 from kdbxstudio.ui.widgets.entry_list import EntryListWidget
@@ -112,6 +96,7 @@ from kdbxstudio.ui.widgets.totp_widget import TotpWidget
 
 class MainWindow(QMainWindow):
     _favicon_ready = Signal()
+    _status_message = Signal(str, int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -119,6 +104,7 @@ class MainWindow(QMainWindow):
         self._apply_window_icon()
         self._main_toolbar: QToolBar | None = None
         self._settings = load_settings()
+        set_language(self._settings.language)
 
         self._dbm = DatabaseManager()
         self._search = SearchEngine(self._dbm)
@@ -166,22 +152,23 @@ class MainWindow(QMainWindow):
         self._attachments = AttachmentPreviewWidget()
         self._pem = PemInspectorWidget()
         self._totp = TotpWidget()
-        self._audit_dash = AuditDashboardWidget()
+        self._audit_dialog = None
         self._favicon_ready.connect(self._on_favicon_fetched)
+        self._status_message.connect(self._show_status_message)
         self._search_box = QLineEdit()
-        self._search_box.setPlaceholderText("Search entries…")
-        self._search_box.setAccessibleName("Universal search")
+        self._search_box.setPlaceholderText(tr("Search entries…"))
+        self._search_box.setAccessibleName(tr("Universal search"))
         self._search_box.setClearButtonEnabled(True)
         self._search_box.returnPressed.connect(self._run_search)
         self._filter_bar = FilterBarWidget()
         self._filter_bar.filter_changed.connect(self._on_filter_changed)
 
         self._entry_tabs = QTabWidget()
-        self._entry_tabs.addTab(self._entry_detail, "Entry")
-        self._entry_tabs.addTab(self._totp, "TOTP")
-        self._entry_tabs.addTab(self._history, "History")
-        self._entry_tabs.addTab(self._attachments, "Attachments")
-        self._entry_tabs.addTab(self._pem, "Certificates / SSH")
+        self._entry_tabs.addTab(self._entry_detail, tr("Entry"))
+        self._entry_tabs.addTab(self._totp, tr("TOTP"))
+        self._entry_tabs.addTab(self._history, tr("History"))
+        self._entry_tabs.addTab(self._attachments, tr("Attachments"))
+        self._entry_tabs.addTab(self._pem, tr("Certificates / SSH"))
 
         workspace = QWidget()
         center_layout = QVBoxLayout(workspace)
@@ -218,7 +205,7 @@ class MainWindow(QMainWindow):
         self._build_toolbar()
         self._setup_tray()
         self.setStatusBar(QStatusBar())
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(tr("Ready"))
 
         self._group_tree.group_selected.connect(self._on_group_selected)
         self._group_tree.entry_drop_requested.connect(self._on_entry_dropped_on_group)
@@ -233,9 +220,21 @@ class MainWindow(QMainWindow):
         self._attachments.add_requested.connect(self._add_attachment)
         self._attachments.delete_requested.connect(self._delete_attachment)
         self._attachments.files_dropped.connect(self._on_files_dropped)
-        self._audit_dash.refresh_requested.connect(self._refresh_audit)
-        self._audit_dash.finding_activated.connect(self._on_finding_activated)
+        self._entry_list.delete_requested.connect(lambda: self.delete_entry(False))
+        self._entry_list.permanent_delete_requested.connect(
+            lambda: self.delete_entry(True)
+        )
+        self._entry_list.customContextMenuRequested.connect(
+            self._on_entry_list_context_menu
+        )
+        self._group_tree.customContextMenuRequested.connect(
+            self._on_group_tree_context_menu
+        )
         self._dbm.add_listener(self._refresh_ui)
+        self._audit_timer = QTimer(self)
+        self._audit_timer.setSingleShot(True)
+        self._audit_timer.setInterval(350)
+        self._audit_timer.timeout.connect(self._run_debounced_audit)
 
         self._bind_shortcuts()
         self._install_idle_filters()
@@ -247,7 +246,6 @@ class MainWindow(QMainWindow):
         self._connect_screen_signals()
         # Start with docks hidden until a database is open.
         self._groups_dock.hide()
-        self._audit_dock.hide()
         self._auto_lock.activity()
 
     def _bind_shortcuts(self) -> None:
@@ -282,7 +280,7 @@ class MainWindow(QMainWindow):
             return
         if entry.username:
             self._clipboard.copy(entry.username)
-            self.statusBar().showMessage("Username copied", 3000)
+            self.statusBar().showMessage(tr("Username copied"), 3000)
 
     def _quick_copy_password(self) -> None:
         entry = self._get_selected_entry()
@@ -292,7 +290,8 @@ class MainWindow(QMainWindow):
             self._clipboard.copy(entry.password)
             secs = self._settings.clipboard_timeout_ms // 1000
             self.statusBar().showMessage(
-                f"Password copied (clears in {secs}s)", 3000
+                tr("Password copied (clears in {secs}s)").format(secs=secs),
+                3000,
             )
 
     def _quick_copy_url(self) -> None:
@@ -301,7 +300,7 @@ class MainWindow(QMainWindow):
             return
         if entry.url:
             self._clipboard.copy(entry.url)
-            self.statusBar().showMessage("URL copied", 3000)
+            self.statusBar().showMessage(tr("URL copied"), 3000)
 
     def _quick_copy_totp(self) -> None:
         entry = self._get_selected_entry()
@@ -310,7 +309,90 @@ class MainWindow(QMainWindow):
         status = current_totp(entry.otp)
         if status.valid and status.code:
             self._clipboard.copy(status.code)
-            self.statusBar().showMessage("TOTP code copied", 3000)
+            self.statusBar().showMessage(tr("TOTP code copied"), 3000)
+
+    def _on_entry_list_context_menu(self, pos) -> None:
+        self._entry_list.select_row_at(pos)
+        has_selection = bool(self._entry_list.selected_entry_uuids())
+        entry = self._get_selected_entry() if has_selection else None
+        multi = len(self._entry_list.selected_entry_uuids()) > 1
+
+        menu = QMenu(self)
+        menu.addAction(tr("Add Entry…"), self.add_entry)
+        menu.addAction(tr("New from Template…"), self.add_entry_from_template)
+        menu.addSeparator()
+
+        copy_user = menu.addAction(
+            tr("Copy Username"), self._quick_copy_username
+        )
+        copy_pass = menu.addAction(
+            tr("Copy Password"), self._quick_copy_password
+        )
+        copy_url = menu.addAction(tr("Copy URL"), self._quick_copy_url)
+        copy_totp = menu.addAction(tr("Copy TOTP"), self._quick_copy_totp)
+        for action in (copy_user, copy_pass, copy_url, copy_totp):
+            action.setEnabled(bool(entry) and not multi)
+        if entry is not None and not multi:
+            copy_user.setEnabled(bool(entry.username))
+            copy_pass.setEnabled(bool(entry.password))
+            copy_url.setEnabled(bool(entry.url))
+            copy_totp.setEnabled(bool(entry.otp))
+
+        menu.addSeparator()
+        autotype = menu.addAction(tr("Auto-Type"), self.auto_type_selected)
+        move = menu.addAction(tr("Move to Group…"), self.move_selected_entry)
+        favicon = menu.addAction(tr("Fetch Favicon"), self.fetch_selected_favicon)
+        for action in (autotype, move, favicon):
+            action.setEnabled(has_selection)
+        if multi:
+            autotype.setEnabled(False)
+            favicon.setEnabled(False)
+
+        menu.addSeparator()
+        recycle = menu.addAction(
+            tr("Move to Recycle Bin"), lambda: self.delete_entry(False)
+        )
+        purge = menu.addAction(
+            tr("Delete Permanently"), lambda: self.delete_entry(True)
+        )
+        recycle.setEnabled(has_selection)
+        purge.setEnabled(has_selection)
+        menu.exec(self._entry_list.mapToGlobal(pos))
+
+    def _on_group_tree_context_menu(self, pos) -> None:
+        self._group_tree.select_at(pos)
+        group_uuid = self._group_tree.selected_group_uuid()
+        is_bin = False
+        if group_uuid and self._dbm.active is not None:
+            for group in self._dbm.list_groups():
+                if group.uuid == group_uuid:
+                    is_bin = group.is_recycle_bin
+                    break
+
+        menu = QMenu(self)
+        add_group = menu.addAction(tr("Add Group…"), self.add_group)
+        add_entry = menu.addAction(tr("Add Entry…"), self.add_entry)
+        add_template = menu.addAction(
+            tr("New from Template…"), self.add_entry_from_template
+        )
+        menu.addSeparator()
+        rename = menu.addAction(tr("Rename Group…"), self.rename_group)
+        delete = menu.addAction(
+            tr("Move Group to Recycle Bin"), self.delete_group
+        )
+        menu.addSeparator()
+        empty_bin = menu.addAction(
+            tr("Empty Recycle Bin…"), self.empty_recycle_bin
+        )
+
+        has_group = group_uuid is not None
+        add_group.setEnabled(has_group and not is_bin)
+        add_entry.setEnabled(has_group and not is_bin)
+        add_template.setEnabled(has_group and not is_bin)
+        rename.setEnabled(has_group and not is_bin)
+        delete.setEnabled(has_group and not is_bin)
+        empty_bin.setEnabled(self._dbm.active is not None)
+        menu.exec(self._group_tree.mapToGlobal(pos))
 
     def _install_idle_filters(self) -> None:
         self.installEventFilter(self)
@@ -338,48 +420,86 @@ class MainWindow(QMainWindow):
         self._startup_done = True
         self._run_startup_tasks()
 
+    def _show_status_message(self, message: str, timeout_ms: int) -> None:
+        self.statusBar().showMessage(message, timeout_ms)
+
     def _run_startup_tasks(self) -> None:
         if self._settings.check_updates_on_start:
-            try:
-                info = check_github_release(__version__)
-                if info.newer:
-                    self.statusBar().showMessage(
-                        f"Update available: {info.latest} (you have {info.current})",
-                        10000,
-                    )
-                else:
-                    self.statusBar().showMessage(
-                        f"KDBXStudio {__version__} is up to date", 4000
-                    )
-            except Exception:
-                pass
+            Thread(target=self._check_updates_background, daemon=True).start()
         if self._settings.start_minimized_to_tray and self._tray is not None:
             QTimer.singleShot(0, self.hide)
+
+    def _check_updates_background(self) -> None:
+        from kdbxstudio.application.update_check import check_github_release
+
+        try:
+            info = check_github_release(__version__)
+        except Exception:
+            return
+        if info.newer:
+            self._status_message.emit(
+                f"Update available: {info.latest} (you have {info.current})",
+                10000,
+            )
+        else:
+            self._status_message.emit(
+                f"KDBXStudio {__version__} is up to date",
+                4000,
+            )
 
     def _setup_tray(self) -> None:
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
+        menu = QMenu(self)
+        show_action = QAction(tr("Show"), self)
+        show_action.triggered.connect(self._tray_show)
+        menu.addAction(show_action)
+        lock_action = QAction(tr("Lock"), self)
+        lock_action.triggered.connect(self._on_auto_lock)
+        menu.addAction(lock_action)
+        menu.addSeparator()
+        quit_action = QAction(tr("Quit"), self)
+        quit_action.triggered.connect(self._tray_quit)
+        menu.addAction(quit_action)
+
+        if self._tray is not None:
+            self._tray.setToolTip(f"KDBXStudio {__version__}")
+            self._tray.setContextMenu(menu)
+            return
+
         tray = QSystemTrayIcon(self)
         icon = self.windowIcon()
         if icon.isNull():
             icon = QIcon.fromTheme("dialog-password")
         tray.setIcon(icon)
         tray.setToolTip(f"KDBXStudio {__version__}")
-        menu = QMenu(self)
-        show_action = QAction("Show", self)
-        show_action.triggered.connect(self._tray_show)
-        menu.addAction(show_action)
-        lock_action = QAction("Lock", self)
-        lock_action.triggered.connect(self._on_auto_lock)
-        menu.addAction(lock_action)
-        menu.addSeparator()
-        quit_action = QAction("Quit", self)
-        quit_action.triggered.connect(self._tray_quit)
-        menu.addAction(quit_action)
         tray.setContextMenu(menu)
         tray.activated.connect(self._on_tray_activated)
         tray.show()
         self._tray = tray
+
+    def _retranslate_shell(self) -> None:
+        """Rebuild menus/toolbar/tray after a language change."""
+        self.menuBar().clear()
+        self._build_menus()
+        if self._main_toolbar is not None:
+            self.removeToolBar(self._main_toolbar)
+            self._main_toolbar.deleteLater()
+            self._main_toolbar = None
+        self._build_toolbar()
+        self._setup_tray()
+        if hasattr(self, "_groups_dock"):
+            self._groups_dock.setWindowTitle(tr("Groups"))
+        self._search_box.setPlaceholderText(tr("Search entries…"))
+        self._search_box.setAccessibleName(tr("Universal search"))
+        for index, key in enumerate(
+            ("Entry", "TOTP", "History", "Attachments", "Certificates / SSH")
+        ):
+            self._entry_tabs.setTabText(index, tr(key))
+        self._group_tree.setHeaderLabel(tr("Groups"))
+        self._entry_list.setHorizontalHeaderLabels(
+            [tr(col) for col in self._entry_list.COLUMNS]
+        )
 
     def _tray_show(self) -> None:
         self.showNormal()
@@ -429,7 +549,7 @@ class MainWindow(QMainWindow):
         self._plugins.activate_all()
 
     def _setup_docks(self) -> None:
-        groups_dock = QDockWidget("Groups", self)
+        groups_dock = QDockWidget(tr("Groups"), self)
         groups_dock.setObjectName("groupsDock")
         groups_dock.setWidget(self._group_tree)
         groups_dock.setAllowedAreas(
@@ -439,212 +559,200 @@ class MainWindow(QMainWindow):
         groups_dock.setMaximumWidth(280)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, groups_dock)
 
-        audit_dock = QDockWidget("Password Health", self)
-        audit_dock.setObjectName("auditDock")
-        audit_dock.setWidget(self._audit_dash)
-        audit_dock.setAllowedAreas(
-            Qt.DockWidgetArea.BottomDockWidgetArea
-            | Qt.DockWidgetArea.RightDockWidgetArea
-        )
-        audit_dock.setMinimumHeight(80)
-        audit_dock.setMaximumHeight(180)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, audit_dock)
         self._groups_dock = groups_dock
-        self._audit_dock = audit_dock
         self.resizeDocks([groups_dock], [170], Qt.Orientation.Horizontal)
-        self.resizeDocks([audit_dock], [110], Qt.Orientation.Vertical)
 
     def _build_menus(self) -> None:
-        file_menu = self.menuBar().addMenu("&File")
-        open_action = QAction("Open…", self)
+        file_menu = self.menuBar().addMenu(tr("&File"))
+        open_action = QAction(tr("Open…"), self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.open_database)
         file_menu.addAction(open_action)
 
-        create_action = QAction("New Database…", self)
+        create_action = QAction(tr("New Database…"), self)
         create_action.setShortcut(QKeySequence.StandardKey.New)
         create_action.triggered.connect(self.create_database)
         file_menu.addAction(create_action)
 
-        save_action = QAction("Save", self)
+        save_action = QAction(tr("Save"), self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_database)
         file_menu.addAction(save_action)
 
-        export_action = QAction("Export CSV…", self)
+        export_action = QAction(tr("Export CSV…"), self)
         export_action.triggered.connect(self.export_csv)
         file_menu.addAction(export_action)
 
-        import_action = QAction("Import CSV…", self)
+        import_action = QAction(tr("Import CSV…"), self)
         import_action.triggered.connect(self.import_csv)
         file_menu.addAction(import_action)
 
-        props_action = QAction("Database Properties…", self)
+        props_action = QAction(tr("Database Properties…"), self)
         props_action.triggered.connect(self.show_database_properties)
         file_menu.addAction(props_action)
 
-        creds_action = QAction("Change Master Password…", self)
+        creds_action = QAction(tr("Change Master Password…"), self)
         creds_action.triggered.connect(self.change_master_password)
         file_menu.addAction(creds_action)
 
-        close_action = QAction("Close", self)
+        close_action = QAction(tr("Close"), self)
         close_action.triggered.connect(self.close_database)
         file_menu.addAction(close_action)
 
-        self._recent_menu = file_menu.addMenu("Open Recent")
+        self._recent_menu = file_menu.addMenu(tr("Open Recent"))
         self._rebuild_recent_menu()
 
         file_menu.addSeparator()
-        quit_action = QAction("Quit", self)
+        quit_action = QAction(tr("Quit"), self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self._tray_quit)
         file_menu.addAction(quit_action)
 
-        entry_menu = self.menuBar().addMenu("&Entry")
-        add_action = QAction("Add Entry…", self)
+        entry_menu = self.menuBar().addMenu(tr("&Entry"))
+        add_action = QAction(tr("Add Entry…"), self)
         add_action.triggered.connect(self.add_entry)
         entry_menu.addAction(add_action)
 
-        template_action = QAction("New from Template…", self)
+        template_action = QAction(tr("New from Template…"), self)
         template_action.triggered.connect(self.add_entry_from_template)
         entry_menu.addAction(template_action)
 
-        delete_action = QAction("Move to Recycle Bin", self)
-        delete_action.setShortcut(QKeySequence("Shift+Delete"))
+        delete_action = QAction(tr("Move to Recycle Bin"), self)
+        delete_action.setShortcut(QKeySequence(Qt.Key.Key_Delete))
         delete_action.triggered.connect(lambda: self.delete_entry(False))
         entry_menu.addAction(delete_action)
 
-        purge_action = QAction("Delete Permanently", self)
+        purge_action = QAction(tr("Delete Permanently"), self)
+        purge_action.setShortcut(QKeySequence("Shift+Delete"))
         purge_action.triggered.connect(lambda: self.delete_entry(True))
         entry_menu.addAction(purge_action)
 
         entry_menu.addSeparator()
-        autotype_action = QAction("Auto-Type", self)
+        autotype_action = QAction(tr("Auto-Type"), self)
         autotype_action.setShortcuts(
             [QKeySequence("Ctrl+Shift+V"), QKeySequence("Ctrl+Alt+A")]
         )
         autotype_action.triggered.connect(self.auto_type_selected)
         entry_menu.addAction(autotype_action)
 
-        move_action = QAction("Move to Group…", self)
+        move_action = QAction(tr("Move to Group…"), self)
         move_action.triggered.connect(self.move_selected_entry)
         entry_menu.addAction(move_action)
 
-        favicon_action = QAction("Fetch Favicon", self)
+        favicon_action = QAction(tr("Fetch Favicon"), self)
         favicon_action.triggered.connect(self.fetch_selected_favicon)
         entry_menu.addAction(favicon_action)
 
-        group_menu = self.menuBar().addMenu("&Group")
-        add_group = QAction("Add Group…", self)
+        group_menu = self.menuBar().addMenu(tr("&Group"))
+        add_group = QAction(tr("Add Group…"), self)
         add_group.triggered.connect(self.add_group)
         group_menu.addAction(add_group)
-        rename_group = QAction("Rename Group…", self)
+        rename_group = QAction(tr("Rename Group…"), self)
         rename_group.setShortcut(QKeySequence(Qt.Key.Key_F2))
         rename_group.triggered.connect(self.rename_group)
         group_menu.addAction(rename_group)
-        delete_group = QAction("Move Group to Recycle Bin", self)
+        delete_group = QAction(tr("Move Group to Recycle Bin"), self)
         delete_group.triggered.connect(self.delete_group)
         group_menu.addAction(delete_group)
 
-        tools_menu = self.menuBar().addMenu("&Tools")
-        audit_action = QAction("Refresh Password Audit", self)
-        audit_action.triggered.connect(self._refresh_audit)
+        tools_menu = self.menuBar().addMenu(tr("&Tools"))
+        audit_action = QAction(tr("Password Health…"), self)
+        audit_action.triggered.connect(self.open_password_health)
         tools_menu.addAction(audit_action)
 
-        empty_bin = QAction("Empty Recycle Bin…", self)
+        empty_bin = QAction(tr("Empty Recycle Bin…"), self)
         empty_bin.triggered.connect(self.empty_recycle_bin)
         tools_menu.addAction(empty_bin)
 
-        plugins_menu = tools_menu.addMenu("Plugin Center")
-        plugins_action = QAction("Marketplace…", self)
+        plugins_menu = tools_menu.addMenu(tr("Plugin Center"))
+        plugins_action = QAction(tr("Marketplace…"), self)
         plugins_action.triggered.connect(self.open_plugins)
         plugins_menu.addAction(plugins_action)
 
-        plugins_mgr = QAction("Installed Plugins…", self)
+        plugins_mgr = QAction(tr("Installed Plugins…"), self)
         plugins_mgr.triggered.connect(self.open_installed_plugins)
         plugins_menu.addAction(plugins_mgr)
 
-        generator_action = QAction("Password Generator…", self)
+        generator_action = QAction(tr("Password Generator…"), self)
         generator_action.triggered.connect(self.open_password_generator)
         tools_menu.addAction(generator_action)
 
         tools_menu.addSeparator()
-        merge_action = QAction("Merge Database…", self)
+        merge_action = QAction(tr("Merge Database…"), self)
         merge_action.triggered.connect(self.merge_database)
         tools_menu.addAction(merge_action)
 
-        emergency_action = QAction("Emergency Sheet…", self)
+        emergency_action = QAction(tr("Emergency Sheet…"), self)
         emergency_action.triggered.connect(self.export_emergency_sheet)
         tools_menu.addAction(emergency_action)
 
-        updates_action = QAction("Check for Updates…", self)
+        updates_action = QAction(tr("Check for Updates…"), self)
         updates_action.triggered.connect(self.check_for_updates)
         tools_menu.addAction(updates_action)
 
-        ssh_action = QAction("Add Selected PEM to SSH Agent", self)
+        ssh_action = QAction(tr("Add Selected PEM to SSH Agent"), self)
         ssh_action.triggered.connect(self.add_selected_pem_to_agent)
         tools_menu.addAction(ssh_action)
 
         tools_menu.addSeparator()
-        lock_action = QAction("Lock All Databases", self)
+        lock_action = QAction(tr("Lock All Databases"), self)
         lock_action.setShortcut(QKeySequence("Ctrl+L"))
         lock_action.triggered.connect(self._on_auto_lock)
         tools_menu.addAction(lock_action)
 
-        security_action = QAction("Settings…", self)
+        security_action = QAction(tr("Settings…"), self)
         security_action.triggered.connect(self.open_security_settings)
         tools_menu.addAction(security_action)
 
-        view_menu = self.menuBar().addMenu("&View")
+        view_menu = self.menuBar().addMenu(tr("&View"))
         view_menu.addAction(self._groups_dock.toggleViewAction())
-        view_menu.addAction(self._audit_dock.toggleViewAction())
         view_menu.addSeparator()
-        save_layout = QAction("Save Layout", self)
+        save_layout = QAction(tr("Save Layout"), self)
         save_layout.triggered.connect(self.save_layout)
         view_menu.addAction(save_layout)
-        reset_layout = QAction("Reset Layout", self)
+        reset_layout = QAction(tr("Reset Layout"), self)
         reset_layout.triggered.connect(self.reset_layout)
         view_menu.addAction(reset_layout)
         view_menu.addSeparator()
-        theme_menu = view_menu.addMenu("Theme")
+        theme_menu = view_menu.addMenu(tr("Theme"))
         for label, value in (
             ("Dark", "dark"),
             ("Light", "light"),
             ("System", "system"),
         ):
-            action = QAction(label, self)
+            action = QAction(tr(label), self)
             action.triggered.connect(lambda checked=False, v=value: self.set_theme(v))
             theme_menu.addAction(action)
-        palette_action = QAction("Command Palette…", self)
+        palette_action = QAction(tr("Command Palette…"), self)
         palette_action.setShortcut(QKeySequence("Ctrl+K"))
         palette_action.triggered.connect(self.open_command_palette)
         view_menu.addAction(palette_action)
 
-        help_menu = self.menuBar().addMenu("&Help")
-        about_action = QAction("About", self)
+        help_menu = self.menuBar().addMenu(tr("&Help"))
+        about_action = QAction(tr("About"), self)
         about_action.triggered.connect(self._about)
         help_menu.addAction(about_action)
 
     def _build_toolbar(self) -> None:
-        toolbar = QToolBar("Main")
+        toolbar = QToolBar(tr("Main"))
         toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(16, 16))
+        toolbar.setIconSize(QSize(22, 22))
         self.addToolBar(toolbar)
         self._main_toolbar = toolbar
 
         def add_icon(name: str, tip: str, slot: object) -> None:
-            button = icon_tool_button(name, tip, toolbar, size=16)
+            button = icon_tool_button(name, tip, toolbar, size=22)
             button.clicked.connect(slot)
             toolbar.addWidget(button)
 
-        add_icon(ICON_OPEN, "Open database", self.open_database)
-        add_icon(ICON_SAVE, "Save database", self.save_database)
-        add_icon(ICON_ADD, "Add entry", self.add_entry)
-        add_icon(ICON_PALETTE, "Command palette", self.open_command_palette)
-        add_icon(ICON_AUDIT, "Refresh password audit", self._refresh_audit)
-        add_icon(ICON_PLUGIN, "Plugin marketplace", self.open_plugins)
-        add_icon(ICON_LOCK, "Lock all databases", self._on_auto_lock)
+        add_icon(ICON_OPEN, tr("Open database"), self.open_database)
+        add_icon(ICON_SAVE, tr("Save database"), self.save_database)
+        add_icon(ICON_ADD, tr("Add entry"), self.add_entry)
+        add_icon(ICON_PALETTE, tr("Command palette"), self.open_command_palette)
+        add_icon(ICON_AUDIT, tr("Password Health"), self.open_password_health)
+        add_icon(ICON_PLUGIN, tr("Plugin marketplace"), self.open_plugins)
+        add_icon(ICON_LOCK, tr("Lock all databases"), self._on_auto_lock)
 
     def _apply_window_icon(self) -> None:
         candidates = [
@@ -662,7 +770,7 @@ class MainWindow(QMainWindow):
         self._recent_menu.clear()
         recent = load_recent_databases()
         if not recent:
-            empty = QAction("No recent databases", self)
+            empty = QAction(tr("No recent databases"), self)
             empty.setEnabled(False)
             self._recent_menu.addAction(empty)
         else:
@@ -673,14 +781,16 @@ class MainWindow(QMainWindow):
                 )
                 self._recent_menu.addAction(action)
         self._recent_menu.addSeparator()
-        clear_action = QAction("Clear Recent", self)
+        clear_action = QAction(tr("Clear Recent"), self)
         clear_action.triggered.connect(self._clear_recent)
         self._recent_menu.addAction(clear_action)
 
     def _open_recent(self, path: Path) -> None:
         if not path.is_file():
             QMessageBox.warning(
-                self, "Missing file", f"Database no longer exists:\n{path}"
+                self,
+                tr("Missing file"),
+                tr("Database no longer exists:\n{path}").format(path=path),
             )
             self._rebuild_recent_menu()
             return
@@ -697,9 +807,11 @@ class MainWindow(QMainWindow):
             self._rebuild_recent_menu()
             self.statusBar().showMessage(f"Opened {path.name}", 5000)
         except InvalidCredentialsError:
-            QMessageBox.critical(self, "Unlock failed", "Invalid password or key file.")
+            QMessageBox.critical(
+                self, tr("Unlock failed"), tr("Invalid password or key file.")
+            )
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Open failed", str(exc))
+            QMessageBox.critical(self, tr("Open failed"), str(exc))
         self._auto_lock.activity()
 
     def _clear_recent(self) -> None:
@@ -711,13 +823,13 @@ class MainWindow(QMainWindow):
         if not self._ensure_writable():
             return
         if self._dbm.active is None:
-            QMessageBox.information(self, "Import", "Open a database first.")
+            QMessageBox.information(self, tr("Import"), tr("Open a database first."))
             return
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import CSV",
+            tr("Import CSV"),
             str(Path.home()),
-            "CSV Files (*.csv)",
+            tr("CSV Files (*.csv)"),
         )
         if not path:
             return
@@ -741,7 +853,7 @@ class MainWindow(QMainWindow):
         except (OSError, DatabaseError, KeyError) as exc:
             QMessageBox.critical(
                 self,
-                "Import failed",
+                tr("Import failed"),
                 f"{exc}\n\nExpected columns (Bitwarden/Chrome/KeePass CSV):\n"
                 "name or title, username or login_username, password,\n"
                 "url / login_uri / uri, notes, folder / group",
@@ -752,8 +864,12 @@ class MainWindow(QMainWindow):
         if not self._ensure_writable():
             return
         if self._dbm.active is None:
-            QMessageBox.information(self, "Credentials", "Open a database first.")
+            QMessageBox.information(self, tr("Credentials"), tr("Open a database first."))
             return
+        from kdbxstudio.ui.dialogs.change_credentials_dialog import (
+            ChangeCredentialsDialog,
+        )
+
         dialog = ChangeCredentialsDialog(self)
         if dialog.exec() != ChangeCredentialsDialog.DialogCode.Accepted:
             return
@@ -768,26 +884,26 @@ class MainWindow(QMainWindow):
                 "Master credentials updated and database saved", 5000
             )
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Credential change failed", str(exc))
+            QMessageBox.critical(self, tr("Credential change failed"), str(exc))
         self._auto_lock.activity()
 
     def add_group(self) -> None:
         if not self._ensure_writable():
             return
         if self._dbm.active is None:
-            QMessageBox.information(self, "Add group", "Open a database first.")
+            QMessageBox.information(self, tr("Add group"), tr("Open a database first."))
             return
         parent = (
             self._group_tree.selected_group_uuid() or self._dbm.root_group_uuid()
         )
-        name, ok = QInputDialog.getText(self, "New Group", "Group name:")
+        name, ok = QInputDialog.getText(self, tr("New Group"), tr("Group name:"))
         if not ok or not name.strip():
             return
         try:
             group = self._dbm.add_group(parent, name.strip())
             self.statusBar().showMessage(f"Added group '{group.name}'", 3000)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Add group failed", str(exc))
+            QMessageBox.critical(self, tr("Add group failed"), str(exc))
         self._auto_lock.activity()
 
     def rename_group(self) -> None:
@@ -798,14 +914,14 @@ class MainWindow(QMainWindow):
         group_uuid = self._group_tree.selected_group_uuid()
         if not group_uuid:
             return
-        name, ok = QInputDialog.getText(self, "Rename Group", "New name:")
+        name, ok = QInputDialog.getText(self, tr("Rename Group"), tr("New name:"))
         if not ok or not name.strip():
             return
         try:
             group = self._dbm.rename_group(group_uuid, name.strip())
             self.statusBar().showMessage(f"Renamed group to '{group.name}'", 3000)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Rename failed", str(exc))
+            QMessageBox.critical(self, tr("Rename failed"), str(exc))
         self._auto_lock.activity()
 
     def delete_group(self) -> None:
@@ -818,51 +934,59 @@ class MainWindow(QMainWindow):
             return
         confirm = QMessageBox.question(
             self,
-            "Recycle Bin",
-            "Move the selected group to the Recycle Bin?",
+            tr("Recycle Bin"),
+            tr("Move the selected group to the Recycle Bin?"),
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
         try:
             self._dbm.delete_group(group_uuid)
-            self.statusBar().showMessage("Group moved to Recycle Bin", 3000)
+            self.statusBar().showMessage(tr("Group moved to Recycle Bin"), 3000)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Delete group failed", str(exc))
+            QMessageBox.critical(self, tr("Delete group failed"), str(exc))
         self._auto_lock.activity()
 
     def export_csv(self) -> None:
         if self._dbm.active is None:
-            QMessageBox.information(self, "Export", "Open a database first.")
+            QMessageBox.information(self, tr("Export"), tr("Open a database first."))
             return
         path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export CSV",
+            tr("Export CSV"),
             str(Path.home() / "kdbxstudio-export.csv"),
-            "CSV Files (*.csv)",
+            tr("CSV Files (*.csv)"),
         )
         if not path:
             return
         confirm = QMessageBox.warning(
             self,
-            "Export includes secrets",
-            "The CSV file will contain passwords and OTP secrets "
-            "in plain text. Continue?",
+            tr("Export includes secrets"),
+            tr(
+                "The CSV file will contain passwords and OTP secrets "
+                "in plain text. Continue?"
+            ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
         try:
+            from kdbxstudio.application.export import export_entries_csv
+
             entries = self._dbm.all_entries(include_recycle_bin=False)
             export_entries_csv(path, entries)
             self.statusBar().showMessage(f"Exported {len(entries)} entries", 5000)
         except OSError as exc:
-            QMessageBox.critical(self, "Export failed", str(exc))
+            QMessageBox.critical(self, tr("Export failed"), str(exc))
         self._auto_lock.activity()
 
     def show_database_properties(self) -> None:
         if self._dbm.active is None:
-            QMessageBox.information(self, "Properties", "Open a database first.")
+            QMessageBox.information(self, tr("Properties"), tr("Open a database first."))
             return
+        from kdbxstudio.ui.dialogs.database_properties_dialog import (
+            DatabasePropertiesDialog,
+        )
+
         dialog = DatabasePropertiesDialog(self._dbm.database_info(), self)
         dialog.exec()
 
@@ -873,9 +997,11 @@ class MainWindow(QMainWindow):
             return
         confirm = QMessageBox.question(
             self,
-            "Restore revision",
-            "Restore this historical revision? "
-            "Current values are saved to history first.",
+            tr("Restore revision"),
+            tr(
+                "Restore this historical revision? "
+                "Current values are saved to history first."
+            ),
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
@@ -883,13 +1009,17 @@ class MainWindow(QMainWindow):
             entry = self._dbm.restore_history(self._current_entry_uuid, history_index)
             self._show_entry(entry.uuid)
             self.statusBar().showMessage(
-                "Revision restored (save database to persist)", 4000
+                tr("Revision restored (save database to persist)"), 4000
             )
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Restore failed", str(exc))
+            QMessageBox.critical(self, tr("Restore failed"), str(exc))
         self._auto_lock.activity()
 
     def open_password_generator(self) -> None:
+        from kdbxstudio.ui.dialogs.password_generator_dialog import (
+            PasswordGeneratorDialog,
+        )
+
         dialog = PasswordGeneratorDialog(self, clipboard_guard=self._clipboard)
         if dialog.exec() != PasswordGeneratorDialog.DialogCode.Accepted:
             return
@@ -897,12 +1027,12 @@ class MainWindow(QMainWindow):
         if self._current_entry_uuid:
             self._entry_detail.set_password(password)
             self.statusBar().showMessage(
-                "Generated password applied to entry (save to keep)", 4000
+                tr("Generated password applied to entry (save to keep)"), 4000
             )
         else:
             self._clipboard.copy(password)
             self.statusBar().showMessage(
-                "Generated password copied to clipboard", 4000
+                tr("Generated password copied to clipboard"), 4000
             )
         self._auto_lock.activity()
 
@@ -921,106 +1051,111 @@ class MainWindow(QMainWindow):
     def open_command_palette(self) -> None:
         actions = [
             PaletteAction(
-                "open", "Open Database…", ("file", "open"), self.open_database
+                "open", tr("Open Database…"), ("file", "open"), self.open_database
             ),
             PaletteAction(
-                "new", "New Database…", ("create", "new"), self.create_database
+                "new", tr("New Database…"), ("create", "new"), self.create_database
             ),
-            PaletteAction("save", "Save", ("save",), self.save_database),
-            PaletteAction("lock", "Lock All", ("lock", "security"), self._on_auto_lock),
+            PaletteAction("save", tr("Save"), ("save",), self.save_database),
             PaletteAction(
-                "add-entry", "Add Entry…", ("entry", "add"), self.add_entry
+                "lock", tr("Lock All"), ("lock", "security"), self._on_auto_lock
+            ),
+            PaletteAction(
+                "add-entry", tr("Add Entry…"), ("entry", "add"), self.add_entry
             ),
             PaletteAction(
                 "template",
-                "New from Template…",
+                tr("New from Template…"),
                 ("template",),
                 self.add_entry_from_template,
             ),
             PaletteAction(
                 "generate",
-                "Password Generator…",
+                tr("Password Generator…"),
                 ("password", "generate"),
                 self.open_password_generator,
             ),
             PaletteAction(
-                "audit", "Refresh Audit", ("audit", "health"), self._refresh_audit
+                "audit",
+                tr("Password Health…"),
+                ("audit", "health", "findings"),
+                self.open_password_health,
             ),
             PaletteAction(
-                "import", "Import CSV…", ("import", "csv"), self.import_csv
+                "import", tr("Import CSV…"), ("import", "csv"), self.import_csv
             ),
             PaletteAction(
-                "export", "Export CSV…", ("export", "csv"), self.export_csv
+                "export", tr("Export CSV…"), ("export", "csv"), self.export_csv
             ),
             PaletteAction(
                 "autotype",
-                "Auto-Type Selected Entry",
+                tr("Auto-Type Selected Entry"),
                 ("autotype", "type"),
                 self.auto_type_selected,
             ),
             PaletteAction(
                 "merge",
-                "Merge Database…",
+                tr("Merge Database…"),
                 ("merge", "import"),
                 self.merge_database,
             ),
             PaletteAction(
                 "emergency",
-                "Emergency Sheet…",
+                tr("Emergency Sheet…"),
                 ("emergency", "print", "sheet"),
                 self.export_emergency_sheet,
             ),
             PaletteAction(
                 "updates",
-                "Check for Updates…",
+                tr("Check for Updates…"),
                 ("update", "version"),
                 self.check_for_updates,
             ),
             PaletteAction(
                 "move-entry",
-                "Move Entry to Group…",
+                tr("Move Entry to Group…"),
                 ("move", "group"),
                 self.move_selected_entry,
             ),
             PaletteAction(
                 "favicon",
-                "Fetch Favicon",
+                tr("Fetch Favicon"),
                 ("favicon", "icon"),
                 self.fetch_selected_favicon,
             ),
             PaletteAction(
                 "plugins",
-                "Plugin Marketplace…",
+                tr("Plugin Marketplace…"),
                 ("plugin", "market"),
                 self.open_plugins,
             ),
             PaletteAction(
                 "settings",
-                "Security & Appearance…",
+                tr("Security & Appearance…"),
                 ("settings", "theme"),
                 self.open_security_settings,
             ),
             PaletteAction(
                 "theme-dark",
-                "Theme: Dark",
+                tr("Theme: Dark"),
                 ("theme", "dark"),
                 lambda: self.set_theme("dark"),
             ),
             PaletteAction(
                 "theme-light",
-                "Theme: Light",
+                tr("Theme: Light"),
                 ("theme", "light"),
                 lambda: self.set_theme("light"),
             ),
             PaletteAction(
                 "theme-system",
-                "Theme: System",
+                tr("Theme: System"),
                 ("theme", "system"),
                 lambda: self.set_theme("system"),
             ),
             PaletteAction(
                 "focus-search",
-                "Focus Search",
+                tr("Focus Search"),
                 ("search", "find"),
                 lambda: self._search_box.setFocus(),
             ),
@@ -1041,7 +1176,7 @@ class MainWindow(QMainWindow):
             )
         if self._dbm.active is not None:
             for entry in self._dbm.all_entries(include_recycle_bin=False)[:25]:
-                title = entry.title or "(untitled)"
+                title = entry.title or tr("(untitled)")
 
                 def _jump(uuid: str = entry.uuid) -> None:
                     self._show_entry(uuid)
@@ -1080,9 +1215,9 @@ class MainWindow(QMainWindow):
                 f"Opened {dialog.database_path().name}", 5000
             )
         except InvalidCredentialsError:
-            QMessageBox.critical(self, "Unlock failed", "Invalid password or key file.")
+            QMessageBox.critical(self, tr("Unlock failed"), tr("Invalid password or key file."))
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Open failed", str(exc))
+            QMessageBox.critical(self, tr("Open failed"), str(exc))
         self._auto_lock.activity()
 
     def create_database(self) -> None:
@@ -1101,15 +1236,15 @@ class MainWindow(QMainWindow):
                 f"Created {dialog.database_path().name}", 5000
             )
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Create failed", str(exc))
+            QMessageBox.critical(self, tr("Create failed"), str(exc))
         self._auto_lock.activity()
 
     def _ensure_writable(self) -> bool:
         if self._settings.read_only:
             QMessageBox.information(
                 self,
-                "Read-only mode",
-                "This session is read-only. Disable it in Security & Appearance.",
+                tr("Read-only mode"),
+                tr("This session is read-only. Disable it in Security & Appearance."),
             )
             return False
         return True
@@ -1118,13 +1253,13 @@ class MainWindow(QMainWindow):
         if not self._ensure_writable():
             return
         if self._dbm.active is None:
-            QMessageBox.information(self, "Save", "No database is open.")
+            QMessageBox.information(self, tr("Save"), tr("No database is open."))
             return
         try:
             self._save_with_backup()
-            self.statusBar().showMessage("Database saved", 3000)
+            self.statusBar().showMessage(tr("Database saved"), 3000)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Save failed", str(exc))
+            QMessageBox.critical(self, tr("Save failed"), str(exc))
         self._auto_lock.activity()
 
     def _backup_session(self, session_id: str) -> None:
@@ -1173,8 +1308,8 @@ class MainWindow(QMainWindow):
         if self._dbm.active is not None and self._dbm.active.is_dirty:
             answer = QMessageBox.question(
                 self,
-                "Unsaved changes",
-                "Save this database before closing?",
+                tr("Unsaved changes"),
+                tr("Save this database before closing?"),
                 QMessageBox.StandardButton.Save
                 | QMessageBox.StandardButton.Discard
                 | QMessageBox.StandardButton.Cancel,
@@ -1185,39 +1320,70 @@ class MainWindow(QMainWindow):
                 try:
                     self._save_with_backup()
                 except DatabaseError as exc:
-                    QMessageBox.critical(self, "Save failed", str(exc))
+                    QMessageBox.critical(self, tr("Save failed"), str(exc))
                     return
         self._dbm.close()
         self._clear_entry_panels()
-        self.statusBar().showMessage("Database closed", 3000)
+        self.statusBar().showMessage(tr("Database closed"), 3000)
 
     def add_entry(self) -> None:
         if not self._ensure_writable():
             return
         if self._dbm.active is None:
-            QMessageBox.information(self, "Add entry", "Open a database first.")
+            QMessageBox.information(self, tr("Add entry"), tr("Open a database first."))
             return
         group_uuid = self._group_tree.selected_group_uuid()
         if not group_uuid:
             group_uuid = self._dbm.root_group_uuid()
-        title, ok = QInputDialog.getText(self, "New Entry", "Title:")
-        if not ok or not title.strip():
+        group_path = next(
+            (g.path for g in self._dbm.list_groups() if g.uuid == group_uuid),
+            "Root",
+        )
+        dialog = NewEntryDialog(
+            self,
+            clipboard_guard=self._clipboard,
+            group_path=group_path,
+        )
+        if dialog.exec() != NewEntryDialog.DialogCode.Accepted:
             return
+        data = dialog.entry_data()
+        from kdbxstudio.application.expiry import local_date_to_utc_end_of_day
+
+        expiry_time = None
+        if data.expires and data.expiry_date:
+            try:
+                expiry_time = local_date_to_utc_end_of_day(data.expiry_date)
+            except ValueError:
+                expiry_time = None
         try:
-            entry = self._dbm.add_entry(group_uuid, title=title.strip())
+            entry = self._dbm.add_entry(
+                group_uuid,
+                title=data.title,
+                username=data.username,
+                password=data.password,
+                url=data.url,
+                notes=data.notes,
+                tags=list(data.tags) or None,
+                expires=data.expires if data.expires or expiry_time else None,
+                expiry_time=expiry_time,
+            )
+            if data.otp:
+                entry = self._dbm.update_entry(entry.uuid, otp=data.otp)
             self._on_group_selected(group_uuid)
             self._show_entry(entry.uuid)
             self.statusBar().showMessage(f"Added entry '{entry.title}'", 3000)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Add failed", str(exc))
+            QMessageBox.critical(self, tr("Add failed"), str(exc))
         self._auto_lock.activity()
 
     def add_entry_from_template(self) -> None:
         if not self._ensure_writable():
             return
         if self._dbm.active is None:
-            QMessageBox.information(self, "Template", "Open a database first.")
+            QMessageBox.information(self, tr("Template"), tr("Open a database first."))
             return
+        from kdbxstudio.ui.dialogs.template_dialog import TemplateDialog
+
         dialog = TemplateDialog(self)
         if dialog.exec() != TemplateDialog.DialogCode.Accepted:
             return
@@ -1247,38 +1413,50 @@ class MainWindow(QMainWindow):
                 f"Created '{entry.title}' from {template.name}", 4000
             )
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Template failed", str(exc))
+            QMessageBox.critical(self, tr("Template failed"), str(exc))
         self._auto_lock.activity()
 
     def delete_entry(self, permanent: bool = False) -> None:
         if not self._ensure_writable():
             return
-        uuid = self._entry_list.selected_entry_uuid()
-        if not uuid or self._dbm.active is None:
+        uuids = self._entry_list.selected_entry_uuids()
+        if not uuids and self._current_entry_uuid:
+            uuids = [self._current_entry_uuid]
+        if not uuids or self._dbm.active is None:
             return
+        count = len(uuids)
         if permanent:
+            key = (
+                "Permanently delete {count} selected entry?"
+                if count == 1
+                else "Permanently delete {count} selected entries?"
+            )
             confirm = QMessageBox.question(
                 self,
-                "Delete permanently",
-                "Permanently delete the selected entry?",
+                tr("Delete permanently"),
+                tr(key).format(count=count),
             )
         else:
+            key = (
+                "Move {count} selected entry to the Recycle Bin?"
+                if count == 1
+                else "Move {count} selected entries to the Recycle Bin?"
+            )
             confirm = QMessageBox.question(
                 self,
-                "Recycle Bin",
-                "Move the selected entry to the Recycle Bin?",
+                tr("Recycle Bin"),
+                tr(key).format(count=count),
             )
         if confirm != QMessageBox.StandardButton.Yes:
             return
         try:
-            self._dbm.delete_entry(uuid, permanent=permanent)
+            removed = self._dbm.delete_entries(uuids, permanent=permanent)
             self._clear_entry_panels()
-            group_uuid = self._group_tree.selected_group_uuid()
-            if group_uuid:
-                self._on_group_selected(group_uuid)
-            self._refresh_audit()
+            label = tr("entry") if removed == 1 else tr("entries")
+            action = tr("Deleted") if permanent else tr("Moved to Recycle Bin")
+            self.statusBar().showMessage(f"{action}: {removed} {label}", 4000)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Delete failed", str(exc))
+            QMessageBox.critical(self, tr("Delete failed"), str(exc))
         self._auto_lock.activity()
 
     def empty_recycle_bin(self) -> None:
@@ -1288,8 +1466,8 @@ class MainWindow(QMainWindow):
             return
         confirm = QMessageBox.question(
             self,
-            "Empty Recycle Bin",
-            "Permanently delete all recycled entries?",
+            tr("Empty Recycle Bin"),
+            tr("Permanently delete all recycled entries?"),
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
@@ -1299,12 +1477,16 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"Removed {count} recycled {label}", 4000
             )
-            self._refresh_audit()
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Empty bin failed", str(exc))
+            QMessageBox.critical(self, tr("Empty bin failed"), str(exc))
         self._auto_lock.activity()
 
     def open_security_settings(self) -> None:
+        from kdbxstudio.ui.dialogs.security_settings_dialog import (
+            SecuritySettingsDialog,
+        )
+
+        previous_language = get_language()
         dialog = SecuritySettingsDialog(self._settings, self)
         if dialog.exec() != SecuritySettingsDialog.DialogCode.Accepted:
             return
@@ -1321,14 +1503,33 @@ class MainWindow(QMainWindow):
             except ValueError:
                 mode = ThemeMode.DARK
             apply_theme(app, mode)
-        self.statusBar().showMessage("Settings saved", 3000)
+        set_language(self._settings.language)
+        language_changed = get_language() != previous_language
+        if language_changed:
+            self._retranslate_shell()
+        self.statusBar().showMessage(tr("Settings saved"), 3000)
+        if language_changed:
+            QMessageBox.information(
+                self,
+                tr("Language"),
+                tr(
+                    "Some remaining labels may need an application "
+                    "restart to update."
+                ),
+            )
         self._auto_lock.activity()
 
     def open_plugins(self) -> None:
+        from kdbxstudio.ui.dialogs.plugin_marketplace_dialog import (
+            PluginMarketplaceDialog,
+        )
+
         dialog = PluginMarketplaceDialog(self._plugins, self)
         dialog.exec()
 
     def open_installed_plugins(self) -> None:
+        from kdbxstudio.ui.dialogs.plugin_dialog import PluginDialog
+
         dialog = PluginDialog(self._plugins, self)
         dialog.exec()
 
@@ -1345,7 +1546,7 @@ class MainWindow(QMainWindow):
             return
         hits = self._search.search(query, entry_filter=filt)
         self._entry_list.set_entries([h.entry for h in hits])
-        self.statusBar().showMessage(f"{len(hits)} result(s)", 3000)
+        self.statusBar().showMessage(tr("{n} result(s)").format(n=len(hits)), 3000)
         self._auto_lock.activity()
 
     def _on_filter_changed(self, filt: object) -> None:
@@ -1378,25 +1579,59 @@ class MainWindow(QMainWindow):
             self._group_tree.clear()
             self._entry_list.set_entries([])
             self._clear_entry_panels()
-            self._audit_dash.clear()
+            if self._audit_dialog is not None:
+                self._audit_dialog.dashboard.clear()
+                self._audit_dialog.hide()
             self._groups_dock.hide()
-            self._audit_dock.hide()
             self.setWindowTitle(f"KDBXStudio {__version__}")
             return
         self._groups_dock.show()
-        self._audit_dock.show()
         self._stack.setCurrentWidget(self._workspace_widget)
         name = self._dbm.display_name()
         self.setWindowTitle(f"KDBXStudio — {name}")
+        selected_group = self._group_tree.selected_group_uuid()
         groups = self._dbm.list_groups()
         root = self._dbm.root_group_uuid()
         self._group_tree.set_groups(groups, root)
-        self._on_group_selected(root)
+        group_ids = {g.uuid for g in groups}
+        target = (
+            selected_group
+            if selected_group and selected_group in group_ids
+            else root
+        )
+        self._on_group_selected(target)
+        self._schedule_audit()
+
+    def _schedule_audit(self) -> None:
+        self._audit_timer.start()
+
+    def _run_debounced_audit(self) -> None:
         self._refresh_audit(include_hibp=False)
 
+    def _ensure_audit_dialog(self):
+        if self._audit_dialog is None:
+            from kdbxstudio.ui.dialogs.password_health_dialog import (
+                PasswordHealthDialog,
+            )
+
+            self._audit_dialog = PasswordHealthDialog(self)
+            dash = self._audit_dialog.dashboard
+            dash.refresh_requested.connect(self._refresh_audit)
+            dash.finding_activated.connect(self._on_finding_activated)
+        return self._audit_dialog
+
+    def open_password_health(self) -> None:
+        dialog = self._ensure_audit_dialog()
+        self._refresh_audit()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _refresh_audit(self, *, include_hibp: bool | None = None) -> None:
+        dialog = self._audit_dialog
         if self._dbm.active is None:
-            self._audit_dash.clear()
+            if dialog is not None:
+                dialog.dashboard.clear()
             return
         check_hibp = (
             self._settings.hibp_enabled
@@ -1404,7 +1639,8 @@ class MainWindow(QMainWindow):
             else include_hibp
         )
         report = self._audit.run(check_hibp=check_hibp)
-        self._audit_dash.show_report(report)
+        if dialog is not None:
+            dialog.dashboard.show_report(report)
         self._plugins.context.emit("audit.completed", report=report)
         self._auto_lock.activity()
 
@@ -1474,7 +1710,7 @@ class MainWindow(QMainWindow):
             )
             return "attached"
         except (OSError, DatabaseError) as exc:
-            QMessageBox.critical(self, "Attachment failed", str(exc))
+            QMessageBox.critical(self, tr("Attachment failed"), str(exc))
             return "failed"
 
     def _on_files_dropped(self, paths: object) -> None:
@@ -1502,7 +1738,7 @@ class MainWindow(QMainWindow):
         if not self._current_entry_uuid or self._dbm.active is None:
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Add Attachment", str(Path.home()), "All Files (*)"
+            self, tr("Add Attachment"), str(Path.home()), tr("All Files (*)")
         )
         if not path:
             return
@@ -1520,7 +1756,7 @@ class MainWindow(QMainWindow):
             self._dbm.delete_attachment(self._current_entry_uuid, attachment_id)
             self._show_entry(self._current_entry_uuid)
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Remove failed", str(exc))
+            QMessageBox.critical(self, tr("Remove failed"), str(exc))
         self._auto_lock.activity()
 
     def _on_tab_changed(self, index: int) -> None:
@@ -1538,8 +1774,8 @@ class MainWindow(QMainWindow):
         if session_id in self._dbm.dirty_session_ids():
             answer = QMessageBox.question(
                 self,
-                "Unsaved changes",
-                "Save this database before closing?",
+                tr("Unsaved changes"),
+                tr("Save this database before closing?"),
                 QMessageBox.StandardButton.Save
                 | QMessageBox.StandardButton.Discard
                 | QMessageBox.StandardButton.Cancel,
@@ -1550,7 +1786,7 @@ class MainWindow(QMainWindow):
                 try:
                     self._save_with_backup(session_id)
                 except DatabaseError as exc:
-                    QMessageBox.critical(self, "Save failed", str(exc))
+                    QMessageBox.critical(self, tr("Save failed"), str(exc))
                     return
         self._dbm.close(session_id)
         if self._dbm.active is None:
@@ -1572,6 +1808,8 @@ class MainWindow(QMainWindow):
         if entry:
             self._entry_list.set_entries([entry])
             self._show_entry(entry_uuid)
+            self.raise_()
+            self.activateWindow()
 
     def _on_save_entry(self, data: dict) -> None:
         if not self._ensure_writable():
@@ -1610,15 +1848,14 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 "Entry updated (history saved; save database to persist)", 4000
             )
-            self._refresh_audit()
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Update failed", str(exc))
+            QMessageBox.critical(self, tr("Update failed"), str(exc))
         self._auto_lock.activity()
 
     def _on_copy_password(self, password: str) -> None:
         self._clipboard.copy(password)
         secs = self._settings.clipboard_timeout_ms // 1000
-        self.statusBar().showMessage(f"Password copied (clears in {secs}s)", 3000)
+        self.statusBar().showMessage(tr("Password copied (clears in {secs}s)").format(secs=secs), 3000)
         self._auto_lock.activity()
 
     def _on_auto_lock(self) -> None:
@@ -1643,7 +1880,7 @@ class MainWindow(QMainWindow):
                 clipboard.clear()
         self._dbm.close_all()
         self._clear_entry_panels()
-        self.statusBar().showMessage("Databases locked", 5000)
+        self.statusBar().showMessage(tr("Databases locked"), 5000)
         if self._settings.minimize_on_lock:
             self.showMinimized()
             if self._tray is not None:
@@ -1659,19 +1896,25 @@ class MainWindow(QMainWindow):
                     keyfile=dialog.keyfile(),
                 )
             except (InvalidCredentialsError, DatabaseError) as exc:
-                QMessageBox.critical(self, "Unlock failed", str(exc))
+                QMessageBox.critical(self, tr("Unlock failed"), str(exc))
         self._auto_lock.activity()
 
     def auto_type_selected(self) -> None:
+        from kdbxstudio.application.autotype import (
+            AutoTypeError,
+            auto_type,
+            detect_backend,
+        )
+
         uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
         if not uuid or self._dbm.active is None:
-            QMessageBox.information(self, "Auto-Type", "Select an entry first.")
+            QMessageBox.information(self, tr("Auto-Type"), tr("Select an entry first."))
             return
         if detect_backend() is None:
             QMessageBox.warning(
                 self,
-                "Auto-Type",
-                "No Auto-Type backend found. Install xdotool, ydotool, or wtype.",
+                tr("Auto-Type"),
+                tr("No Auto-Type backend found. Install xdotool, ydotool, or wtype."),
             )
             return
         entry = self._dbm.get_entry(uuid)
@@ -1679,8 +1922,11 @@ class MainWindow(QMainWindow):
             return
         delay_ms, ok = QInputDialog.getInt(
             self,
-            "Auto-Type",
-            "Focus the target window, then confirm.\nDelay before typing (ms):",
+            tr("Auto-Type"),
+            tr(
+                "Focus the target window, then confirm.\n"
+                "Delay before typing (ms):"
+            ),
             1500,
             0,
             15000,
@@ -1692,7 +1938,7 @@ class MainWindow(QMainWindow):
         if entry.otp:
             status = current_totp(entry.otp)
             totp_code = status.code or ""
-        self.statusBar().showMessage("Focus target window… Auto-Type starting", 2000)
+        self.statusBar().showMessage(tr("Focus target window… Auto-Type starting"), 2000)
         QApplication.processEvents()
         try:
             backend = auto_type(
@@ -1705,12 +1951,12 @@ class MainWindow(QMainWindow):
             )
             self.statusBar().showMessage(f"Auto-Type completed via {backend}", 4000)
         except AutoTypeError as exc:
-            QMessageBox.critical(self, "Auto-Type failed", str(exc))
+            QMessageBox.critical(self, tr("Auto-Type failed"), str(exc))
         except Exception:
             QMessageBox.critical(
                 self,
-                "Auto-Type failed",
-                "Auto-Type failed unexpectedly. Secrets were not shown in this dialog.",
+                tr("Auto-Type failed"),
+                tr("Auto-Type failed unexpectedly. Secrets were not shown in this dialog."),
             )
         self._auto_lock.activity()
 
@@ -1719,7 +1965,7 @@ class MainWindow(QMainWindow):
             return
         uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
         if not uuid or self._dbm.active is None:
-            QMessageBox.information(self, "Move Entry", "Select an entry first.")
+            QMessageBox.information(self, tr("Move Entry"), tr("Select an entry first."))
             return
         groups = [
             g for g in self._dbm.list_groups() if not g.is_recycle_bin
@@ -1728,7 +1974,7 @@ class MainWindow(QMainWindow):
             return
         labels = [g.path for g in groups]
         choice, ok = QInputDialog.getItem(
-            self, "Move Entry", "Target group:", labels, 0, False
+            self, tr("Move Entry"), tr("Target group:"), labels, 0, False
         )
         if not ok or not choice:
             return
@@ -1758,25 +2004,29 @@ class MainWindow(QMainWindow):
                 f"Moved '{entry.title}' to {path}", 4000
             )
         except DatabaseError as exc:
-            QMessageBox.critical(self, "Move failed", str(exc))
+            QMessageBox.critical(self, tr("Move failed"), str(exc))
         self._auto_lock.activity()
 
     def fetch_selected_favicon(self) -> None:
         uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
         if not uuid or self._dbm.active is None:
-            QMessageBox.information(self, "Favicon", "Select an entry first.")
+            QMessageBox.information(self, tr("Favicon"), tr("Select an entry first."))
             return
         entry = self._dbm.get_entry(uuid)
         if entry is None or not (entry.url or "").strip():
-            QMessageBox.information(self, "Favicon", "Selected entry has no URL.")
+            QMessageBox.information(self, tr("Favicon"), tr("Selected entry has no URL."))
             return
         try:
             path = fetch_favicon(entry.url)
         except Exception as exc:
-            QMessageBox.warning(self, "Favicon", f"Could not fetch favicon: {exc}")
+            QMessageBox.warning(
+                self,
+                tr("Favicon"),
+                tr("Could not fetch favicon: {exc}").format(exc=exc),
+            )
             return
         if path is None:
-            QMessageBox.information(self, "Favicon", "No favicon found for this URL.")
+            QMessageBox.information(self, tr("Favicon"), tr("No favicon found for this URL."))
             return
         group_uuid = self._group_tree.selected_group_uuid()
         if group_uuid:
@@ -1785,11 +2035,12 @@ class MainWindow(QMainWindow):
         self._auto_lock.activity()
 
     def merge_database(self) -> None:
+        from kdbxstudio.application.merge import merge_databases
         if not self._ensure_writable():
             return
         destination = self._dbm.active
         if destination is None:
-            QMessageBox.information(self, "Merge", "Open a destination database first.")
+            QMessageBox.information(self, tr("Merge"), tr("Open a destination database first."))
             return
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1828,20 +2079,21 @@ class MainWindow(QMainWindow):
                 8000,
             )
         except InvalidCredentialsError:
-            QMessageBox.critical(self, "Merge failed", "Invalid password or key file.")
+            QMessageBox.critical(self, tr("Merge failed"), tr("Invalid password or key file."))
         except (DatabaseError, OSError) as exc:
-            QMessageBox.critical(self, "Merge failed", str(exc))
+            QMessageBox.critical(self, tr("Merge failed"), str(exc))
         finally:
             source.close()
         self._auto_lock.activity()
 
     def export_emergency_sheet(self) -> None:
+        from kdbxstudio.application.emergency_sheet import render_emergency_html
         if self._dbm.active is None:
-            QMessageBox.information(self, "Emergency Sheet", "Open a database first.")
+            QMessageBox.information(self, tr("Emergency Sheet"), tr("Open a database first."))
             return
         choice = QMessageBox.question(
             self,
-            "Emergency Sheet",
+            tr("Emergency Sheet"),
             "Include all entries?\n\nYes = all entries · No = selected entry only",
             QMessageBox.StandardButton.Yes
             | QMessageBox.StandardButton.No
@@ -1855,7 +2107,7 @@ class MainWindow(QMainWindow):
             uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
             if not uuid:
                 QMessageBox.information(
-                    self, "Emergency Sheet", "Select an entry first."
+                    self, tr("Emergency Sheet"), tr("Select an entry first.")
                 )
                 return
             entry = self._dbm.get_entry(uuid)
@@ -1873,9 +2125,9 @@ class MainWindow(QMainWindow):
         html = render_emergency_html(entries)
         path_str, _ = QFileDialog.getSaveFileName(
             self,
-            "Save Emergency Sheet",
+            tr("Save Emergency Sheet"),
             str(Path.home() / "kdbxstudio-emergency.html"),
-            "HTML Files (*.html)",
+            tr("HTML Files (*.html)"),
         )
         if path_str:
             out = Path(path_str)
@@ -1886,21 +2138,23 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(out.resolve())))
             self.statusBar().showMessage(f"Emergency sheet: {out}", 6000)
         except OSError as exc:
-            QMessageBox.critical(self, "Emergency sheet failed", str(exc))
+            QMessageBox.critical(self, tr("Emergency sheet failed"), str(exc))
         self._auto_lock.activity()
 
     def check_for_updates(self, *, interactive: bool = True) -> None:
+        from kdbxstudio.application.update_check import check_github_release
+
         try:
             info = check_github_release(__version__)
         except Exception as exc:
             if interactive:
-                QMessageBox.warning(self, "Update check", str(exc))
+                QMessageBox.warning(self, tr("Update check"), str(exc))
             return
         if info.newer:
             if interactive:
                 answer = QMessageBox.information(
                     self,
-                    "Update available",
+                    tr("Update available"),
                     f"A newer version is available: {info.latest}\n"
                     f"You have: {info.current}\n\nOpen release page?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -1914,7 +2168,7 @@ class MainWindow(QMainWindow):
         elif interactive:
             QMessageBox.information(
                 self,
-                "Up to date",
+                tr("Up to date"),
                 f"KDBXStudio {info.current} is the latest release.",
             )
         else:
@@ -1936,9 +2190,15 @@ class MainWindow(QMainWindow):
         return None
 
     def add_selected_pem_to_agent(self) -> None:
+        from kdbxstudio.application.ssh_agent import (
+            SshAgentError,
+            add_private_key,
+            agent_available,
+        )
+        from kdbxstudio.core.pem_inspector import inspect_pem_text
         uuid = self._entry_list.selected_entry_uuid() or self._current_entry_uuid
         if not uuid or self._dbm.active is None:
-            QMessageBox.information(self, "SSH Agent", "Select an entry first.")
+            QMessageBox.information(self, tr("SSH Agent"), tr("Select an entry first."))
             return
         entry = self._dbm.get_entry(uuid)
         if entry is None:
@@ -1950,32 +2210,32 @@ class MainWindow(QMainWindow):
         if not any(b.kind == "private_key" for b in blocks):
             QMessageBox.information(
                 self,
-                "SSH Agent",
+                tr("SSH Agent"),
                 "No private key PEM found in the selected entry.",
             )
             return
         if not agent_available():
             QMessageBox.warning(
                 self,
-                "SSH Agent",
+                tr("SSH Agent"),
                 "ssh-add is unavailable or SSH_AUTH_SOCK is not set.",
             )
             return
         pem = self._extract_private_pem(text)
         if not pem:
-            QMessageBox.warning(self, "SSH Agent", "Could not extract private key PEM.")
+            QMessageBox.warning(self, tr("SSH Agent"), tr("Could not extract private key PEM."))
             return
         try:
             message = add_private_key(pem)
-            self.statusBar().showMessage(message or "Identity added to SSH agent", 5000)
+            self.statusBar().showMessage(message or tr("Identity added to SSH agent"), 5000)
         except SshAgentError as exc:
-            QMessageBox.critical(self, "SSH Agent", str(exc))
+            QMessageBox.critical(self, tr("SSH Agent"), str(exc))
         self._auto_lock.activity()
 
     def _about(self) -> None:
         QMessageBox.about(
             self,
-            "About KDBXStudio",
+            tr("About KDBXStudio"),
             (
                 f"<b>KDBXStudio</b> {__version__}<br>"
                 "Modern Qt6 KDBX password manager for Linux.<br>"
@@ -1989,24 +2249,16 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        if (
-            not self._quitting
-            and self._tray is not None
-            and self._tray.isVisible()
-        ):
-            event.ignore()
-            self.hide()
-            self.statusBar().showMessage("Still running in the system tray", 4000)
-            return
+        # Window close (title-bar X) always quits. Tray is for show/lock only —
+        # hiding on close left the process running in the background.
         dirty_ids = self._dbm.dirty_session_ids()
         if dirty_ids:
             answer = QMessageBox.question(
                 self,
-                "Unsaved changes",
-                (
-                    f"Save {len(dirty_ids)} database(s) with unsaved changes "
-                    "before quitting?"
-                ),
+                tr("Unsaved changes"),
+                tr(
+                    "Save {count} database(s) with unsaved changes before quitting?"
+                ).format(count=len(dirty_ids)),
                 QMessageBox.StandardButton.Save
                 | QMessageBox.StandardButton.Discard
                 | QMessageBox.StandardButton.Cancel,
@@ -2019,22 +2271,28 @@ class MainWindow(QMainWindow):
                 try:
                     self._save_all_with_backup()
                 except DatabaseError as exc:
-                    QMessageBox.critical(self, "Save failed", str(exc))
+                    QMessageBox.critical(self, tr("Save failed"), str(exc))
                     self._quitting = False
                     event.ignore()
                     return
+        self._quitting = True
         self._dbm.close_all()
         self._auto_lock.stop()
         if self._tray is not None:
             self._tray.hide()
+            self._tray.setVisible(False)
         self._persist_layout()
         save_settings(self._settings)
+        event.accept()
         super().closeEvent(event)
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
 
     def save_layout(self) -> None:
         self._persist_layout()
         save_settings(self._settings)
-        self.statusBar().showMessage("Layout saved", 3000)
+        self.statusBar().showMessage(tr("Layout saved"), 3000)
 
     def reset_layout(self) -> None:
         self.restoreGeometry(self._default_geometry)
@@ -2044,7 +2302,7 @@ class MainWindow(QMainWindow):
             window_state="",
         )
         save_settings(self._settings)
-        self.statusBar().showMessage("Layout reset", 3000)
+        self.statusBar().showMessage(tr("Layout reset"), 3000)
 
     def _persist_layout(self) -> None:
         geometry = b64encode(self.saveGeometry().data()).decode("ascii")
@@ -2084,13 +2342,13 @@ class MainWindow(QMainWindow):
     def _apply_chrome_scale(self) -> None:
         self.setMinimumSize(900, 560)
         if self._main_toolbar is not None:
-            self._main_toolbar.setIconSize(QSize(16, 16))
+            self._main_toolbar.setIconSize(QSize(22, 22))
+            for child in self._main_toolbar.findChildren(QToolButton):
+                child.setIconSize(QSize(22, 22))
+                child.setFixedSize(30, 30)
         if hasattr(self, "_groups_dock"):
             self._groups_dock.setMinimumWidth(140)
             self._groups_dock.setMaximumWidth(280)
-        if hasattr(self, "_audit_dock"):
-            self._audit_dock.setMinimumHeight(80)
-            self._audit_dock.setMaximumHeight(180)
         menu = self.menuBar()
         if menu is not None:
             menu.setNativeMenuBar(False)

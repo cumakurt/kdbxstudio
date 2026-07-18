@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QMimeData, QSize, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QMimeData, QPoint, QSize, Qt, Signal
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QTableWidget,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from kdbxstudio.application.favicon import cached_favicon
 from kdbxstudio.core.database import EntryView
+from kdbxstudio.i18n import tr
 from kdbxstudio.ui.icons.entry_type import detect_entry_kind_from_view, entry_kind_icon
 
 ENTRY_MIME = "application/x-kdbxstudio-entry"
@@ -21,14 +22,16 @@ class EntryListWidget(QTableWidget):
     """Shows entries for the selected group."""
 
     entry_selected = Signal(str)
+    delete_requested = Signal()
+    permanent_delete_requested = Signal()
 
     COLUMNS = ("Title", "Username", "URL")
 
     def __init__(self, parent: QTableWidget | None = None) -> None:
         super().__init__(0, len(self.COLUMNS), parent)
-        self.setHorizontalHeaderLabels(list(self.COLUMNS))
+        self.setHorizontalHeaderLabels([tr(col) for col in self.COLUMNS])
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setAlternatingRowColors(True)
         self.verticalHeader().setVisible(False)
@@ -39,6 +42,25 @@ class EntryListWidget(QTableWidget):
         self.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.setDragEnabled(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        QShortcut(QKeySequence.StandardKey.SelectAll, self, self.selectAll)
+        QShortcut(QKeySequence(Qt.Key.Key_Delete), self, self.delete_requested.emit)
+        QShortcut(
+            QKeySequence("Shift+Delete"),
+            self,
+            self.permanent_delete_requested.emit,
+        )
+
+    def select_row_at(self, pos: QPoint) -> bool:
+        """Select the row under *pos* if it is not already part of the selection."""
+        item = self.itemAt(pos)
+        if item is None:
+            return False
+        row = item.row()
+        selected_rows = {index.row() for index in self.selectedIndexes()}
+        if row not in selected_rows:
+            self.selectRow(row)
+        return True
 
     def mimeTypes(self) -> list[str]:
         return [ENTRY_MIME, *super().mimeTypes()]
@@ -53,11 +75,10 @@ class EntryListWidget(QTableWidget):
         return data
 
     def set_entries(self, entries: list[EntryView]) -> None:
-        self.setRowCount(0)
         self.setSortingEnabled(False)
-        for entry in entries:
-            row = self.rowCount()
-            self.insertRow(row)
+        self.clearContents()
+        self.setRowCount(len(entries))
+        for row, entry in enumerate(entries):
             kind = detect_entry_kind_from_view(entry)
             title = QTableWidgetItem(entry.title)
             title.setData(int(Qt.ItemDataRole.UserRole), entry.uuid)
@@ -76,15 +97,26 @@ class EntryListWidget(QTableWidget):
         self.setSortingEnabled(True)
 
     def selected_entry_uuid(self) -> str | None:
-        items = self.selectedItems()
-        if not items:
-            return None
-        row = items[0].row()
-        title_item = self.item(row, 0)
-        if title_item is None:
-            return None
-        uuid = title_item.data(int(Qt.ItemDataRole.UserRole))
-        return str(uuid) if uuid else None
+        uuids = self.selected_entry_uuids()
+        return uuids[0] if uuids else None
+
+    def selected_entry_uuids(self) -> list[str]:
+        rows = sorted({index.row() for index in self.selectedIndexes()})
+        result: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            title_item = self.item(row, 0)
+            if title_item is None:
+                continue
+            uuid = title_item.data(int(Qt.ItemDataRole.UserRole))
+            if not uuid:
+                continue
+            text = str(uuid)
+            if text in seen:
+                continue
+            seen.add(text)
+            result.append(text)
+        return result
 
     def _on_selection(self) -> None:
         uuid = self.selected_entry_uuid()

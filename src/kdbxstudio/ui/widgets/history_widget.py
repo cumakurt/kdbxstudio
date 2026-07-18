@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from kdbxstudio.application.history_diff import diff_history
 from kdbxstudio.core.database import HistoryView
+from kdbxstudio.i18n import tr, trf
 
 
 def _mask_secret(value: str) -> str:
@@ -34,25 +36,27 @@ class HistoryWidget(QWidget):
         self._list = QListWidget()
         self._detail = QTextEdit()
         self._detail.setReadOnly(True)
-        self._empty = QLabel("No history for this entry.")
-        self._restore = QPushButton("Restore selected revision")
+        self._empty = QLabel(tr("No history for this entry."))
+        self._restore = QPushButton(tr("Restore selected revision"))
         self._restore.setEnabled(False)
         self._restore.clicked.connect(self._emit_restore)
-        self._reveal = QPushButton("Reveal secrets")
+        self._reveal = QPushButton(tr("Reveal secrets"))
         self._reveal.setCheckable(True)
         self._reveal.toggled.connect(self._refresh_detail)
 
         self._list.currentRowChanged.connect(self._on_row)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._show_list_menu)
 
         layout = QHBoxLayout(self)
         left = QVBoxLayout()
-        left.addWidget(QLabel("Revisions"))
+        left.addWidget(QLabel(tr("Revisions")))
         left.addWidget(self._list)
         left.addWidget(self._restore)
         left.addWidget(self._reveal)
         left.addWidget(self._empty)
         right = QVBoxLayout()
-        right.addWidget(QLabel("Snapshot / diff vs newer"))
+        right.addWidget(QLabel(tr("Snapshot / diff vs newer")))
         right.addWidget(self._detail)
         layout.addLayout(left, 1)
         layout.addLayout(right, 2)
@@ -73,8 +77,8 @@ class HistoryWidget(QWidget):
         self._restore.setEnabled(False)
         self._reveal.setChecked(False)
         for item in items:
-            label = item.modified or f"Revision {item.index}"
-            title = item.title or "(untitled)"
+            label = item.modified or trf("Revision {index}", index=item.index)
+            title = item.title or tr("(untitled)")
             row = QListWidgetItem(f"{label} — {title}")
             self._list.addItem(row)
         if items:
@@ -84,6 +88,26 @@ class HistoryWidget(QWidget):
         row = self._list.currentRow()
         if 0 <= row < len(self._items):
             self.restore_requested.emit(self._items[row].index)
+
+    def _show_list_menu(self, pos) -> None:
+        item = self._list.itemAt(pos)
+        if item is not None:
+            self._list.setCurrentItem(item)
+        row = self._list.currentRow()
+        has_item = 0 <= row < len(self._items)
+        menu = QMenu(self)
+        restore = menu.addAction(
+            tr("Restore selected revision"), self._emit_restore
+        )
+        restore.setEnabled(has_item)
+        reveal = menu.addAction(
+            tr("Reveal secrets")
+            if not self._reveal.isChecked()
+            else tr("Hide secrets"),
+            lambda: self._reveal.toggle(),
+        )
+        reveal.setEnabled(has_item)
+        menu.exec(self._list.mapToGlobal(pos))
 
     def _on_row(self, row: int) -> None:
         if row < 0 or row >= len(self._items):
@@ -104,23 +128,23 @@ class HistoryWidget(QWidget):
         password = item.password if reveal else _mask_secret(item.password)
         otp = item.otp if reveal else _mask_secret(item.otp)
         lines = [
-            f"Title: {item.title}",
-            f"Username: {item.username}",
-            f"Password: {password}",
-            f"URL: {item.url}",
-            f"OTP: {otp}",
-            f"Modified: {item.modified}",
+            f"{tr('Title')}: {item.title}",
+            f"{tr('Username')}: {item.username}",
+            f"{tr('Password')}: {password}",
+            f"{tr('URL')}: {item.url}",
+            f"{tr('OTP:')} {otp}",
+            f"{tr('Modified:')} {item.modified}",
             "",
-            "Notes:",
+            tr("Notes:"),
             item.notes,
         ]
         if row > 0:
             newer = self._items[row - 1]
             diffs = diff_history(item, newer, mask_secrets=not reveal)
             lines.append("")
-            lines.append("Diff vs newer revision:")
+            lines.append(tr("Diff vs newer revision:"))
             if not diffs:
-                lines.append("(no field changes)")
+                lines.append(tr("(no field changes)"))
             for diff in diffs:
                 lines.append(f"- {diff.field}: {diff.before!r} → {diff.after!r}")
         self._detail.setPlainText("\n".join(lines))

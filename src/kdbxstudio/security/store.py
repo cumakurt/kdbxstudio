@@ -8,9 +8,10 @@ import stat
 import tempfile
 from pathlib import Path
 
+from kdbxstudio.i18n import normalize_language
 from kdbxstudio.security.settings import SecuritySettings
 
-_SETTINGS_VERSION = 4
+_SETTINGS_VERSION = 5
 _MAX_RECENT = 12
 
 
@@ -51,6 +52,9 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     ui_density = str(raw.get("ui_density", SecuritySettings.ui_density))
     if ui_density not in ("compact", "comfortable"):
         ui_density = SecuritySettings.ui_density
+    language = normalize_language(
+        str(raw.get("language", SecuritySettings.language))
+    )
     return SecuritySettings(
         clipboard_timeout_ms=clipboard_ms,
         auto_lock_timeout_ms=autolock_ms,
@@ -87,6 +91,7 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
                 SecuritySettings.start_minimized_to_tray,
             )
         ),
+        language=language,
     )
 
 
@@ -122,6 +127,7 @@ def save_settings(
         "autotype_sequence": settings.autotype_sequence,
         "check_updates_on_start": settings.check_updates_on_start,
         "start_minimized_to_tray": settings.start_minimized_to_tray,
+        "language": settings.language,
         "recent_databases": recent_paths[:_MAX_RECENT],
     }
     data = json.dumps(payload, indent=2) + "\n"

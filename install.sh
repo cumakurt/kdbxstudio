@@ -602,6 +602,14 @@ pack_appimage() {
   ok "AppImage ready: ${APPIMAGE_OUT}"
 }
 
+install_appimage_to_bin() {
+  local dest="/usr/local/bin/KDBXStudio"
+  info "Copying AppImage to ${dest}…"
+  sudo_if_needed cp -f "$APPIMAGE_OUT" "$dest"
+  sudo_if_needed chmod +x "$dest"
+  ok "Installed ${dest}"
+}
+
 install_desktop_appimage() {
   local bindir="${HOME}/.local/bin"
   local appsdir="${HOME}/.local/share/applications"
@@ -689,6 +697,7 @@ main() {
     ensure_appimagetool
     build_appdir
     pack_appimage
+    install_appimage_to_bin
     if [[ "$WITH_DESKTOP" -eq 1 ]]; then
       install_desktop_appimage
     else

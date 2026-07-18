@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Signal
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QStackedWidget,
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.core.database import AttachmentView
+from kdbxstudio.i18n import tr
 
 
 class AttachmentPreviewWidget(QWidget):
@@ -41,8 +43,10 @@ class AttachmentPreviewWidget(QWidget):
 
         self._list = QListWidget()
         self._list.currentRowChanged.connect(self._on_row)
+        self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._list.customContextMenuRequested.connect(self._show_list_menu)
 
-        self._info = QLabel("No attachment selected")
+        self._info = QLabel(tr("No attachment selected"))
         self._info.setWordWrap(True)
 
         self._text = QTextEdit()
@@ -55,11 +59,11 @@ class AttachmentPreviewWidget(QWidget):
         self._stack.addWidget(self._text)
         self._stack.addWidget(self._pdf_view)
 
-        add_btn = QPushButton("Add…")
+        add_btn = QPushButton(tr("Add…"))
         add_btn.clicked.connect(self.add_requested.emit)
-        del_btn = QPushButton("Remove")
+        del_btn = QPushButton(tr("Remove"))
         del_btn.clicked.connect(self._emit_delete)
-        save_btn = QPushButton("Save as…")
+        save_btn = QPushButton(tr("Save as…"))
         save_btn.clicked.connect(self._emit_save)
 
         buttons = QHBoxLayout()
@@ -69,7 +73,7 @@ class AttachmentPreviewWidget(QWidget):
         buttons.addStretch()
 
         left = QVBoxLayout()
-        left.addWidget(QLabel("Attachments (drop files here)"))
+        left.addWidget(QLabel(tr("Attachments (drop files here)")))
         left.addWidget(self._list)
         left.addLayout(buttons)
 
@@ -84,7 +88,7 @@ class AttachmentPreviewWidget(QWidget):
     def clear(self) -> None:
         self._attachments = []
         self._list.clear()
-        self._info.setText("No attachment selected")
+        self._info.setText(tr("No attachment selected"))
         self._text.clear()
         self._close_pdf()
 
@@ -98,7 +102,7 @@ class AttachmentPreviewWidget(QWidget):
         if attachments:
             self._list.setCurrentRow(0)
         else:
-            self._info.setText("No attachment selected")
+            self._info.setText(tr("No attachment selected"))
             self._text.clear()
             self._close_pdf()
 
@@ -127,6 +131,20 @@ class AttachmentPreviewWidget(QWidget):
         if 0 <= row < len(self._attachments):
             self.delete_requested.emit(self._attachments[row].id)
 
+    def _show_list_menu(self, pos) -> None:
+        item = self._list.itemAt(pos)
+        if item is not None:
+            self._list.setCurrentItem(item)
+        row = self._list.currentRow()
+        has_item = 0 <= row < len(self._attachments)
+        menu = QMenu(self)
+        menu.addAction(tr("Add…"), self.add_requested.emit)
+        remove = menu.addAction(tr("Remove"), self._emit_delete)
+        save = menu.addAction(tr("Save as…"), self._emit_save)
+        remove.setEnabled(has_item)
+        save.setEnabled(has_item)
+        menu.exec(self._list.mapToGlobal(pos))
+
     def _emit_save(self) -> None:
         row = self._list.currentRow()
         if row < 0 or row >= len(self._attachments):
@@ -134,14 +152,14 @@ class AttachmentPreviewWidget(QWidget):
         item = self._attachments[row]
         safe_name = Path(item.filename).name or "attachment"
         path, _ = QFileDialog.getSaveFileName(
-            self, "Save attachment", safe_name
+            self, tr("Save attachment"), safe_name
         )
         if not path:
             return
         try:
             Path(path).write_bytes(item.data)
         except OSError as exc:
-            QMessageBox.critical(self, "Save failed", str(exc))
+            QMessageBox.critical(self, tr("Save failed"), str(exc))
             return
         self.save_requested.emit(item.id, path)
 
@@ -164,6 +182,6 @@ class AttachmentPreviewWidget(QWidget):
             text = item.data.decode("utf-8")
         except UnicodeDecodeError:
             preview = item.data[:512]
-            text = "Binary attachment (hex preview):\n" + preview.hex(" ")
+            text = tr("Binary attachment (hex preview):\n") + preview.hex(" ")
         self._text.setPlainText(text)
         self._stack.setCurrentWidget(self._text)
