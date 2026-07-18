@@ -11,7 +11,8 @@ from PySide6.QtDBus import QDBusConnection
 class ScreenLockWatcher(QObject):
     """Call ``on_lock`` when a known screensaver reports ActiveChanged(true).
 
-    Best-effort: silently no-ops when D-Bus interfaces are unavailable.
+    Best-effort: only subscribes when the D-Bus service is registered, so
+    offscreen / headless runs stay quiet.
     """
 
     def __init__(
@@ -26,6 +27,9 @@ class ScreenLockWatcher(QObject):
         except Exception:
             return
         if not bus.isConnected():
+            return
+        dbus_iface = bus.interface()
+        if dbus_iface is None:
             return
         for service, path, interface in (
             (
@@ -45,7 +49,9 @@ class ScreenLockWatcher(QObject):
             ),
         ):
             try:
-                bus.connect(
+                if not dbus_iface.isServiceRegistered(service):
+                    continue
+                ok = bus.connect(
                     service,
                     path,
                     interface,
@@ -53,6 +59,8 @@ class ScreenLockWatcher(QObject):
                     self,
                     "_on_active_changed",
                 )
+                if not ok:
+                    continue
             except Exception:
                 continue
 

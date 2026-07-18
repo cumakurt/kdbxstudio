@@ -154,7 +154,13 @@ class MainWindow(QMainWindow):
         )
         self._auto_lock.lock_requested.connect(self._on_auto_lock)
         self._auto_lock.set_enabled(self._settings.auto_lock_enabled)
-        self._screen_lock = ScreenLockWatcher(self._on_auto_lock, parent=self)
+        # Skip D-Bus screensaver hooks under offscreen/CI to avoid noisy failures.
+        import os
+
+        if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
+            self._screen_lock = None
+        else:
+            self._screen_lock = ScreenLockWatcher(self._on_auto_lock, parent=self)
         self._vault_busy = False
 
         self._db_tabs = QTabWidget()

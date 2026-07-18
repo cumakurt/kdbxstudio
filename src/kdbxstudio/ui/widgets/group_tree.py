@@ -99,6 +99,25 @@ class GroupTreeWidget(QTreeWidget):
         value = items[0].data(0, Qt.ItemDataRole.UserRole)
         return str(value) if value else None
 
+    def select_uuid(self, group_uuid: str) -> bool:
+        """Select a group by UUID if present in the tree."""
+
+        def walk(item: QTreeWidgetItem) -> bool:
+            value = item.data(0, Qt.ItemDataRole.UserRole)
+            if str(value) == group_uuid:
+                self.setCurrentItem(item)
+                return True
+            for index in range(item.childCount()):
+                if walk(item.child(index)):
+                    return True
+            return False
+
+        for index in range(self.topLevelItemCount()):
+            top = self.topLevelItem(index)
+            if top is not None and walk(top):
+                return True
+        return False
+
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
         if event.mimeData().hasFormat(ENTRY_MIME):
             event.acceptProposedAction()

@@ -206,6 +206,10 @@ def test_group_tree_select_uuid(qtbot, tmp_path: Path) -> None:
     qtbot.addWidget(tree)
     tree.set_groups(mgr.list_groups(), root, select_uuid=child.uuid)
     assert tree.selected_group_uuid() == child.uuid
+    root_item_selected = tree.select_uuid(root)
+    assert root_item_selected is True
+    assert tree.selected_group_uuid() == root
+    assert tree.select_uuid("missing-uuid") is False
 
 
 def test_filter_bar_clear_emits_once(qtbot) -> None:
