@@ -47,6 +47,7 @@ from kdbxstudio.application.database_manager import DatabaseManager
 from kdbxstudio.application.favicon import cached_favicon, fetch_favicon
 from kdbxstudio.application.plugin_manager import PluginManager
 from kdbxstudio.application.search_engine import EntryFilter, SearchEngine
+from kdbxstudio.application.security_dashboard import SecurityDashboardAnalyzer
 from kdbxstudio.core.database import (
     DatabaseError,
     EntryView,
@@ -113,6 +114,7 @@ class MainWindow(QMainWindow):
         self._dbm = DatabaseManager()
         self._search = SearchEngine(self._dbm)
         self._audit = AuditEngine(self._dbm)
+        self._security_analyzer = SecurityDashboardAnalyzer(self._dbm)
         self._plugins = PluginManager()
         self._load_builtin_plugins()
         self._search.set_rank_emitter(self._plugins.context.emit)
@@ -783,8 +785,8 @@ class MainWindow(QMainWindow):
         group_menu.addAction(delete_group)
 
         tools_menu = self.menuBar().addMenu(tr("&Tools"))
-        audit_action = QAction(tr("Password Health…"), self)
-        audit_action.triggered.connect(self.open_password_health)
+        audit_action = QAction(tr("Security Dashboard…"), self)
+        audit_action.triggered.connect(self.open_security_dashboard)
         tools_menu.addAction(audit_action)
 
         empty_bin = QAction(tr("Empty Recycle Bin…"), self)
@@ -875,7 +877,7 @@ class MainWindow(QMainWindow):
         add_icon(ICON_SAVE, tr("Save database"), self.save_database)
         add_icon(ICON_ADD, tr("Add entry"), self.add_entry)
         add_icon(ICON_PALETTE, tr("Command palette"), self.open_command_palette)
-        add_icon(ICON_AUDIT, tr("Password Health"), self.open_password_health)
+        add_icon(ICON_AUDIT, tr("Security Dashboard"), self.open_security_dashboard)
         add_icon(ICON_PLUGIN, tr("Plugin marketplace"), self.open_plugins)
         add_icon(ICON_LOCK, tr("Lock all databases"), self._on_auto_lock)
 
@@ -1202,9 +1204,9 @@ class MainWindow(QMainWindow):
             ),
             PaletteAction(
                 "audit",
-                tr("Password Health…"),
-                ("audit", "health", "findings"),
-                self.open_password_health,
+                tr("Security Dashboard…"),
+                ("audit", "health", "findings", "security", "dashboard", "reports"),
+                self.open_security_dashboard,
             ),
             PaletteAction(
                 "import", tr("Import CSV…"), ("import", "csv"), self.import_csv
@@ -1930,7 +1932,7 @@ class MainWindow(QMainWindow):
             self._entry_list.set_entries([])
             self._clear_entry_panels()
             if self._audit_dialog is not None:
-                self._audit_dialog.dashboard.clear()
+                self._audit_dialog.view_model.clear()
                 self._audit_dialog.hide()
             self._groups_dock.hide()
             self.setWindowTitle(f"KDBXStudio {__version__}")
@@ -1979,15 +1981,13 @@ class MainWindow(QMainWindow):
 
     def _ensure_audit_dialog(self):
         if self._audit_dialog is None:
-            from kdbxstudio.ui.dialogs.password_health_dialog import (
-                PasswordHealthDialog,
-            )
+            from kdbxstudio.ui.security_dashboard import SecurityDashboardDialog
 
-            self._audit_dialog = PasswordHealthDialog(self)
-            dash = self._audit_dialog.dashboard
-            dash.refresh_requested.connect(self._refresh_audit)
-            dash.finding_activated.connect(self._on_finding_activated)
-            dash.fix_next_requested.connect(self._on_fix_next_finding)
+            self._audit_dialog = SecurityDashboardDialog(self)
+            vm = self._audit_dialog.view_model
+            vm.refresh_requested.connect(self._refresh_audit)
+            vm.entry_activated.connect(self._on_finding_activated)
+            vm.fix_next_requested.connect(self._on_fix_next_finding)
         return self._audit_dialog
 
     def _on_fix_next_finding(self, kind: str, entry_uuid: str) -> None:
@@ -2017,18 +2017,22 @@ class MainWindow(QMainWindow):
             self._entry_tabs.setCurrentWidget(self._entry_detail)
             self.open_password_generator()
 
-    def open_password_health(self) -> None:
+    def open_security_dashboard(self) -> None:
         dialog = self._ensure_audit_dialog()
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
         self._refresh_audit()
 
+    def open_password_health(self) -> None:
+        """Backwards-compatible alias for Security Dashboard."""
+        self.open_security_dashboard()
+
     def _refresh_audit(self, *, include_hibp: bool | None = None) -> None:
         dialog = self._audit_dialog
         if self._dbm.active is None:
             if dialog is not None:
-                dialog.dashboard.clear()
+                dialog.view_model.clear()
             return
         check_hibp = (
             self._settings.hibp_enabled
@@ -2037,8 +2041,9 @@ class MainWindow(QMainWindow):
         )
         # Local checks stay on the UI thread; HIBP runs in a worker.
         report = self._audit.run(check_hibp=False)
+        snapshot = self._security_analyzer.run(audit_report=report)
         if dialog is not None:
-            dialog.dashboard.show_report(report)
+            dialog.view_model.set_snapshot(snapshot)
         self._plugins.context.emit("audit.completed", report=report)
         self._auto_lock.activity()
         if not check_hibp:
@@ -2066,7 +2071,8 @@ class MainWindow(QMainWindow):
         dialog = self._audit_dialog
         if dialog is None or not dialog.isVisible():
             return
-        dialog.dashboard.show_report(report)
+        snapshot = self._security_analyzer.run(audit_report=report)
+        dialog.view_model.set_snapshot(snapshot)
         self._plugins.context.emit("audit.completed", report=report)
 
     def _clear_entry_panels(self) -> None:

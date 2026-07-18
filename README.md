@@ -3,7 +3,7 @@
 **Modern, open-source Qt6 KDBX password manager for Linux.**
 
 KDBXStudio is a KeePass-compatible desktop vault focused on a calm, keyboard-first
-workspace: multi-database tabs, password health auditing, plugins, and rich entry
+workspace: multi-database tabs, Security Dashboard auditing, plugins, and rich entry
 tools (TOTP, attachments, SSH/certificates) — without cloud lock-in. Works with the
 stock **KeePassXC-Browser** extension for form fill.
 
@@ -62,9 +62,9 @@ Captured from the sample vault (`scripts/smoke_visual.py`, Studio Dark, English)
 | --- | --- |
 | ![Search](assets/screenshots/03-search.png) | ![Command palette](assets/screenshots/04-command-palette.png) |
 
-| Password Health | Password generator |
+| Security Dashboard | Password generator |
 | --- | --- |
-| ![Password Health](assets/screenshots/05-password-health.png) | ![Password generator](assets/screenshots/06-password-generator.png) |
+| ![Security Dashboard](assets/screenshots/05-security-dashboard.png) | ![Password generator](assets/screenshots/06-password-generator.png) |
 
 Regenerate locally:
 
@@ -95,7 +95,7 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 ### Workspace
 
 - Dockable **Groups** tree
-- **Password Health** window (Tools → Password Health…) with severity findings, Fix next, and open-entry actions
+- **Security Dashboard** (Tools → Security Dashboard…) with Security Score, KPI cards, charts, recommendations, findings, Fix next, and open-entry actions
 - Fast entry list (`QTableView` model) + detail split view (resizable), optional **favicon** icons
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - **Expiry countdown** — visual indicator showing days until entry expires
@@ -128,7 +128,7 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 
 - Inverted-index **full-text search** (includes tags)
 - Filter chips: URL, custom/OTP, weak / empty / duplicates, **expired**, **expiring soon**, Recycle Bin, tag/group text
-- **Password Health** audit: empty, weak, low entropy, duplicates, missing / reused usernames,
+- **Security Dashboard** audit: empty, weak, low entropy, duplicates, missing / reused usernames,
   **expired / expiring soon**, optional **HIBP** (k-anonymity, off UI thread)
 - **Health score** percentage with theme-aware progress bar
 - **Expiry warnings** — visual alerts for expired and expiring entries
@@ -174,7 +174,7 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 |---------|-----------|-----------|-----------|
 | KeePass KDBX 4.x | ✓ | ✓ | ✓ |
 | Multi-database tabs | ✓ | ✗ | ✗ |
-| Password health audit | ✓ (built-in) | ✓ | ✓ |
+| Security Dashboard audit | ✓ (built-in) | ✓ | ✓ |
 | HIBP k-anonymity | ✓ | ✓ | ✓ |
 | TOTP live display | ✓ | ✓ | ✓ |
 | Quick copy shortcuts | ✓ (Ctrl+U/B/T) | ✓ | ✓ |
@@ -294,7 +294,7 @@ If KeePassXC is also installed, disable its browser integration to avoid conflic
 1. Open a recent vault or use File → Open.
 2. Browse **Groups**, search with the search box (`Ctrl+F`), or Command Palette (`Ctrl+K`).
 3. Edit the entry; Save entry then File → Save to persist the KDBX file.
-4. Open **Tools → Password Health…** for weak / duplicate / empty secrets.
+4. Open **Tools → Security Dashboard…** for weak / duplicate / empty secrets.
 5. Pick a theme under **View → Theme** (or Settings).
 6. Lock with Tools → Lock All Databases (`Ctrl+L`) when stepping away.
 7. Optionally use **Tools → Check for Updates…** to compare with GitHub.

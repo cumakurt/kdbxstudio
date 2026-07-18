@@ -26,7 +26,7 @@ README_EXPORT = {
     "02_workspace_open": "02-workspace.png",
     "03_search_github": "03-search.png",
     "04_command_palette": "04-command-palette.png",
-    "05_password_health": "05-password-health.png",
+    "05_security_dashboard": "05-security-dashboard.png",
     "06_password_generator": "06-password-generator.png",
 }
 
@@ -42,14 +42,18 @@ def build_sample_db(path: Path) -> None:
     root = mgr.root_group_uuid()
     work = mgr.add_group(root, "Work")
     personal = mgr.add_group(root, "Personal")
-    mgr.add_entry(
+    github = mgr.add_entry(
         work.uuid,
         title="GitHub",
         username="dev@example.com",
-        password="StrongPass!2024",
+        password="StrongPass!2024-Extra-Long",
         url="https://github.com",
         notes="Work account\n\n- SSH keys in Deploy SSH\n- Rotate quarterly",
-        tags=["work", "dev"],
+        tags=["work", "dev", "favorite"],
+    )
+    mgr.update_entry(
+        github.uuid,
+        otp="otpauth://totp/GitHub:dev@example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub",
     )
     mgr.add_entry(
         work.uuid,
@@ -57,7 +61,7 @@ def build_sample_db(path: Path) -> None:
         username="vpn",
         password="1234",
         url="https://vpn.example",
-        tags=["infra"],
+        tags=["infra", "vpn"],
     )
     mgr.add_entry(
         work.uuid,
@@ -216,9 +220,9 @@ def main() -> int:
             ),
             PaletteAction(
                 "health",
-                "Password Health…",
-                ("audit", "health"),
-                window.open_password_health,
+                "Security Dashboard…",
+                ("audit", "health", "security", "dashboard"),
+                window.open_security_dashboard,
             ),
             PaletteAction(
                 "settings",
@@ -244,15 +248,17 @@ def main() -> int:
     grab(palette, "04_command_palette")
     palette.close()
 
-    window.open_password_health()
+    window.open_security_dashboard()
     app.processEvents()
-    health = window._audit_dialog
-    assert health is not None
-    health.resize(900, 620)
-    health.show()
+    dash = window._audit_dialog
+    assert dash is not None
+    assert dash.view_model.snapshot is not None
+    dash.resize(1280, 800)
+    dash.show()
+    dash.raise_()
     app.processEvents()
-    grab(health, "05_password_health")
-    health.close()
+    grab(dash, "05_security_dashboard")
+    dash.close()
 
     from kdbxstudio.ui.dialogs.password_generator_dialog import PasswordGeneratorDialog
 

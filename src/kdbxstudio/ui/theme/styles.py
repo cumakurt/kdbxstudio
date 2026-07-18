@@ -24,6 +24,7 @@ def build_stylesheet(
     body = s.font_px(11)
     caption = s.font_px(10)
     display = s.font_px(18)
+    title = s.font_px(14)
 
     return f"""
 * {{
@@ -540,6 +541,89 @@ QLabel#auditSummaryStrip {{
   border: 1px solid {t.border_subtle};
   border-radius: {px(4)};
   font-size: {caption}px;
+}}
+
+QWidget#securityDashboard {{
+  background-color: {t.surface_app};
+}}
+
+QFrame#securityDashboardPanel {{
+  background-color: {t.surface_panel};
+  border: 1px solid {t.border_subtle};
+  border-radius: {px(8)};
+}}
+
+QLabel#securityPanelTitle {{
+  color: {t.text_primary};
+  font-size: {title}px;
+  font-weight: 600;
+}}
+
+QWidget#securityKpiCard {{
+  background-color: {t.surface_elevated};
+  border: 1px solid {t.border_subtle};
+  border-radius: {px(6)};
+}}
+
+QLabel#securityKpiTitle {{
+  color: {t.text_muted};
+  font-size: {caption}px;
+  font-weight: 500;
+}}
+
+QLabel#securityKpiValue {{
+  color: {t.text_primary};
+  font-size: {title}px;
+  font-weight: 600;
+}}
+
+QLabel#securityKpiValue[tone="success"] {{
+  color: {t.text_success};
+}}
+
+QLabel#securityKpiValue[tone="warning"] {{
+  color: {t.text_warning};
+}}
+
+QLabel#securityKpiValue[tone="danger"] {{
+  color: {t.text_danger};
+}}
+
+QLabel#securityKpiSubtitle {{
+  color: {t.text_secondary};
+  font-size: {caption}px;
+}}
+
+QLabel#securityStatusBadge {{
+  background-color: {t.surface_sunken};
+  border: 1px solid {t.border_subtle};
+  border-radius: {px(4)};
+  padding: 2px {px(8)};
+  font-size: {caption}px;
+  font-weight: 600;
+}}
+
+QLabel#securityStatusBadge[tone="success"] {{
+  color: {t.text_success};
+}}
+
+QLabel#securityStatusBadge[tone="warning"] {{
+  color: {t.text_warning};
+}}
+
+QLabel#securityStatusBadge[tone="danger"] {{
+  color: {t.text_danger};
+}}
+
+QLabel#securityPanelHint {{
+  color: {t.text_secondary};
+  font-size: {caption}px;
+}}
+
+QListWidget#securityTimelineList {{
+  background-color: {t.surface_elevated};
+  border: 1px solid {t.border_subtle};
+  border-radius: {px(4)};
 }}
 
 QLabel#entryKindBadge {{

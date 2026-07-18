@@ -1,4 +1,4 @@
-"""Password Health dialog — re-exports Security Dashboard (backwards compatible)."""
+"""Security Dashboard UI package."""
 
 from kdbxstudio.ui.security_dashboard.dialog import (
     PasswordHealthDialog,

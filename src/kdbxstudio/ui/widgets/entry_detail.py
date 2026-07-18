@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-import re
 from datetime import UTC, datetime
 
 from PySide6.QtCore import QDate, QSize, Qt, Signal
@@ -28,6 +26,11 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.core.database import EntryView
+from kdbxstudio.core.password_strength import (
+    StrengthBucket,
+    estimate_password_strength,
+    strength_tone,
+)
 from kdbxstudio.i18n import tr, trf
 from kdbxstudio.ui.icons.entry_type import (
     EntryKind,
@@ -38,6 +41,15 @@ from kdbxstudio.ui.icons.entry_type import (
 from kdbxstudio.ui.theme.manager import set_widget_tone
 from kdbxstudio.ui.widgets.notes_preview import NotesPreviewWidget
 
+_STRENGTH_LABELS = {
+    StrengthBucket.EMPTY: "Empty",
+    StrengthBucket.VERY_WEAK: "Very Weak",
+    StrengthBucket.WEAK: "Weak",
+    StrengthBucket.FAIR: "Fair",
+    StrengthBucket.GOOD: "Good",
+    StrengthBucket.STRONG: "Strong",
+}
+
 
 def _leading_icon(edit: QLineEdit, icon_kind: FieldKind) -> QAction:
     action = QAction(edit)
@@ -47,57 +59,12 @@ def _leading_icon(edit: QLineEdit, icon_kind: FieldKind) -> QAction:
 
 
 def _estimate_password_strength(password: str) -> tuple[int, str]:
-    """Return (score 0-100, label) for a password."""
-    if not password:
-        return 0, tr("Empty")
-    score = 0
-    length = len(password)
-    if length >= 8:
-        score += 20
-    elif length >= 6:
-        score += 10
-    if length >= 16:
-        score += 20
-    elif length >= 12:
-        score += 15
-    if re.search(r"[a-z]", password):
-        score += 10
-    if re.search(r"[A-Z]", password):
-        score += 10
-    if re.search(r"\d", password):
-        score += 10
-    if re.search(r"[^a-zA-Z0-9]", password):
-        score += 15
-    unique_chars = len(set(password))
-    if unique_chars >= 10:
-        score += 10
-    elif unique_chars >= 6:
-        score += 5
-    entropy = len(password) * math.log2(max(1, unique_chars))
-    if entropy >= 60:
-        score += 10
-    elif entropy >= 40:
-        score += 5
-    score = min(100, score)
-    if score >= 80:
-        label = tr("Strong")
-    elif score >= 60:
-        label = tr("Good")
-    elif score >= 40:
-        label = tr("Fair")
-    elif score >= 20:
-        label = tr("Weak")
-    else:
-        label = tr("Very Weak")
-    return score, label
+    score, bucket = estimate_password_strength(password)
+    return score, tr(_STRENGTH_LABELS[bucket])
 
 
 def _strength_tone(score: int) -> str:
-    if score >= 60:
-        return "success"
-    if score >= 20:
-        return "warning"
-    return "danger"
+    return strength_tone(score)
 
 
 class EntryDetailWidget(QWidget):

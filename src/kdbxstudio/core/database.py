@@ -44,6 +44,9 @@ class EntryView:
     expiry_time: str = ""
     tags: tuple[str, ...] = ()
     attachment_count: int = 0
+    modified: str = ""
+    accessed: str = ""
+    created: str = ""
 
 
 @dataclass(frozen=True)
@@ -788,6 +791,16 @@ class KdbxDatabase:
             except Exception:
                 expiry = str(expiry_time)
         attachments = entry.attachments or []
+
+        def _iso_time(attr: str) -> str:
+            value = getattr(entry, attr, None)
+            if value is None:
+                return ""
+            try:
+                return value.isoformat()
+            except Exception:
+                return str(value)
+
         return EntryView(
             uuid=str(entry.uuid),
             title=entry.title or "",
@@ -807,4 +820,7 @@ class KdbxDatabase:
             expiry_time=expiry,
             tags=tags,
             attachment_count=len(attachments),
+            modified=_iso_time("mtime"),
+            accessed=_iso_time("atime"),
+            created=_iso_time("ctime"),
         )

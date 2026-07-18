@@ -106,13 +106,13 @@ Prefer **Inter** when installed; fall back to `Noto Sans`, then `Sans Serif`.
 │ (dock)   │ + filter bar       │ Entry|TOTP|History|…        │
 └──────────┴────────────────────┴─────────────────────────────┘
 
-Password Health → Tools menu → separate resizable window
+Password Health / Security Dashboard → Tools menu → separate resizable window
 ```
 
 - Min window: 1024×640
 - Groups dock default width: 240
 - Entry list flex 2, detail flex 3
-- Password Health dialog default size: 880×600
+- Security Dashboard dialog default size: 1280×800
 
 ---
 
@@ -126,7 +126,7 @@ Password Health → Tools menu → separate resizable window
 | Filter chips | `FilterBarWidget` | Checkbox row → evolve to chips |
 | Entry table | `QTableWidget` | Row select |
 | Command Palette | custom dialog | Ctrl+K / Ctrl+Shift+P |
-| Health list | `QTreeWidget` | Severity column |
+| Security Dashboard | `SecurityDashboardDialog` + panel registry | KPI / Gauge / Donut / Bar / HeatMap |
 | Theme toggle | menu / palette | Persisted |
 
 ---
@@ -150,11 +150,15 @@ Password Health → Tools menu → separate resizable window
 - Fuzzy filter over actions + recent DBs + entry titles (when unlocked)
 - Enter runs; Esc closes; ↑↓ navigate
 
-### 8.4 Password Health
+### 8.4 Security Dashboard (Reports)
 
-- Tools → Password Health… opens a dedicated resizable window
-- Summary strip + sortable findings list
-- Double-click / Open entry → focus entry in main window
+- Tools → Security Dashboard… opens a dedicated resizable window (~1280×800)
+- Modular panel grid (2 columns, scrollable) driven by `panel_registry`
+- Header: Security Score gauge (0–100) + KPI strip
+- Panels: password stats, duplicates, age, expiry, entropy, length, categories, OTP, tags, username, URL, certificates, SSH, attachments, favorites, database health, risk matrix, recommendations, findings
+- Charts: custom QPainter widgets (`ui/charts/`) — Gauge, Donut, Bar, HeatMap, KPI cards
+- Double-click finding / Fix next → focus entry in main window
+- Dark and light themes via design tokens + `#securityDashboard*` QSS
 
 ### 8.5 Plugin Center
 
@@ -167,7 +171,7 @@ Password Health → Tools menu → separate resizable window
 
 1. **First run** → Create DB → Add entry from template → Copy password  
 2. **Daily unlock** → Recent → Unlock → Search / Ctrl+K → Copy  
-3. **Audit** → Tools → Password Health… → Jump to weak/duplicate → Fix → Save  
+3. **Audit** → Tools → Security Dashboard… → Review score / Jump to weak/duplicate → Fix → Save  
 4. **Lock** → Idle / Tools → Lock → Clipboard clear  
 
 ---

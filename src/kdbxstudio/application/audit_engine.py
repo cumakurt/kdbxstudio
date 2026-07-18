@@ -54,11 +54,27 @@ class AuditReport:
 
     @property
     def health_score(self) -> int:
-        if self.total_entries == 0:
-            return 100
-        good = self.total_entries - self.empty_passwords - self.weak_passwords
-        good = max(0, good)
-        return min(100, int(good * 100 / self.total_entries))
+        from kdbxstudio.application.security_dashboard.scoring import (
+            ScoreInputs,
+            compute_security_score,
+        )
+
+        score, _ = compute_security_score(
+            ScoreInputs(
+                total_entries=self.total_entries,
+                empty_passwords=self.empty_passwords,
+                weak=self.weak_passwords,
+                duplicates=self.duplicates,
+                expired=self.expired,
+                expiring_30=self.expiring_soon,
+                empty_usernames=self.missing_usernames,
+                empty_urls=max(0, self.total_entries - self.entries_with_url),
+                low_entropy=self.low_entropy,
+                pwned=self.pwned,
+                short_passwords=self.weak_passwords,
+            )
+        )
+        return score
 
 
 def _charset_size(password: str) -> int:
