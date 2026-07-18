@@ -268,7 +268,7 @@ def test_merge_copies_attachments_and_clears_otp(tmp_path: Path) -> None:
     merge_databases(dst, src, update_existing=True)
     merged = next(e for e in dst.list_entries() if e.title == "Shared")
     assert merged.otp == ""
-    attachments = dst.list_attachments(merged.uuid)
+    attachments = dst.list_attachments(merged.uuid, include_data=True)
     assert len(attachments) == 1
     assert attachments[0].filename == "note.txt"
     assert attachments[0].data == b"payload"

@@ -343,19 +343,12 @@ class SearchEngine:
             result = [e for e in result if is_expired(e)]
 
         if filt.expiring_soon_only:
-            from datetime import UTC, datetime, timedelta
+            from datetime import UTC, datetime
 
-            from kdbxstudio.application.expiry import parse_expiry
+            from kdbxstudio.application.expiry import is_expiring_soon
 
             now = datetime.now(UTC)
-            soon = now + timedelta(days=30)
-            result = [
-                e
-                for e in result
-                if (exp := parse_expiry(e)) is not None
-                and exp > now
-                and exp <= soon
-            ]
+            result = [e for e in result if is_expiring_soon(e, now=now)]
 
         if filt.min_password_length is not None:
             result = [

@@ -6,7 +6,15 @@ import hashlib
 import json
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from pathlib import Path
+
+_MAX_CACHE_ENTRIES = 200
+_FLUSH_EVERY = 8
+
+# Process-local prefix cache (avoids re-reading JSON on every lookup).
+_memory_cache: OrderedDict[str, dict[str, int]] | None = None
+_dirty_writes = 0
 
 
 class HibpError(Exception):
@@ -19,28 +27,42 @@ def _cache_path() -> Path:
     return root / "prefix_cache.json"
 
 
-def _load_cache() -> dict[str, dict[str, int]]:
+def _load_cache() -> OrderedDict[str, dict[str, int]]:
     path = _cache_path()
+    out: OrderedDict[str, dict[str, int]] = OrderedDict()
     if not path.is_file():
-        return {}
+        return out
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            out: dict[str, dict[str, int]] = {}
             for key, value in data.items():
                 if isinstance(value, dict):
                     out[str(key)] = {str(a): int(b) for a, b in value.items()}
-            return out
     except (OSError, ValueError, TypeError):
-        return {}
-    return {}
+        return OrderedDict()
+    return out
 
 
-def _save_cache(cache: dict[str, dict[str, int]]) -> None:
+def _save_cache(cache: OrderedDict[str, dict[str, int]]) -> None:
     path = _cache_path()
-    # Keep cache bounded.
-    items = list(cache.items())[-200:]
-    path.write_text(json.dumps(dict(items)), encoding="utf-8")
+    # Bound size (LRU: oldest keys first in OrderedDict).
+    while len(cache) > _MAX_CACHE_ENTRIES:
+        cache.popitem(last=False)
+    path.write_text(json.dumps(dict(cache)), encoding="utf-8")
+
+
+def _get_memory_cache() -> OrderedDict[str, dict[str, int]]:
+    global _memory_cache
+    if _memory_cache is None:
+        _memory_cache = _load_cache()
+    return _memory_cache
+
+
+def reset_hibp_cache_for_tests() -> None:
+    """Clear in-memory HIBP cache (tests only)."""
+    global _memory_cache, _dirty_writes
+    _memory_cache = None
+    _dirty_writes = 0
 
 
 def password_sha1(password: str) -> str:
@@ -53,11 +75,13 @@ def password_sha1(password: str) -> str:
 
 def fetch_range(prefix5: str, *, timeout_s: float = 8.0) -> dict[str, int]:
     """Return map of suffix→count for a 5-char SHA-1 prefix."""
+    global _dirty_writes
     prefix5 = prefix5.upper()
     if len(prefix5) != 5 or any(c not in "0123456789ABCDEF" for c in prefix5):
         raise ValueError("prefix must be 5 hex chars")
-    cache = _load_cache()
+    cache = _get_memory_cache()
     if prefix5 in cache:
+        cache.move_to_end(prefix5)
         return cache[prefix5]
     url = f"https://api.pwnedpasswords.com/range/{prefix5}"
     req = urllib.request.Request(
@@ -82,10 +106,14 @@ def fetch_range(prefix5: str, *, timeout_s: float = 8.0) -> dict[str, int]:
         except ValueError:
             continue
     cache[prefix5] = mapping
-    try:
-        _save_cache(cache)
-    except OSError:
-        pass
+    cache.move_to_end(prefix5)
+    _dirty_writes += 1
+    if _dirty_writes >= _FLUSH_EVERY:
+        try:
+            _save_cache(cache)
+            _dirty_writes = 0
+        except OSError:
+            pass
     return mapping
 
 

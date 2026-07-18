@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 
 from kdbxstudio.core.database import EntryView
+
+# Shared by audit dashboard and search filter chips.
+EXPIRING_SOON_DAYS = 14
 
 
 def parse_expiry(entry: EntryView) -> datetime | None:
@@ -36,3 +39,19 @@ def is_expired(entry: EntryView, *, now: datetime | None = None) -> bool:
         return False
     current = now or datetime.now(UTC)
     return expiry <= current
+
+
+def is_expiring_soon(
+    entry: EntryView,
+    *,
+    now: datetime | None = None,
+    days: int = EXPIRING_SOON_DAYS,
+) -> bool:
+    """True when expiry is in the future but within ``days``."""
+    expiry = parse_expiry(entry)
+    if expiry is None:
+        return False
+    current = now or datetime.now(UTC)
+    if expiry <= current:
+        return False
+    return expiry <= current + timedelta(days=days)

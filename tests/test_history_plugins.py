@@ -30,7 +30,11 @@ def test_attachments(tmp_path: Path) -> None:
     assert att.filename == "note.txt"
     listed = mgr.list_attachments(entry.uuid)
     assert len(listed) == 1
-    assert listed[0].data == b"hello"
+    assert listed[0].data == b""
+    assert listed[0].size == 5
+    assert mgr.get_attachment_data(entry.uuid, listed[0].id) == b"hello"
+    with_data = mgr.list_attachments(entry.uuid, include_data=True)
+    assert with_data[0].data == b"hello"
     mgr.delete_attachment(entry.uuid, att.id)
     assert mgr.list_attachments(entry.uuid) == []
 

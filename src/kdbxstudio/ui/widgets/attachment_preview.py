@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt, Signal
@@ -38,6 +39,7 @@ class AttachmentPreviewWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._attachments: list[AttachmentView] = []
+        self._data_loader: Callable[[int], bytes] | None = None
         self._pdf_buffer: QBuffer | None = None
         self.setAcceptDrops(True)
 
@@ -85,6 +87,10 @@ class AttachmentPreviewWidget(QWidget):
         layout.addLayout(left, 1)
         layout.addLayout(right, 2)
 
+    def set_data_loader(self, loader: Callable[[int], bytes] | None) -> None:
+        """Optional lazy loader for attachment bytes by attachment id."""
+        self._data_loader = loader
+
     def clear(self) -> None:
         self._attachments = []
         self._list.clear()
@@ -126,6 +132,16 @@ class AttachmentPreviewWidget(QWidget):
             self._pdf_buffer.close()
             self._pdf_buffer = None
 
+    def _payload(self, item: AttachmentView) -> bytes:
+        if item.data:
+            return item.data
+        if self._data_loader is not None:
+            try:
+                return self._data_loader(item.id)
+            except Exception:
+                return b""
+        return b""
+
     def _emit_delete(self) -> None:
         row = self._list.currentRow()
         if 0 <= row < len(self._attachments):
@@ -157,7 +173,7 @@ class AttachmentPreviewWidget(QWidget):
         if not path:
             return
         try:
-            Path(path).write_bytes(item.data)
+            Path(path).write_bytes(self._payload(item))
         except OSError as exc:
             QMessageBox.critical(self, tr("Save failed"), str(exc))
             return
@@ -168,20 +184,21 @@ class AttachmentPreviewWidget(QWidget):
             return
         item = self._attachments[row]
         self._info.setText(f"{item.filename} — {item.size} bytes")
+        data = self._payload(item)
         name = item.filename.lower()
         if name.endswith(".pdf"):
             self._close_pdf()
             self._pdf_buffer = QBuffer()
-            self._pdf_buffer.setData(QByteArray(item.data))
+            self._pdf_buffer.setData(QByteArray(data))
             self._pdf_buffer.open(QIODevice.OpenModeFlag.ReadOnly)
             self._pdf_doc.load(self._pdf_buffer)
             self._stack.setCurrentWidget(self._pdf_view)
             return
         self._close_pdf()
         try:
-            text = item.data.decode("utf-8")
+            text = data.decode("utf-8")
         except UnicodeDecodeError:
-            preview = item.data[:512]
+            preview = data[:512]
             text = tr("Binary attachment (hex preview):\n") + preview.hex(" ")
         self._text.setPlainText(text)
         self._stack.setCurrentWidget(self._text)

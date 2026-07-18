@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from kdbxstudio.application.database_manager import DatabaseManager
+from kdbxstudio.application.expiry import (
+    EXPIRING_SOON_DAYS as SHARED_EXPIRING_SOON_DAYS,
+)
 from kdbxstudio.application.expiry import parse_expiry
 from kdbxstudio.core.database import EntryView
 from kdbxstudio.core.password_generator import estimate_entropy_bits
@@ -81,7 +84,7 @@ class AuditEngine:
     WEAK_LENGTH = 8
     LOW_ENTROPY_BITS = 40.0
     REUSED_USERNAME_THRESHOLD = 3
-    EXPIRING_SOON_DAYS = 14
+    EXPIRING_SOON_DAYS = SHARED_EXPIRING_SOON_DAYS
 
     def __init__(self, database_manager: DatabaseManager) -> None:
         self._dbm = database_manager
@@ -117,7 +120,7 @@ class AuditEngine:
         soon = now + timedelta(days=self.EXPIRING_SOON_DAYS)
 
         try:
-            group_count = len(self._dbm.list_groups())
+            group_count = len(self._dbm.list_groups(session_id))
         except Exception:
             group_count = 0
 
@@ -130,11 +133,8 @@ class AuditEngine:
                 with_custom += 1
             if entry.otp:
                 with_otp += 1
-            try:
-                if self._dbm.attachment_count(entry.uuid) > 0:
-                    with_attachments += 1
-            except Exception:
-                pass
+            if entry.attachment_count > 0:
+                with_attachments += 1
             username = (entry.username or "").strip()
             if not username:
                 missing_usernames += 1
@@ -217,57 +217,8 @@ class AuditEngine:
                     )
 
         if check_hibp:
-            from kdbxstudio.application.hibp import HibpError, pwned_count
-
-            checked = 0
-            seen_pw: dict[str, int] = {}
-            for entry in entries:
-                if checked >= hibp_limit:
-                    findings.append(
-                        AuditFinding(
-                            kind="hibp_truncated",
-                            message=(
-                                f"HIBP check limited to {hibp_limit} passwords "
-                                "this run"
-                            ),
-                            entry_uuid=None,
-                            severity="info",
-                        )
-                    )
-                    break
-                pwd = entry.password or ""
-                if not pwd:
-                    continue
-                try:
-                    if pwd in seen_pw:
-                        count = seen_pw[pwd]
-                    else:
-                        count = pwned_count(pwd)
-                        seen_pw[pwd] = count
-                        checked += 1
-                except HibpError as exc:
-                    findings.append(
-                        AuditFinding(
-                            kind="hibp_error",
-                            message=str(exc),
-                            entry_uuid=None,
-                            severity="info",
-                        )
-                    )
-                    break
-                if count > 0:
-                    pwned += 1
-                    findings.append(
-                        AuditFinding(
-                            kind="pwned_password",
-                            message=(
-                                f"Entry '{entry.title}' password seen in breaches "
-                                f"({count} times)"
-                            ),
-                            entry_uuid=entry.uuid,
-                            severity="critical",
-                        )
-                    )
+            hibp_findings, pwned = self._hibp_findings(entries, hibp_limit=hibp_limit)
+            findings.extend(hibp_findings)
 
         duplicates = 0
         for _pwd, group in password_map.items():
@@ -322,3 +273,73 @@ class AuditEngine:
             entries_with_tags=with_tags,
             entries_with_custom_fields=with_custom,
         )
+
+    @staticmethod
+    def hibp_findings_for_entries(
+        entries: list[EntryView],
+        *,
+        hibp_limit: int = 40,
+    ) -> tuple[list[AuditFinding], int]:
+        """Run HIBP checks against a snapshot of entries (safe for worker threads)."""
+        return AuditEngine._hibp_findings(entries, hibp_limit=hibp_limit)
+
+    @staticmethod
+    def _hibp_findings(
+        entries: list[EntryView],
+        *,
+        hibp_limit: int = 40,
+    ) -> tuple[list[AuditFinding], int]:
+        from kdbxstudio.application.hibp import HibpError, pwned_count
+
+        findings: list[AuditFinding] = []
+        pwned = 0
+        checked = 0
+        seen_pw: dict[str, int] = {}
+        for entry in entries:
+            if checked >= hibp_limit:
+                findings.append(
+                    AuditFinding(
+                        kind="hibp_truncated",
+                        message=(
+                            f"HIBP check limited to {hibp_limit} passwords "
+                            "this run"
+                        ),
+                        entry_uuid=None,
+                        severity="info",
+                    )
+                )
+                break
+            pwd = entry.password or ""
+            if not pwd:
+                continue
+            try:
+                if pwd in seen_pw:
+                    count = seen_pw[pwd]
+                else:
+                    count = pwned_count(pwd)
+                    seen_pw[pwd] = count
+                    checked += 1
+            except HibpError as exc:
+                findings.append(
+                    AuditFinding(
+                        kind="hibp_error",
+                        message=str(exc),
+                        entry_uuid=None,
+                        severity="info",
+                    )
+                )
+                break
+            if count > 0:
+                pwned += 1
+                findings.append(
+                    AuditFinding(
+                        kind="pwned_password",
+                        message=(
+                            f"Entry '{entry.title}' password seen in breaches "
+                            f"({count} times)"
+                        ),
+                        entry_uuid=entry.uuid,
+                        severity="critical",
+                    )
+                )
+        return findings, pwned

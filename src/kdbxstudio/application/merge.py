@@ -30,11 +30,31 @@ def _sync_attachments(
     source: KdbxDatabase,
     source_uuid: str,
 ) -> None:
-    for attachment in destination.list_attachments(dest_uuid):
-        destination.delete_attachment(dest_uuid, attachment.id)
-    for attachment in source.list_attachments(source_uuid):
-        name = Path(attachment.filename).name or "attachment"
-        destination.add_attachment(dest_uuid, name, attachment.data)
+    """Replace destination attachments with source copies without delete-first.
+
+    New binaries are added first; old destination attachments are removed only
+    after the copy succeeds. On failure, newly added copies are rolled back.
+    """
+    source_attachments = source.list_attachments(source_uuid, include_data=True)
+    old_ids = [
+        attachment.id
+        for attachment in destination.list_attachments(dest_uuid, include_data=False)
+    ]
+    added_ids: list[int] = []
+    try:
+        for attachment in source_attachments:
+            name = Path(attachment.filename).name or "attachment"
+            created = destination.add_attachment(dest_uuid, name, attachment.data)
+            added_ids.append(created.id)
+        for attachment_id in old_ids:
+            destination.delete_attachment(dest_uuid, attachment_id)
+    except Exception:
+        for attachment_id in added_ids:
+            try:
+                destination.delete_attachment(dest_uuid, attachment_id)
+            except Exception:
+                pass
+        raise
 
 
 def merge_databases(

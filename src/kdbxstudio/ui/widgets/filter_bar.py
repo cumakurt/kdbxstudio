@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from kdbxstudio.application.expiry import EXPIRING_SOON_DAYS
 from kdbxstudio.application.search_engine import EntryFilter
 from kdbxstudio.i18n import tr
 
@@ -71,7 +72,7 @@ class FilterBarWidget(QWidget):
                 tr("Empty passwords"),
                 tr("Duplicates"),
                 tr("Past expiry date"),
-                tr("Expiring within 30 days"),
+                tr("Expiring within {n} days").format(n=EXPIRING_SOON_DAYS),
                 tr("Recycle Bin only"),
             ),
             strict=True,
@@ -97,10 +98,20 @@ class FilterBarWidget(QWidget):
         layout.addWidget(clear_btn)
 
     def clear(self) -> None:
-        self._group.clear()
-        self._tag.clear()
+        self._group.blockSignals(True)
+        self._tag.blockSignals(True)
         for chip in self._chips:
-            chip.setChecked(False)
+            chip.blockSignals(True)
+        try:
+            self._group.clear()
+            self._tag.clear()
+            for chip in self._chips:
+                chip.setChecked(False)
+        finally:
+            self._group.blockSignals(False)
+            self._tag.blockSignals(False)
+            for chip in self._chips:
+                chip.blockSignals(False)
         self._emit()
 
     def current_filter(self, query: str = "") -> EntryFilter:

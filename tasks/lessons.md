@@ -16,11 +16,13 @@
 - Seed audit scenarios *before* recycling entries that contribute to reused-username / empty-password counts.
 - Attachment mutations must invalidate search/index caches, not only fire listeners.
 
-## Logic polish (2026-07-18)
+## Perf / correctness (2026-07-18)
 
-- Never advertise DnD without wiring drop → `move_entry`; prefer DropOnly on group tree.
-- Do not call Qt widget APIs from worker threads — use a Signal owned by the main-window QObject.
-- History UI diffs `HistoryView` pairs: put tags/custom/expiry on `HistoryView`, not only `EntryView`.
-- Centralize save+backup so auto-lock / quit / tab close cannot skip backups.
-- Clipboard `0` means disabled; AutoLock idle `0` must not arm a zero-delay timer.
-- Score helpers: put longer length thresholds before shorter `elif` branches.
+- Audit must never call `attachment_count(uuid)` per entry — put `attachment_count` on `EntryView` during list.
+- Never return the live `_index_cache` list from `all_entries`; always `list(cached)`.
+- Attachment list default is metadata-only; use `get_attachment_data` / `include_data=True` for payloads.
+- Merge attachments: add-then-delete (with rollback), never delete-first.
+- HIBP and manual favicon must not block the UI thread; snapshot entries on main, network in a worker + Signal.
+- Password Show state and group-tree selection must reset/restore on entry/group refresh.
+- Expiring-soon window is one shared constant (`expiry.EXPIRING_SOON_DAYS`) for audit + search filters.
+

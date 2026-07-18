@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import shutil
 from base64 import b64decode, b64encode
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from threading import Thread
@@ -41,7 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio import __version__
-from kdbxstudio.application.audit_engine import AuditEngine
+from kdbxstudio.application.audit_engine import AuditEngine, AuditReport
 from kdbxstudio.application.database_manager import DatabaseManager
 from kdbxstudio.application.favicon import cached_favicon, fetch_favicon
 from kdbxstudio.application.plugin_manager import PluginManager
@@ -96,7 +97,9 @@ from kdbxstudio.ui.widgets.totp_widget import TotpWidget
 
 class MainWindow(QMainWindow):
     _favicon_ready = Signal()
+    _favicon_manual_done = Signal(str, str)  # path_name_or_empty, error_or_empty
     _status_message = Signal(str, int)
+    _audit_hibp_done = Signal(object)  # AuditReport
 
     def __init__(self) -> None:
         super().__init__()
@@ -150,16 +153,21 @@ class MainWindow(QMainWindow):
         self._entry_detail = EntryDetailWidget()
         self._history = HistoryWidget()
         self._attachments = AttachmentPreviewWidget()
+        self._attachments.set_data_loader(self._load_attachment_bytes)
         self._pem = PemInspectorWidget()
         self._totp = TotpWidget()
         self._audit_dialog = None
+        self._audit_hibp_generation = 0
         self._favicon_ready.connect(self._on_favicon_fetched)
+        self._favicon_manual_done.connect(self._on_favicon_manual_done)
+        self._audit_hibp_done.connect(self._on_audit_hibp_done)
         self._status_message.connect(self._show_status_message)
         self._search_box = QLineEdit()
         self._search_box.setPlaceholderText(tr("Search entries…"))
         self._search_box.setAccessibleName(tr("Universal search"))
         self._search_box.setClearButtonEnabled(True)
         self._search_box.returnPressed.connect(self._run_search)
+        self._search_box.textChanged.connect(self._on_search_text_changed)
         self._filter_bar = FilterBarWidget()
         self._filter_bar.filter_changed.connect(self._on_filter_changed)
 
@@ -1549,6 +1557,14 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(tr("{n} result(s)").format(n=len(hits)), 3000)
         self._auto_lock.activity()
 
+    def _on_search_text_changed(self, text: str) -> None:
+        # Clear button (×) empties the field without Enter — restore group list.
+        if text.strip():
+            return
+        if self._dbm.active is None:
+            return
+        self._run_search()
+
     def _on_filter_changed(self, filt: object) -> None:
         if isinstance(filt, EntryFilter):
             self._active_filter = filt
@@ -1592,20 +1608,32 @@ class MainWindow(QMainWindow):
         selected_group = self._group_tree.selected_group_uuid()
         groups = self._dbm.list_groups()
         root = self._dbm.root_group_uuid()
-        self._group_tree.set_groups(groups, root)
         group_ids = {g.uuid for g in groups}
         target = (
             selected_group
             if selected_group and selected_group in group_ids
             else root
         )
-        self._on_group_selected(target)
+        self._group_tree.set_groups(groups, root, select_uuid=target)
+        query = self._search_box.text().strip()
+        filt = self._filter_bar.current_filter(query=query)
+        self._active_filter = filt
+        if query or not filt.is_empty():
+            self._run_search()
+        else:
+            self._on_group_selected(target)
         self._schedule_audit()
 
     def _schedule_audit(self) -> None:
+        dialog = self._audit_dialog
+        if dialog is None or not dialog.isVisible():
+            return
         self._audit_timer.start()
 
     def _run_debounced_audit(self) -> None:
+        dialog = self._audit_dialog
+        if dialog is None or not dialog.isVisible():
+            return
         self._refresh_audit(include_hibp=False)
 
     def _ensure_audit_dialog(self):
@@ -1622,10 +1650,10 @@ class MainWindow(QMainWindow):
 
     def open_password_health(self) -> None:
         dialog = self._ensure_audit_dialog()
-        self._refresh_audit()
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
+        self._refresh_audit()
 
     def _refresh_audit(self, *, include_hibp: bool | None = None) -> None:
         dialog = self._audit_dialog
@@ -1638,11 +1666,39 @@ class MainWindow(QMainWindow):
             if include_hibp is None
             else include_hibp
         )
-        report = self._audit.run(check_hibp=check_hibp)
+        # Local checks stay on the UI thread; HIBP runs in a worker.
+        report = self._audit.run(check_hibp=False)
         if dialog is not None:
             dialog.dashboard.show_report(report)
         self._plugins.context.emit("audit.completed", report=report)
         self._auto_lock.activity()
+        if not check_hibp:
+            return
+        entries = self._dbm.all_entries(include_recycle_bin=False)
+        self._audit_hibp_generation += 1
+        generation = self._audit_hibp_generation
+        base_report = report
+
+        def _worker() -> None:
+            findings, pwned = AuditEngine.hibp_findings_for_entries(entries)
+            merged = replace(
+                base_report,
+                findings=base_report.findings + tuple(findings),
+                pwned=pwned,
+            )
+            if generation == self._audit_hibp_generation:
+                self._audit_hibp_done.emit(merged)
+
+        Thread(target=_worker, daemon=True).start()
+
+    def _on_audit_hibp_done(self, report: object) -> None:
+        if not isinstance(report, AuditReport):
+            return
+        dialog = self._audit_dialog
+        if dialog is None or not dialog.isVisible():
+            return
+        dialog.dashboard.show_report(report)
+        self._plugins.context.emit("audit.completed", report=report)
 
     def _clear_entry_panels(self) -> None:
         self._current_entry_uuid = None
@@ -1661,10 +1717,19 @@ class MainWindow(QMainWindow):
         self._entry_detail.load_entry(entry)
         self._totp.set_otp(entry.otp)
         self._history.set_history(self._dbm.list_history(entry_uuid))
-        self._attachments.set_attachments(self._dbm.list_attachments(entry_uuid))
+        self._attachments.set_attachments(
+            self._dbm.list_attachments(entry_uuid, include_data=False)
+        )
         self._pem.inspect_entry(entry)
         if (entry.url or "").strip():
             self._maybe_fetch_favicon(entry.url)
+
+    def _load_attachment_bytes(self, attachment_id: int) -> bytes:
+        if not self._current_entry_uuid or self._dbm.active is None:
+            return b""
+        return self._dbm.get_attachment_data(
+            self._current_entry_uuid, attachment_id
+        )
 
     def _maybe_fetch_favicon(self, url: str) -> None:
         had_cache = cached_favicon(url) is not None
@@ -1682,6 +1747,11 @@ class MainWindow(QMainWindow):
 
     def _on_favicon_fetched(self) -> None:
         if self._dbm.active is None:
+            return
+        query = self._search_box.text().strip()
+        filt = self._filter_bar.current_filter(query=query)
+        if query or not filt.is_empty():
+            self._run_search()
             return
         group_uuid = self._group_tree.selected_group_uuid()
         if group_uuid:
@@ -2016,23 +2086,38 @@ class MainWindow(QMainWindow):
         if entry is None or not (entry.url or "").strip():
             QMessageBox.information(self, tr("Favicon"), tr("Selected entry has no URL."))
             return
-        try:
-            path = fetch_favicon(entry.url)
-        except Exception as exc:
+        url = entry.url
+        self.statusBar().showMessage(tr("Fetching favicon…"), 4000)
+
+        def _fetch() -> None:
+            try:
+                path = fetch_favicon(url)
+            except Exception as exc:
+                self._favicon_manual_done.emit("", str(exc))
+                return
+            if path is None:
+                self._favicon_manual_done.emit("", "")
+                return
+            self._favicon_manual_done.emit(path.name, "")
+
+        Thread(target=_fetch, daemon=True).start()
+        self._auto_lock.activity()
+
+    def _on_favicon_manual_done(self, path_name: str, error: str) -> None:
+        if error:
             QMessageBox.warning(
                 self,
                 tr("Favicon"),
-                tr("Could not fetch favicon: {exc}").format(exc=exc),
+                tr("Could not fetch favicon: {exc}").format(exc=error),
             )
             return
-        if path is None:
-            QMessageBox.information(self, tr("Favicon"), tr("No favicon found for this URL."))
+        if not path_name:
+            QMessageBox.information(
+                self, tr("Favicon"), tr("No favicon found for this URL.")
+            )
             return
-        group_uuid = self._group_tree.selected_group_uuid()
-        if group_uuid:
-            self._entry_list.set_entries(self._dbm.list_entries(group_uuid))
-        self.statusBar().showMessage(f"Favicon saved: {path.name}", 4000)
-        self._auto_lock.activity()
+        self._on_favicon_fetched()
+        self.statusBar().showMessage(f"Favicon saved: {path_name}", 4000)
 
     def merge_database(self) -> None:
         from kdbxstudio.application.merge import merge_databases

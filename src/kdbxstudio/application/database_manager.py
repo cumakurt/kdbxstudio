@@ -315,9 +315,23 @@ class DatabaseManager:
         return self._get(session_id).database_info()
 
     def list_attachments(
-        self, entry_uuid: str, session_id: str | None = None
+        self,
+        entry_uuid: str,
+        session_id: str | None = None,
+        *,
+        include_data: bool = False,
     ) -> list[AttachmentView]:
-        return self._get(session_id).list_attachments(entry_uuid)
+        return self._get(session_id).list_attachments(
+            entry_uuid, include_data=include_data
+        )
+
+    def get_attachment_data(
+        self,
+        entry_uuid: str,
+        attachment_id: int,
+        session_id: str | None = None,
+    ) -> bytes:
+        return self._get(session_id).get_attachment_data(entry_uuid, attachment_id)
 
     def attachment_count(
         self, entry_uuid: str, session_id: str | None = None
@@ -404,7 +418,7 @@ class DatabaseManager:
             cached = self._get(sid).list_entries()
             self._index_cache.set(sid, cached)
         if include_recycle_bin:
-            return cached
+            return list(cached)
         return [e for e in cached if not e.in_recycle_bin]
 
     def display_name(self, session_id: str | None = None) -> str:

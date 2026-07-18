@@ -17,6 +17,25 @@ def agent_available() -> bool:
     return bool(shutil.which("ssh-add") and os.environ.get("SSH_AUTH_SOCK"))
 
 
+def _shred_and_unlink(path: Path) -> None:
+    try:
+        if path.is_file():
+            size = path.stat().st_size
+            with path.open("r+b") as handle:
+                handle.write(b"\0" * size)
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except OSError:
+                    pass
+        path.unlink(missing_ok=True)
+    except OSError:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def add_private_key(pem_text: str, *, lifetime_seconds: int | None = None) -> str:
     """Load a PEM/OpenSSH private key into the agent. Returns ssh-add stdout."""
     if not shutil.which("ssh-add"):
@@ -39,12 +58,13 @@ def add_private_key(pem_text: str, *, lifetime_seconds: int | None = None) -> st
     if proc.returncode == 0:
         return (proc.stdout or proc.stderr or "Identity added.").strip()
 
-    # Fallback for agents that reject stdin ("-").
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".pem") as handle:
-        handle.write(pem)
-        path = Path(handle.name)
+    # Fallback for agents that reject stdin ("-"): create 0600 tempfile.
+    fd, name = tempfile.mkstemp(prefix="kdbxstudio-ssh-", suffix=".pem")
+    path = Path(name)
     try:
-        path.chmod(0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(pem)
         file_cmd = ["ssh-add"]
         if lifetime_seconds is not None and lifetime_seconds > 0:
             file_cmd.extend(["-t", str(lifetime_seconds)])
@@ -55,7 +75,4 @@ def add_private_key(pem_text: str, *, lifetime_seconds: int | None = None) -> st
             raise SshAgentError(detail)
         return (proc.stdout or proc.stderr or "Identity added.").strip()
     finally:
-        try:
-            path.unlink(missing_ok=True)
-        except OSError:
-            pass
+        _shred_and_unlink(path)

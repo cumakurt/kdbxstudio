@@ -180,10 +180,13 @@ def test_e2e_sample_database_feature_matrix(tmp_path: Path) -> None:
     # --- Attachments (list / save-as / delete) ---
     attachments = mgr.list_attachments(github.uuid)
     assert len(attachments) == 1
-    assert attachments[0].data == b"hello attachment"
+    assert attachments[0].data == b""
+    assert attachments[0].size == len(b"hello attachment")
+    payload = mgr.get_attachment_data(github.uuid, attachments[0].id)
+    assert payload == b"hello attachment"
     save_as = tmp_path / "export" / attachments[0].filename
     save_as.parent.mkdir()
-    save_as.write_bytes(attachments[0].data)
+    save_as.write_bytes(payload)
     assert save_as.read_bytes() == b"hello attachment"
 
     # --- Groups / move / list by group ---
@@ -347,7 +350,9 @@ def test_e2e_sample_database_feature_matrix(tmp_path: Path) -> None:
     result = merge_databases(merge_dst, merge_src)
     assert result.added == 1
     merged = next(e for e in merge_dst.list_entries() if e.title == "Merged")
-    assert merge_dst.list_attachments(merged.uuid)[0].data == b"\x00\x01"
+    assert merge_dst.get_attachment_data(
+        merged.uuid, merge_dst.list_attachments(merged.uuid)[0].id
+    ) == b"\x00\x01"
 
     # --- Emergency sheet ---
     sheet = render_emergency_html(

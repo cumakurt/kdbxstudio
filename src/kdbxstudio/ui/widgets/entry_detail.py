@@ -283,6 +283,7 @@ class EntryDetailWidget(QWidget):
         self._username.blockSignals(False)
         self._notes.clear()
         self._custom.setRowCount(0)
+        self._reset_password_visibility()
         self._apply_kind_icons(EntryKind.GENERIC)
         self.set_enabled(False)
 
@@ -320,6 +321,7 @@ class EntryDetailWidget(QWidget):
         )
         self._apply_kind_icons(kind)
         self._update_expiry_countdown(entry)
+        self._reset_password_visibility()
         self.set_enabled(True)
 
     def _on_expiry_mode_toggled(self, has_expiry: bool) -> None:
@@ -482,18 +484,28 @@ class EntryDetailWidget(QWidget):
         )
         self._show_btn.setText(tr("Hide") if checked else tr("Show"))
 
+    def _reset_password_visibility(self) -> None:
+        self._show_btn.blockSignals(True)
+        self._show_btn.setChecked(False)
+        self._show_btn.blockSignals(False)
+        self._password.setEchoMode(QLineEdit.EchoMode.Password)
+        self._show_btn.setText(tr("Show"))
+
     def _update_strength(self) -> None:
         password = self._password.text()
         score, label = _estimate_password_strength(password)
         color = _strength_color(score)
         self._strength_bar.setValue(score)
-        self._strength_bar.setStyleSheet(
-            f"QProgressBar::chunk {{ background-color: {color}; }}"
-        )
+        band = score // 25
+        if getattr(self, "_strength_band", None) != band:
+            self._strength_band = band
+            self._strength_bar.setStyleSheet(
+                f"QProgressBar::chunk {{ background-color: {color}; }}"
+            )
+            self._strength_label.setStyleSheet(
+                f"font-size: 11px; color: {color}; font-weight: bold;"
+            )
         self._strength_label.setText(label)
-        self._strength_label.setStyleSheet(
-            f"font-size: 11px; color: {color}; font-weight: bold;"
-        )
 
     def _copy_password(self) -> None:
         self.copy_password_requested.emit(self._password.text())

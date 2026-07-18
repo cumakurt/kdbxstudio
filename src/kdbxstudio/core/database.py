@@ -43,6 +43,7 @@ class EntryView:
     expires: bool = False
     expiry_time: str = ""
     tags: tuple[str, ...] = ()
+    attachment_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,8 @@ class KdbxDatabase:
         self._password: SecureString | None = None
         self._keyfile: Path | None = None
         self._dirty = False
+        self._entry_by_uuid: dict[str, Any] | None = None
+        self._group_by_uuid: dict[str, Group] | None = None
 
     @property
     def path(self) -> Path | None:
@@ -161,6 +164,7 @@ class KdbxDatabase:
         self._set_password(password)
         self._keyfile = keyfile_path
         self._dirty = False
+        self._invalidate_indexes()
 
     def save(self, path: Path | str | None = None) -> None:
         """Save the database to disk."""
@@ -170,6 +174,8 @@ class KdbxDatabase:
             kp.filename = str(self._path)
         if self._path is None:
             raise DatabaseError("No path set for save")
+        if self._password is not None:
+            kp.password = self._password.get()
         try:
             kp.save()
         except Exception as exc:
@@ -178,11 +184,21 @@ class KdbxDatabase:
 
     def close(self) -> None:
         """Close the database and clear credentials from this wrapper."""
+        if self._kp is not None:
+            try:
+                self._kp.password = None
+            except Exception:
+                pass
+            try:
+                self._kp.keyfile = None
+            except Exception:
+                pass
         self._kp = None
         self._path = None
         self._clear_password()
         self._keyfile = None
         self._dirty = False
+        self._invalidate_indexes()
 
     def _set_password(self, password: str | None) -> None:
         self._clear_password()
@@ -217,6 +233,7 @@ class KdbxDatabase:
         parent = self._find_group(parent_uuid)
         group = kp.add_group(parent, name)
         self._dirty = True
+        self._invalidate_indexes()
         recycle_uuid = self._recycle_bin_uuid()
         parent_group = group.parentgroup
         return GroupView(
@@ -259,6 +276,7 @@ class KdbxDatabase:
         else:
             kp.trash_group(group)
         self._dirty = True
+        self._invalidate_indexes()
 
     def ensure_group_path(self, path: str) -> str:
         """Create nested groups from a path like Root/Work/Dev; return leaf UUID."""
@@ -277,6 +295,7 @@ class KdbxDatabase:
             if child is None:
                 child = kp.add_group(current, part)
                 self._dirty = True
+                self._invalidate_indexes()
             current = child
         return str(current.uuid)
 
@@ -312,17 +331,24 @@ class KdbxDatabase:
         if group_uuid is not None:
             group = self._find_group(group_uuid)
             entries = group.entries
-        views = [self._to_entry_view(entry) for entry in entries]
+        recycle_uuid = self._recycle_bin_uuid()
+        path_cache: dict[str, str] = {}
+        views = [
+            self._to_entry_view(
+                entry, recycle_uuid=recycle_uuid, path_cache=path_cache
+            )
+            for entry in entries
+        ]
         if not include_recycle_bin and group_uuid is None:
             views = [e for e in views if not e.in_recycle_bin]
         return views
 
     def get_entry(self, entry_uuid: str) -> EntryView | None:
-        kp = self._require_kp()
-        for entry in kp.entries:
-            if str(entry.uuid) == entry_uuid:
-                return self._to_entry_view(entry)
-        return None
+        try:
+            entry = self._find_entry(entry_uuid)
+        except DatabaseError:
+            return None
+        return self._to_entry_view(entry)
 
     def add_entry(
         self,
@@ -355,6 +381,7 @@ class KdbxDatabase:
             for key, value in custom_properties.items():
                 entry.set_custom_property(key, value)
         self._dirty = True
+        self._invalidate_indexes()
         return self._to_entry_view(entry)
 
     def update_entry(
@@ -412,6 +439,7 @@ class KdbxDatabase:
         group = self._find_group(group_uuid)
         kp.move_entry(entry, group)
         self._dirty = True
+        self._invalidate_indexes()
         return self._to_entry_view(entry)
 
     def list_history(self, entry_uuid: str) -> list[HistoryView]:
@@ -500,6 +528,7 @@ class KdbxDatabase:
             binary_id = kp.add_binary(data)
             entry.add_attachment(binary_id, filename)
         self._dirty = True
+        self._invalidate_indexes()
         return self._to_entry_view(entry)
 
     def database_info(self) -> DatabaseInfo:
@@ -535,20 +564,36 @@ class KdbxDatabase:
             encryption=encryption,
         )
 
-    def list_attachments(self, entry_uuid: str) -> list[AttachmentView]:
+    def list_attachments(
+        self,
+        entry_uuid: str,
+        *,
+        include_data: bool = False,
+    ) -> list[AttachmentView]:
+        """List attachments. Binary payloads are omitted unless ``include_data``."""
         entry = self._find_entry(entry_uuid)
         result: list[AttachmentView] = []
         for attachment in entry.attachments or []:
-            data = bytes(attachment.binary or b"")
+            raw = attachment.binary or b""
+            size = len(raw)
+            data = bytes(raw) if include_data else b""
             result.append(
                 AttachmentView(
                     id=int(attachment.id),
                     filename=str(attachment.filename or ""),
-                    size=len(data),
+                    size=size,
                     data=data,
                 )
             )
         return result
+
+    def get_attachment_data(self, entry_uuid: str, attachment_id: int) -> bytes:
+        """Load a single attachment payload by id."""
+        entry = self._find_entry(entry_uuid)
+        for attachment in entry.attachments or []:
+            if int(attachment.id) == attachment_id:
+                return bytes(attachment.binary or b"")
+        raise DatabaseError(f"Attachment not found: {attachment_id}")
 
     def attachment_count(self, entry_uuid: str) -> int:
         """Count attachments without copying binary payloads into memory."""
@@ -566,6 +611,7 @@ class KdbxDatabase:
         binary_id = kp.add_binary(data)
         attachment = entry.add_attachment(binary_id, safe_name)
         self._dirty = True
+        self._invalidate_indexes()
         payload = bytes(attachment.binary or b"")
         return AttachmentView(
             id=int(attachment.id),
@@ -580,6 +626,7 @@ class KdbxDatabase:
             if int(attachment.id) == attachment_id:
                 attachment.delete()
                 self._dirty = True
+                self._invalidate_indexes()
                 return
         raise DatabaseError(f"Attachment not found: {attachment_id}")
 
@@ -589,6 +636,7 @@ class KdbxDatabase:
         entry = self._find_entry(entry_uuid)
         kp.trash_entry(entry)
         self._dirty = True
+        self._invalidate_indexes()
 
     def delete_entry(self, entry_uuid: str, *, permanent: bool = False) -> None:
         """Trash by default; permanently delete when requested."""
@@ -597,6 +645,7 @@ class KdbxDatabase:
             entry = self._find_entry(entry_uuid)
             kp.delete_entry(entry)
             self._dirty = True
+            self._invalidate_indexes()
             return
         self.trash_entry(entry_uuid)
 
@@ -625,6 +674,7 @@ class KdbxDatabase:
             kp.delete_group(subgroup)
         if entries or subgroups:
             self._dirty = True
+            self._invalidate_indexes()
         return len(entries)
 
     def recycle_bin_uuid(self) -> str | None:
@@ -644,21 +694,37 @@ class KdbxDatabase:
             raise DatabaseNotOpenError("Database is not open")
         return self._kp
 
-    def _find_group(self, group_uuid: str) -> Group:
+    def _invalidate_indexes(self) -> None:
+        self._entry_by_uuid = None
+        self._group_by_uuid = None
+
+    def _ensure_indexes(self) -> None:
+        if self._entry_by_uuid is not None and self._group_by_uuid is not None:
+            return
         kp = self._require_kp()
-        for group in kp.groups:
-            if str(group.uuid) == group_uuid:
-                return group
-        raise DatabaseError(f"Group not found: {group_uuid}")
+        self._entry_by_uuid = {str(entry.uuid): entry for entry in kp.entries}
+        self._group_by_uuid = {str(group.uuid): group for group in kp.groups}
+
+    def _find_group(self, group_uuid: str) -> Group:
+        self._ensure_indexes()
+        assert self._group_by_uuid is not None
+        group = self._group_by_uuid.get(group_uuid)
+        if group is None:
+            raise DatabaseError(f"Group not found: {group_uuid}")
+        return group
 
     def _find_entry(self, entry_uuid: str) -> Any:
-        kp = self._require_kp()
-        for entry in kp.entries:
-            if str(entry.uuid) == entry_uuid:
-                return entry
-        raise DatabaseError(f"Entry not found: {entry_uuid}")
+        self._ensure_indexes()
+        assert self._entry_by_uuid is not None
+        entry = self._entry_by_uuid.get(entry_uuid)
+        if entry is None:
+            raise DatabaseError(f"Entry not found: {entry_uuid}")
+        return entry
 
-    def _group_path(self, group: Group) -> str:
+    def _group_path(self, group: Group, cache: dict[str, str] | None = None) -> str:
+        uuid = str(group.uuid)
+        if cache is not None and uuid in cache:
+            return cache[uuid]
         parts: list[str] = []
         current: Group | None = group
         while current is not None:
@@ -666,10 +732,16 @@ class KdbxDatabase:
             parts.append(name)
             current = current.parentgroup
         parts.reverse()
-        return "/".join(parts)
+        path = "/".join(parts)
+        if cache is not None:
+            cache[uuid] = path
+        return path
 
-    def _is_in_recycle_bin(self, entry: Any) -> bool:
-        recycle_uuid = self._recycle_bin_uuid()
+    def _is_in_recycle_bin(
+        self, entry: Any, *, recycle_uuid: str | None = None
+    ) -> bool:
+        if recycle_uuid is None:
+            recycle_uuid = self._recycle_bin_uuid()
         if recycle_uuid is None or entry.group is None:
             return False
         current = entry.group
@@ -679,7 +751,13 @@ class KdbxDatabase:
             current = current.parentgroup
         return False
 
-    def _to_entry_view(self, entry: Any) -> EntryView:
+    def _to_entry_view(
+        self,
+        entry: Any,
+        *,
+        recycle_uuid: str | None = None,
+        path_cache: dict[str, str] | None = None,
+    ) -> EntryView:
         group = entry.group
         props = {
             str(k): str(v) for k, v in dict(entry.custom_properties or {}).items()
@@ -694,6 +772,7 @@ class KdbxDatabase:
                 expiry = expiry_time.isoformat()
             except Exception:
                 expiry = str(expiry_time)
+        attachments = entry.attachments or []
         return EntryView(
             uuid=str(entry.uuid),
             title=entry.title or "",
@@ -701,11 +780,16 @@ class KdbxDatabase:
             password=entry.password or "",
             url=entry.url or "",
             notes=entry.notes or "",
-            group_path=self._group_path(group) if group is not None else "",
+            group_path=(
+                self._group_path(group, path_cache) if group is not None else ""
+            ),
             custom_properties=props,
-            in_recycle_bin=self._is_in_recycle_bin(entry),
+            in_recycle_bin=self._is_in_recycle_bin(
+                entry, recycle_uuid=recycle_uuid
+            ),
             otp=entry.otp or "",
             expires=expires,
             expiry_time=expiry,
             tags=tags,
+            attachment_count=len(attachments),
         )

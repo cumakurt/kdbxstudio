@@ -35,39 +35,54 @@ class GroupTreeWidget(QTreeWidget):
         self.setCurrentItem(item)
         return True
 
-    def set_groups(self, groups: list[GroupView], root_uuid: str) -> None:
-        self.clear()
-        by_uuid: dict[str, GroupView] = {g.uuid: g for g in groups}
-        items: dict[str, QTreeWidgetItem] = {}
+    def set_groups(
+        self,
+        groups: list[GroupView],
+        root_uuid: str,
+        *,
+        select_uuid: str | None = None,
+    ) -> None:
+        self.blockSignals(True)
+        try:
+            self.clear()
+            by_uuid: dict[str, GroupView] = {g.uuid: g for g in groups}
+            items: dict[str, QTreeWidgetItem] = {}
 
-        # Build items without parents first
-        for group in groups:
-            label = group.name or tr("(unnamed)")
-            if group.is_recycle_bin:
-                label = f"[Bin] {label}"
-            item = QTreeWidgetItem([label])
-            item.setData(0, Qt.ItemDataRole.UserRole, group.uuid)
-            items[group.uuid] = item
+            # Build items without parents first
+            for group in groups:
+                label = group.name or tr("(unnamed)")
+                if group.is_recycle_bin:
+                    label = f"[Bin] {label}"
+                item = QTreeWidgetItem([label])
+                item.setData(0, Qt.ItemDataRole.UserRole, group.uuid)
+                items[group.uuid] = item
 
-        roots: list[QTreeWidgetItem] = []
-        for group in groups:
-            item = items[group.uuid]
-            parent_uuid = group.parent_uuid
-            if parent_uuid and parent_uuid in items and parent_uuid in by_uuid:
-                items[parent_uuid].addChild(item)
+            roots: list[QTreeWidgetItem] = []
+            for group in groups:
+                item = items[group.uuid]
+                parent_uuid = group.parent_uuid
+                if parent_uuid and parent_uuid in items and parent_uuid in by_uuid:
+                    items[parent_uuid].addChild(item)
+                else:
+                    roots.append(item)
+
+            # Prefer attaching under true root when present
+            if root_uuid in items:
+                self.addTopLevelItem(items[root_uuid])
             else:
-                roots.append(item)
+                for item in roots:
+                    self.addTopLevelItem(item)
 
-        # Prefer attaching under true root when present
-        if root_uuid in items:
-            self.addTopLevelItem(items[root_uuid])
-        else:
-            for item in roots:
-                self.addTopLevelItem(item)
-
-        self.expandAll()
-        if root_uuid in items:
-            self.setCurrentItem(items[root_uuid])
+            self.expandAll()
+            target = (
+                select_uuid
+                if select_uuid and select_uuid in items
+                else root_uuid
+            )
+            if target in items:
+                self.setCurrentItem(items[target])
+        finally:
+            self.blockSignals(False)
 
     def selected_group_uuid(self) -> str | None:
         items = self.selectedItems()
