@@ -1043,6 +1043,7 @@ class MainWindow(QMainWindow):
         try:
             self._dbm.delete_group(group_uuid)
             self.statusBar().showMessage(tr("Group moved to Recycle Bin"), 3000)
+            self._select_recycle_bin()
         except DatabaseError as exc:
             QMessageBox.critical(self, tr("Delete group failed"), str(exc))
         self._auto_lock.activity()
@@ -1757,9 +1758,25 @@ class MainWindow(QMainWindow):
             label = tr("entry") if removed == 1 else tr("entries")
             action = tr("Deleted") if permanent else tr("Moved to Recycle Bin")
             self.statusBar().showMessage(f"{action}: {removed} {label}", 4000)
+            if not permanent:
+                self._select_recycle_bin()
         except DatabaseError as exc:
             QMessageBox.critical(self, tr("Delete failed"), str(exc))
         self._auto_lock.activity()
+
+    def _select_recycle_bin(self) -> None:
+        """Focus the Recycle Bin group and list all trashed entries."""
+        if self._dbm.active is None:
+            return
+        bin_uuid = self._dbm.recycle_bin_uuid()
+        if not bin_uuid:
+            return
+        self._group_tree.set_groups(
+            self._dbm.list_groups(),
+            self._dbm.root_group_uuid(),
+            select_uuid=bin_uuid,
+        )
+        self._on_group_selected(bin_uuid)
 
     def empty_recycle_bin(self) -> None:
         if not self._ensure_writable():
@@ -1779,6 +1796,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"Removed {count} recycled {label}", 4000
             )
+            self._select_recycle_bin()
         except DatabaseError as exc:
             QMessageBox.critical(self, tr("Empty bin failed"), str(exc))
         self._auto_lock.activity()
@@ -1910,7 +1928,12 @@ class MainWindow(QMainWindow):
         query = self._search_box.text().strip()
         filt = self._filter_bar.current_filter(query=query)
         self._active_filter = filt
-        if query or not filt.is_empty():
+        target_is_bin = any(g.uuid == target and g.is_recycle_bin for g in groups)
+        # Recycle Bin selection always shows bin contents — do not let an active
+        # search/filter strip recycled entries while the bin group is selected.
+        if target_is_bin:
+            self._on_group_selected(target)
+        elif query or not filt.is_empty():
             self._run_search()
         else:
             self._on_group_selected(target)
@@ -2077,7 +2100,14 @@ class MainWindow(QMainWindow):
             return
         group_uuid = self._group_tree.selected_group_uuid()
         if group_uuid:
-            self._entry_list.set_entries(self._dbm.list_entries(group_uuid))
+            recursive: bool | None = None
+            for group in self._dbm.list_groups():
+                if group.uuid == group_uuid and group.is_recycle_bin:
+                    recursive = True
+                    break
+            self._entry_list.set_entries(
+                self._dbm.list_entries(group_uuid, recursive=recursive)
+            )
 
     def _attach_file(self, path: Path | str) -> str:
         """Attach a regular file. Returns 'attached', 'skipped', or 'failed'."""
@@ -2187,7 +2217,13 @@ class MainWindow(QMainWindow):
     def _on_group_selected(self, group_uuid: str) -> None:
         if self._dbm.active is None:
             return
-        entries = self._dbm.list_entries(group_uuid)
+        # Recycle Bin lists nested trashed groups recursively (pykeepass default).
+        recursive: bool | None = None
+        for group in self._dbm.list_groups():
+            if group.uuid == group_uuid and group.is_recycle_bin:
+                recursive = True
+                break
+        entries = self._dbm.list_entries(group_uuid, recursive=recursive)
         self._entry_list.set_entries(entries)
         self._auto_lock.activity()
 

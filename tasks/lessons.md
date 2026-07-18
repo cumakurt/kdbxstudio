@@ -27,7 +27,11 @@
 - `QTableView` has no `setUniformRowHeights` — use header default section size instead.
 - Browser fill needs a running unlocked vault + socket bridge; native host alone is not enough.
 
-## Perf / correctness (2026-07-18)
+## Recycle Bin visibility (2026-07-18)
+
+- Selecting Recycle Bin must list entries **recursively** — KeePass stores trashed groups as nested folders; `group.entries` alone hides nested secrets.
+- After Move to Recycle Bin, select the bin in the UI so the user immediately sees trashed items.
+- When the bin group is selected, do not re-run search filters that exclude `in_recycle_bin`.
 
 - Audit must never call `attachment_count(uuid)` per entry — put `attachment_count` on `EntryView` during list.
 - Never return the live `_index_cache` list from `all_entries`; always `list(cached)`.

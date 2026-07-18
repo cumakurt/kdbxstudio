@@ -325,12 +325,26 @@ class KdbxDatabase:
         group_uuid: str | None = None,
         *,
         include_recycle_bin: bool = True,
+        recursive: bool | None = None,
     ) -> list[EntryView]:
+        """List entries.
+
+        When *group_uuid* is the Recycle Bin (or *recursive* is True), entries
+        from nested trashed subgroups are included — KeePass stores trashed
+        groups as folders under the bin, so a non-recursive list looks empty.
+        """
         kp = self._require_kp()
         entries = kp.entries
         if group_uuid is not None:
             group = self._find_group(group_uuid)
-            entries = group.entries
+            recycle_uuid = self._recycle_bin_uuid()
+            walk_nested = recursive
+            if walk_nested is None:
+                walk_nested = recycle_uuid is not None and group_uuid == recycle_uuid
+            if walk_nested:
+                entries = self._collect_entries_under(group)
+            else:
+                entries = list(group.entries or [])
         recycle_uuid = self._recycle_bin_uuid()
         path_cache: dict[str, str] = {}
         views = [
@@ -342,6 +356,13 @@ class KdbxDatabase:
         if not include_recycle_bin and group_uuid is None:
             views = [e for e in views if not e.in_recycle_bin]
         return views
+
+    @staticmethod
+    def _collect_entries_under(group: Group) -> list[Any]:
+        found: list[Any] = list(group.entries or [])
+        for subgroup in list(group.subgroups or []):
+            found.extend(KdbxDatabase._collect_entries_under(subgroup))
+        return found
 
     def get_entry(self, entry_uuid: str) -> EntryView | None:
         try:
@@ -660,13 +681,7 @@ class KdbxDatabase:
         if recycle is None:
             return 0
 
-        def _collect_entries(group: Group) -> list[Any]:
-            found: list[Any] = list(group.entries or [])
-            for subgroup in list(group.subgroups or []):
-                found.extend(_collect_entries(subgroup))
-            return found
-
-        entries = _collect_entries(recycle)
+        entries = self._collect_entries_under(recycle)
         subgroups = list(recycle.subgroups or [])
         for entry in entries:
             kp.delete_entry(entry)

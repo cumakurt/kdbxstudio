@@ -120,6 +120,7 @@ class EntryTableModel(QAbstractTableModel):
 class EntryListWidget(QTableView):
     """Shows entries for the selected group."""
 
+    COLUMNS = EntryTableModel.COLUMNS
     entry_selected = Signal(str)
     delete_requested = Signal()
     permanent_delete_requested = Signal()

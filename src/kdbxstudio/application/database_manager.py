@@ -213,8 +213,10 @@ class DatabaseManager:
         self,
         group_uuid: str | None = None,
         session_id: str | None = None,
+        *,
+        recursive: bool | None = None,
     ) -> list[EntryView]:
-        return self._get(session_id).list_entries(group_uuid)
+        return self._get(session_id).list_entries(group_uuid, recursive=recursive)
 
     def get_entry(
         self, entry_uuid: str, session_id: str | None = None
