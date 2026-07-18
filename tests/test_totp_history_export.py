@@ -34,6 +34,8 @@ def test_history_restore(tmp_path: Path) -> None:
 
 
 def test_csv_export(tmp_path: Path) -> None:
+    import stat
+
     mgr = DatabaseManager()
     mgr.create(tmp_path / "exp.kdbx", password="secret")
     root = mgr.root_group_uuid()
@@ -43,6 +45,27 @@ def test_csv_export(tmp_path: Path) -> None:
     text = out.read_text(encoding="utf-8")
     assert "Mail" in text
     assert "password" in text.splitlines()[0]
+    assert stat.S_IMODE(out.stat().st_mode) == 0o600
+
+
+def test_emergency_sheet_write_is_user_rw_only(tmp_path: Path) -> None:
+    import stat
+
+    from kdbxstudio.application.emergency_sheet import write_emergency_html
+    from kdbxstudio.core.database import EntryView
+
+    entry = EntryView(
+        uuid="u1",
+        title="Bank",
+        username="u",
+        password="secret",
+        url="",
+        notes="",
+        group_path="Root",
+    )
+    out = write_emergency_html(tmp_path / "sheet.html", [entry])
+    assert "Bank" in out.read_text(encoding="utf-8")
+    assert stat.S_IMODE(out.stat().st_mode) == 0o600
 
 
 def test_database_info(tmp_path: Path) -> None:

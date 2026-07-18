@@ -32,6 +32,7 @@ from kdbxstudio.core.password_strength import (
     strength_tone,
 )
 from kdbxstudio.i18n import tr, trf
+from kdbxstudio.security.session import ClipboardGuard
 from kdbxstudio.ui.icons.entry_type import (
     EntryKind,
     FieldKind,
@@ -74,8 +75,14 @@ class EntryDetailWidget(QWidget):
     copy_password_requested = Signal(str)
     generate_password_requested = Signal()
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        clipboard_guard: ClipboardGuard | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._clipboard_guard = clipboard_guard
         self._entry_uuid: str | None = None
         self._entry_kind = EntryKind.GENERIC
 
@@ -425,6 +432,9 @@ class EntryDetailWidget(QWidget):
             return
         cell = self._custom.item(row, column)
         text = cell.text() if cell else ""
+        if self._clipboard_guard is not None:
+            self._clipboard_guard.copy(text)
+            return
         clipboard = QApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(text)

@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import html
+import os
+import stat
 from datetime import UTC, datetime
+from pathlib import Path
 
 from kdbxstudio.core.database import EntryView
 
@@ -63,3 +66,23 @@ def render_emergency_html(
 </body>
 </html>
 """
+
+
+def write_emergency_html(
+    path: Path | str,
+    entries: list[EntryView],
+    *,
+    title: str = "KDBXStudio Emergency Sheet",
+    include_passwords: bool = True,
+) -> Path:
+    """Write an emergency sheet and restrict permissions to the owner (0600)."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        render_emergency_html(
+            entries, title=title, include_passwords=include_passwords
+        ),
+        encoding="utf-8",
+    )
+    os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+    return target

@@ -38,7 +38,10 @@ class ClipboardGuard(QObject):
         self._timeout_ms = max(0, timeout_ms)
 
     def cancel(self) -> None:
+        """Stop the clear timer and wipe the clipboard immediately."""
         self._timer.stop()
+        self._clear()
+        self.cleared.emit()
 
     def _on_timeout(self) -> None:
         self._clear()

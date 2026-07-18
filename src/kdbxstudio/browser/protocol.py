@@ -288,6 +288,8 @@ class BrowserProtocol:
         action = "generate-password"
         if session is None:
             return self._error(action, ERR_CLIENT_PK)
+        if not session.associated:
+            return self._error(action, ERR_ASSOCIATION)
         nonce = str(request.get("nonce") or "")
         if not nonce:
             return self._error(action, ERR_DECRYPT)
@@ -306,6 +308,7 @@ class BrowserProtocol:
     def _get_database_groups(
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
+        self._require_associated(session)
         groups = self.context.list_groups()
         if not groups:
             raise _ProtocolError(ERR_NO_GROUPS)
@@ -336,6 +339,7 @@ class BrowserProtocol:
     def _create_new_group(
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
+        self._require_associated(session)
         name = str(payload.get("groupName") or "").strip()
         if not name or self.context.ensure_group_path is None:
             raise _ProtocolError(ERR_DENIED)
@@ -346,6 +350,7 @@ class BrowserProtocol:
     def _get_totp(
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
+        self._require_associated(session)
         raw_uuid = str(payload.get("uuid") or "")
         if not raw_uuid or self.context.get_entry is None:
             raise _ProtocolError(ERR_NO_UUID)
@@ -360,12 +365,14 @@ class BrowserProtocol:
     def _lock_database(
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
+        self._require_associated(session)
         self.context.lock_database()
         # KeePassXC returns an error-shaped payload even on success historically;
         # modern clients accept success.
         return {"hash": db_hash}
 
     def _keys_ok(self, payload: dict, db: KdbxDatabase) -> bool:
+        """Verify association key material. Fail closed when nothing is provided."""
         keys = payload.get("keys") or []
         if not isinstance(keys, list) or not keys:
             # Some clients only send id/key at top level after associate
@@ -374,7 +381,7 @@ class BrowserProtocol:
             if assoc_id and key:
                 stored = associations.get_association_key(db, assoc_id)
                 return bool(stored and stored == key)
-            return True
+            return False
         for item in keys:
             if not isinstance(item, dict):
                 continue

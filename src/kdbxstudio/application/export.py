@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import csv
+import os
+import stat
 from pathlib import Path
 
 from kdbxstudio.core.database import EntryView
@@ -49,4 +51,5 @@ def export_entries_csv(path: Path | str, entries: list[EntryView]) -> Path:
                     "custom_properties": custom,
                 }
             )
+    os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
     return target

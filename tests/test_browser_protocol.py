@@ -9,7 +9,12 @@ from uuid import UUID
 
 from kdbxstudio.browser import associations, crypto
 from kdbxstudio.browser.host import _read_native, _write_native
-from kdbxstudio.browser.protocol import BrowserProtocol, ProtocolContext, _normalize_uuid
+from kdbxstudio.browser.protocol import (
+    BrowserProtocol,
+    ClientSession,
+    ProtocolContext,
+    _normalize_uuid,
+)
 from kdbxstudio.core.database import EntryView, KdbxDatabase
 
 
@@ -223,6 +228,174 @@ def test_protocol_associate_and_get_logins(tmp_path: Path) -> None:
         )
     )
     assert hash_body["hash"] == associations.database_hash_for(db)
+    db.close()
+
+
+def _handshake(
+    protocol: BrowserProtocol, client_sk: str, client_pk: str, client_id: str
+) -> tuple[str, ClientSession]:
+    nonce = crypto.random_nonce_b64()
+    cpk = protocol.handle(
+        {
+            "action": "change-public-keys",
+            "publicKey": client_pk,
+            "nonce": nonce,
+            "clientID": client_id,
+        }
+    )
+    assert cpk.get("success") == crypto.TRUE_STR
+    session = protocol.sessions[client_id]
+    return session.host_public_key, session
+
+
+def _encrypted_handle(
+    protocol: BrowserProtocol,
+    *,
+    action: str,
+    payload: dict,
+    client_id: str,
+    client_sk: str,
+    host_pk: str,
+) -> dict:
+    nonce = crypto.random_nonce_b64()
+    plain = json.dumps({"action": action, **payload}, separators=(",", ":"))
+    message = crypto.encrypt_json(plain, nonce, host_pk, client_sk)
+    return protocol.handle(
+        {
+            "action": action,
+            "message": message,
+            "nonce": nonce,
+            "clientID": client_id,
+        }
+    )
+
+
+def test_keys_ok_fails_closed_without_keys(tmp_path: Path) -> None:
+    protocol, db, _entry = _make_protocol(tmp_path)
+    assert protocol._keys_ok({"keys": []}, db) is False
+    assert protocol._keys_ok({}, db) is False
+    associations.set_association_key(db, "firefox", "pk")
+    assert protocol._keys_ok({"id": "firefox", "key": "pk"}, db) is True
+    assert protocol._keys_ok({"id": "firefox", "key": "wrong"}, db) is False
+    db.close()
+
+
+def test_sensitive_actions_require_association(tmp_path: Path) -> None:
+    protocol, db, entry = _make_protocol(tmp_path)
+    db.update_entry(entry.uuid, otp="otpauth://totp/Test?secret=JBSWY3DPEHPK3PXP&issuer=Test")
+    client_pk, client_sk = crypto.generate_keypair()
+    client_id = "unassociated"
+    host_pk, session = _handshake(protocol, client_sk, client_pk, client_id)
+    assert session.associated is False
+
+    for action, payload in (
+        ("get-totp", {"uuid": entry.uuid}),
+        ("get-database-groups", {}),
+        ("create-new-group", {"groupName": "Root/Browser"}),
+        ("lock-database", {}),
+    ):
+        resp = _encrypted_handle(
+            protocol,
+            action=action,
+            payload=payload,
+            client_id=client_id,
+            client_sk=client_sk,
+            host_pk=host_pk,
+        )
+        assert resp.get("errorCode") == "8", action
+
+    gen = protocol.handle(
+        {
+            "action": "generate-password",
+            "nonce": crypto.random_nonce_b64(),
+            "clientID": client_id,
+        }
+    )
+    assert gen.get("errorCode") == "8"
+    db.close()
+
+
+def test_associated_get_totp_and_groups(tmp_path: Path) -> None:
+    protocol, db, entry = _make_protocol(tmp_path)
+    db.update_entry(
+        entry.uuid, otp="otpauth://totp/Test?secret=JBSWY3DPEHPK3PXP&issuer=Test"
+    )
+    client_pk, client_sk = crypto.generate_keypair()
+    client_id = "assoc-ok"
+    host_pk, _session = _handshake(protocol, client_sk, client_pk, client_id)
+
+    assoc_resp = _encrypted_handle(
+        protocol,
+        action="associate",
+        payload={"key": client_pk, "idKey": client_pk},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    assert "message" in assoc_resp
+
+    groups_resp = _encrypted_handle(
+        protocol,
+        action="get-database-groups",
+        payload={},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    groups_body = json.loads(
+        crypto.decrypt_json(
+            groups_resp["message"],
+            groups_resp["nonce"],
+            host_pk,
+            client_sk,
+        )
+    )
+    assert groups_body["success"] == crypto.TRUE_STR
+    assert groups_body["groups"]
+
+    totp_resp = _encrypted_handle(
+        protocol,
+        action="get-totp",
+        payload={"uuid": entry.uuid},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    totp_body = json.loads(
+        crypto.decrypt_json(
+            totp_resp["message"],
+            totp_resp["nonce"],
+            host_pk,
+            client_sk,
+        )
+    )
+    assert totp_body["success"] == crypto.TRUE_STR
+    assert totp_body["totp"]
+    db.close()
+
+
+def test_get_logins_rejects_empty_keys_without_id(tmp_path: Path) -> None:
+    protocol, db, _entry = _make_protocol(tmp_path)
+    client_pk, client_sk = crypto.generate_keypair()
+    client_id = "keys-fail"
+    host_pk, _session = _handshake(protocol, client_sk, client_pk, client_id)
+    _encrypted_handle(
+        protocol,
+        action="associate",
+        payload={"key": client_pk, "idKey": client_pk},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    login_resp = _encrypted_handle(
+        protocol,
+        action="get-logins",
+        payload={"url": "https://github.com/login", "keys": []},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    assert login_resp.get("errorCode") == "8"
     db.close()
 
 

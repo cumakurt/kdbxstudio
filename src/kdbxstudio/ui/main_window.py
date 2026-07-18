@@ -160,7 +160,7 @@ class MainWindow(QMainWindow):
 
         self._group_tree = GroupTreeWidget()
         self._entry_list = EntryListWidget()
-        self._entry_detail = EntryDetailWidget()
+        self._entry_detail = EntryDetailWidget(clipboard_guard=self._clipboard)
         self._history = HistoryWidget()
         self._attachments = AttachmentPreviewWidget()
         self._attachments.set_data_loader(self._load_attachment_bytes)
@@ -2731,7 +2731,8 @@ class MainWindow(QMainWindow):
         self._auto_lock.activity()
 
     def export_emergency_sheet(self) -> None:
-        from kdbxstudio.application.emergency_sheet import render_emergency_html
+        from kdbxstudio.application.emergency_sheet import write_emergency_html
+
         if self._dbm.active is None:
             QMessageBox.information(self, tr("Emergency Sheet"), tr("Open a database first."))
             return
@@ -2766,19 +2767,16 @@ class MainWindow(QMainWindow):
         )
         if confirm != QMessageBox.StandardButton.Yes:
             return
-        html = render_emergency_html(entries)
         path_str, _ = QFileDialog.getSaveFileName(
             self,
             tr("Save Emergency Sheet"),
             str(Path.home() / "kdbxstudio-emergency.html"),
             tr("HTML Files (*.html)"),
         )
-        if path_str:
-            out = Path(path_str)
-        else:
+        if not path_str:
             return
         try:
-            out.write_text(html, encoding="utf-8")
+            out = write_emergency_html(path_str, entries)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(out.resolve())))
             self.statusBar().showMessage(f"Emergency sheet: {out}", 6000)
         except OSError as exc:

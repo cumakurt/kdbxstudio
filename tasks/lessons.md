@@ -41,3 +41,10 @@
 - Password Show state and group-tree selection must reset/restore on entry/group refresh.
 - Expiring-soon window is one shared constant (`expiry.EXPIRING_SOON_DAYS`) for audit + search filters.
 
+## Browser protocol authz (2026-07-18)
+
+- Encrypted browser actions that read secrets or mutate the vault (`get-totp`, `get-database-groups`, `create-new-group`, `lock-database`, `generate-password`) must call `_require_associated` (or equivalent).
+- `_keys_ok` must fail closed: empty `keys` without top-level `id`/`key` → `False`, never `True`.
+- All clipboard copies of secrets (including custom fields) must go through `ClipboardGuard`; `cancel()` must clear, not only stop the timer.
+- Exports that contain secrets (CSV, emergency HTML) must `chmod` to `0600` after write.
+

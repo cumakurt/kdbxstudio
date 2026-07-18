@@ -466,6 +466,11 @@ def test_e2e_clipboard_and_autolock_qt(qtbot) -> None:  # type: ignore[no-untype
     assert store["value"] == "secret-value"
     qtbot.waitUntil(lambda: store["value"] == "", timeout=2000)
 
+    guard.copy("again")
+    assert store["value"] == "again"
+    guard.cancel()
+    assert store["value"] == ""
+
     lock = AutoLockController(idle_timeout_ms=40)
     locked = {"hit": False}
     lock.lock_requested.connect(lambda: locked.__setitem__("hit", True))
