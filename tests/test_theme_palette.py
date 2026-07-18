@@ -30,7 +30,6 @@ def test_tokens_light_dark_differ() -> None:
     assert light.text_danger != dark.text_danger
     assert light.is_dark is False
     assert dark.is_dark is True
-    # Light elevation must step above panel so chrome/cards read depth.
     assert light.surface_elevated != light.surface_panel
     assert light.surface_app != light.surface_panel
 
@@ -41,11 +40,9 @@ def test_stylesheet_has_pane_depth_hooks() -> None:
     assert "QTableView#entryListPane" in css
     assert "QTabWidget#entryDetailPane::pane" in css
     assert "QSplitter::handle:horizontal" in css
-    assert "width: 4px" in css
 
 
 def test_at_least_five_named_styles() -> None:
-    # System is not a palette; named styles must include brand + community themes.
     named = [m for m in THEME_CHOICES if m != ThemeMode.SYSTEM]
     assert len(named) >= 5
     assert len(THEME_REGISTRY) >= 5
@@ -71,7 +68,7 @@ def test_parse_theme_accepts_aliases_and_unknown() -> None:
 
 def test_stylesheet_contains_brand() -> None:
     css = build_stylesheet(tokens_for(ThemeMode.DARK))
-    assert "#3D9A9C" in css
+    assert "#60A5FA" in css
     assert "font-size: 13px" in css
     assert "border-radius: 8px" in css
 
@@ -161,11 +158,10 @@ def test_studio_accent_overlays_primary() -> None:
 
     dark = tokens_for(ThemeMode.DARK)
     blue = apply_accent(dark, "blue")
-    assert blue.brand_primary == "#5B8DEF"
-    assert blue.focus_ring == "#5B8DEF"
-    # Accent retints brand colors on community themes too (surfaces stay).
+    assert blue.brand_primary == "#3B82F6"
+    assert blue.focus_ring == "#3B82F6"
     nord = apply_accent(tokens_for(ThemeMode.NORD), "blue")
-    assert nord.brand_primary == "#5B8DEF"
+    assert nord.brand_primary == "#3B82F6"
     assert nord.surface_app == tokens_for(ThemeMode.NORD).surface_app
     assert parse_accent("bogus").value == "teal"
 

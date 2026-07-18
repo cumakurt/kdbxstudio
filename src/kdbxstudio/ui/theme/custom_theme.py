@@ -26,6 +26,16 @@ _REQUIRED = (
     "text_success",
 )
 
+_optional_fields = {
+    "surface_overlay": "",
+    "border_focus": "",
+    "text_disabled": "",
+    "text_info": "",
+    "focus_ring": "",
+    "shadow_sm": "",
+    "shadow_md": "",
+}
+
 _custom_tokens: ThemeTokens | None = None
 
 
@@ -39,7 +49,6 @@ def clear_custom_tokens() -> None:
 
 
 def load_custom_theme_json(path: Path | str) -> ThemeTokens:
-    """Validate and store a custom theme from JSON; returns tokens."""
     global _custom_tokens
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -54,6 +63,11 @@ def load_custom_theme_json(path: Path | str) -> ThemeTokens:
         value = str(data[key]).strip()
         if not value.startswith("#") or len(value) not in (4, 7, 9):
             raise ValueError(f"Invalid color for {key}: {value}")
+
+    opt_values = {}
+    for key, default in _optional_fields.items():
+        opt_values[key] = str(data.get(key, default) or default)
+
     tokens = ThemeTokens(
         mode=ThemeMode.CUSTOM,
         appearance=appearance,
@@ -65,15 +79,21 @@ def load_custom_theme_json(path: Path | str) -> ThemeTokens:
         surface_panel=str(data["surface_panel"]),
         surface_elevated=str(data["surface_elevated"]),
         surface_sunken=str(data["surface_sunken"]),
+        surface_overlay=opt_values["surface_overlay"] or data["surface_elevated"],
         border_subtle=str(data["border_subtle"]),
         border_strong=str(data["border_strong"]),
+        border_focus=opt_values["border_focus"] or data["brand_primary"],
         text_primary=str(data["text_primary"]),
         text_secondary=str(data["text_secondary"]),
         text_muted=str(data["text_muted"]),
+        text_disabled=opt_values["text_disabled"],
         text_danger=str(data["text_danger"]),
         text_warning=str(data["text_warning"]),
         text_success=str(data["text_success"]),
-        focus_ring=str(data.get("focus_ring") or data["brand_primary"]),
+        text_info=opt_values["text_info"] or data["brand_primary"],
+        focus_ring=str(opt_values["focus_ring"] or data["brand_primary"]),
+        shadow_sm=opt_values["shadow_sm"],
+        shadow_md=opt_values["shadow_md"],
     )
     _custom_tokens = tokens
     return tokens

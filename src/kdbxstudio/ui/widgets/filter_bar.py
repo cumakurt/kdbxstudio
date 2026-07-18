@@ -84,11 +84,12 @@ class FilterBarWidget(QWidget):
         apply_btn = QPushButton(tr("Apply"))
         apply_btn.clicked.connect(self._emit)
         clear_btn = QPushButton(tr("Clear"))
+        clear_btn.setProperty("cssClass", "ghost")
         clear_btn.clicked.connect(self.clear)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
         layout.addWidget(QLabel(tr("Filter")))
         layout.addWidget(self._group, stretch=1)
         layout.addWidget(self._tag)

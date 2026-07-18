@@ -7,36 +7,42 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SpacingTokens:
+    xxs: int = 2
     xs: int = 4
     sm: int = 8
-    md: int = 16
-    lg: int = 24
-    xl: int = 32
+    md: int = 12
+    lg: int = 16
+    xl: int = 24
+    xxl: int = 32
+    xxxl: int = 48
 
 
 @dataclass(frozen=True)
 class RadiusTokens:
+    xs: int = 4
     sm: int = 6
     md: int = 8
     lg: int = 12
     xl: int = 16
+    full: int = 9999
 
 
 @dataclass(frozen=True)
 class ElevationTokens:
-    """CSS box-shadow strings for QSS."""
-
     e0: str = "none"
-    e1: str = "0 1px 3px rgba(0, 0, 0, 0.22)"
-    e2: str = "0 8px 24px rgba(0, 0, 0, 0.36)"
+    e1: str = "0 1px 2px rgba(0, 0, 0, 0.16)"
+    e2: str = "0 4px 12px rgba(0, 0, 0, 0.24)"
+    e3: str = "0 12px 32px rgba(0, 0, 0, 0.32)"
 
 
 @dataclass(frozen=True)
 class TypeScale:
-    display: int = 24
+    display: int = 26
     title: int = 18
+    subtitle: int = 15
     body: int = 13
     caption: int = 11
+    overline: int = 10
     mono: int = 13
 
 
@@ -46,6 +52,7 @@ class DensityMetrics:
     row_height: int
     toolbar_icon: int
     menu_icon: int
+    sidebar_width: int
 
 
 SPACING = SpacingTokens()
@@ -54,26 +61,30 @@ TYPE_SCALE = TypeScale()
 
 ELEVATION_DARK = ElevationTokens(
     e0="none",
-    e1="0 1px 3px rgba(0, 0, 0, 0.22)",
-    e2="0 8px 24px rgba(0, 0, 0, 0.36)",
+    e1="0 1px 2px rgba(0, 0, 0, 0.24)",
+    e2="0 4px 12px rgba(0, 0, 0, 0.36)",
+    e3="0 12px 32px rgba(0, 0, 0, 0.48)",
 )
 ELEVATION_LIGHT = ElevationTokens(
     e0="none",
-    e1="0 1px 3px rgba(0, 0, 0, 0.08)",
-    e2="0 8px 24px rgba(0, 0, 0, 0.12)",
+    e1="0 1px 2px rgba(0, 0, 0, 0.06)",
+    e2="0 4px 12px rgba(0, 0, 0, 0.08)",
+    e3="0 12px 32px rgba(0, 0, 0, 0.12)",
 )
 
 DENSITY_COMPACT = DensityMetrics(
-    control_height=32,
+    control_height=30,
     row_height=32,
-    toolbar_icon=20,
-    menu_icon=18,
+    toolbar_icon=18,
+    menu_icon=16,
+    sidebar_width=220,
 )
 DENSITY_COMFORTABLE = DensityMetrics(
-    control_height=40,
-    row_height=40,
+    control_height=36,
+    row_height=38,
     toolbar_icon=20,
     menu_icon=18,
+    sidebar_width=240,
 )
 
 
@@ -103,7 +114,6 @@ VALID_WINDOW_RESOLUTIONS: frozenset[str] = frozenset(
     }
 )
 
-# (width, height) — None means keep / auto-fit
 WINDOW_RESOLUTION_SIZES: dict[str, tuple[int, int] | None] = {
     "auto": None,
     "1024x640": (1024, 640),
@@ -121,17 +131,17 @@ class MenuMetrics:
     item_pad_y: int
     item_pad_x: int
     item_min_height: int
-    font_delta: int  # added to body font for menus
+    font_delta: int
 
 
 MENU_SMALL = MenuMetrics(
-    bar_height=28, item_pad_y=3, item_pad_x=8, item_min_height=20, font_delta=-1
+    bar_height=26, item_pad_y=4, item_pad_x=10, item_min_height=24, font_delta=-1
 )
 MENU_MEDIUM = MenuMetrics(
-    bar_height=32, item_pad_y=6, item_pad_x=10, item_min_height=26, font_delta=0
+    bar_height=30, item_pad_y=6, item_pad_x=12, item_min_height=28, font_delta=0
 )
 MENU_LARGE = MenuMetrics(
-    bar_height=40, item_pad_y=10, item_pad_x=14, item_min_height=34, font_delta=1
+    bar_height=36, item_pad_y=8, item_pad_x=16, item_min_height=34, font_delta=1
 )
 
 
@@ -178,12 +188,13 @@ def window_size_for_resolution(value: object) -> tuple[int, int] | None:
 
 
 def type_scale_for_body(body_px: int) -> TypeScale:
-    """Derive title/caption/display from a user body font size."""
     body = clamp_font_size(body_px)
     return TypeScale(
-        display=max(14, body + 11),
+        display=max(14, body + 13),
         title=max(11, body + 5),
+        subtitle=max(10, body + 2),
         body=body,
         caption=max(8, body - 2),
+        overline=max(7, body - 3),
         mono=body,
     )

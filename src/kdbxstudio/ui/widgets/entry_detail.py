@@ -104,7 +104,7 @@ class EntryDetailWidget(QWidget):
         self._strength_bar.setRange(0, 100)
         self._strength_bar.setValue(0)
         self._strength_bar.setTextVisible(True)
-        self._strength_bar.setMaximumHeight(16)
+        self._strength_bar.setMaximumHeight(8)
         self._strength_bar.setFormat("")
         self._strength_label = QLabel("")
         set_widget_tone(self._strength_label, "secondary")
@@ -192,11 +192,12 @@ class EntryDetailWidget(QWidget):
         pwd_row.addWidget(gen_btn)
 
         strength_row = QHBoxLayout()
+        strength_row.setSpacing(8)
         strength_row.addWidget(self._strength_bar, stretch=1)
         strength_row.addWidget(self._strength_label)
 
         title_row = QHBoxLayout()
-        title_row.setSpacing(6)
+        title_row.setSpacing(8)
         title_row.addWidget(self._kind_badge)
         title_row.addWidget(self._title, stretch=1)
 
@@ -205,6 +206,7 @@ class EntryDetailWidget(QWidget):
         add_prop.setIconSize(QSize(14, 14))
         add_prop.clicked.connect(self._add_custom_row)
         del_prop = QPushButton(tr("Remove field"))
+        del_prop.setProperty("cssClass", "ghost")
         del_prop.clicked.connect(self._remove_custom_row)
         prop_btns = QHBoxLayout()
         prop_btns.addWidget(add_prop)
@@ -212,7 +214,7 @@ class EntryDetailWidget(QWidget):
         prop_btns.addStretch()
 
         form = QFormLayout()
-        form.setSpacing(6)
+        form.setSpacing(10)
         form.addRow(tr("Title"), title_row)
         form.addRow(tr("Username"), self._username)
         form.addRow(tr("Password"), pwd_row)
@@ -233,7 +235,8 @@ class EntryDetailWidget(QWidget):
         save_btn.clicked.connect(self._emit_save)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(12)
         layout.addLayout(form)
         layout.addWidget(save_btn)
         self.set_enabled(False)
@@ -417,7 +420,6 @@ class EntryDetailWidget(QWidget):
         self._username_icon.setIcon(field_icon(FieldKind.USERNAME, entry_kind=kind))
         self._password_icon.setIcon(field_icon(FieldKind.PASSWORD, entry_kind=kind))
         self._url_icon.setIcon(field_icon(FieldKind.URL, entry_kind=kind))
-        # Password placeholder hint by kind
         hints = {
             EntryKind.API: tr("API key / token"),
             EntryKind.SSH: tr("Passphrase (optional)"),

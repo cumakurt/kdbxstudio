@@ -65,8 +65,8 @@ class CommandPalette(QDialog):
             | Qt.WindowType.WindowStaysOnTopHint
         )
         scale = current_ui_scale()
-        self.resize(scale.px(480), scale.px(360))
-        self.setMinimumWidth(scale.px(360))
+        self.resize(scale.px(520), scale.px(380))
+        self.setMinimumWidth(scale.px(380))
         self._actions = actions
         self._filtered: list[PaletteAction] = list(actions)
 
@@ -80,15 +80,27 @@ class CommandPalette(QDialog):
         self._hint = QLabel("↑↓ navigate · Enter run · Esc close")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         header = QHBoxLayout()
+        header.setContentsMargins(16, 12, 16, 8)
         header.addWidget(QLabel("Command Palette"))
         header.addStretch()
         header.addWidget(self._hint)
         layout.addLayout(header)
-        layout.addWidget(self._input)
-        layout.addWidget(self._list)
+
+        input_container = QWidget()
+        input_layout = QHBoxLayout(input_container)
+        input_layout.setContentsMargins(12, 0, 12, 8)
+        input_layout.addWidget(self._input)
+        layout.addWidget(input_container)
+
+        list_container = QWidget()
+        list_layout = QVBoxLayout(list_container)
+        list_layout.setContentsMargins(4, 0, 4, 4)
+        list_layout.addWidget(self._list)
+        layout.addWidget(list_container, 1)
 
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         esc.activated.connect(self.reject)

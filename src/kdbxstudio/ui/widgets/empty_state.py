@@ -31,6 +31,7 @@ class EmptyStateWidget(QWidget):
         self._hint.setWordWrap(True)
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(8)
         layout.addWidget(self._icon)
         layout.addWidget(self._title)
         layout.addWidget(self._hint)

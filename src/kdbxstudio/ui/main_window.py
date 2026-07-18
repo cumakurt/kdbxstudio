@@ -239,8 +239,8 @@ class MainWindow(QMainWindow):
         chrome = QWidget()
         chrome.setObjectName("workspaceChrome")
         chrome_layout = QVBoxLayout(chrome)
-        chrome_layout.setContentsMargins(8, 6, 8, 6)
-        chrome_layout.setSpacing(4)
+        chrome_layout.setContentsMargins(12, 8, 12, 8)
+        chrome_layout.setSpacing(6)
         chrome_layout.addWidget(self._search_box)
         chrome_layout.addWidget(self._filter_bar)
         center_layout.addWidget(chrome)
@@ -736,18 +736,17 @@ class MainWindow(QMainWindow):
     def _apply_ui_density(self) -> None:
         if self._workspace_layout is None:
             return
-        # Keep panes flush (KeePassXC-like); density only pads the search/filter chrome.
         self._workspace_layout.setContentsMargins(0, 0, 0, 0)
         self._workspace_layout.setSpacing(0)
         chrome = self._workspace_widget.findChild(QWidget, "workspaceChrome")
         if chrome is None or chrome.layout() is None:
             return
         if self._settings.ui_density == "comfortable":
+            chrome.layout().setContentsMargins(16, 10, 16, 10)
+            chrome.layout().setSpacing(8)
+        else:
             chrome.layout().setContentsMargins(12, 8, 12, 8)
             chrome.layout().setSpacing(6)
-        else:
-            chrome.layout().setContentsMargins(8, 6, 8, 6)
-            chrome.layout().setSpacing(4)
 
     def _focus_search(self) -> None:
         self._stack.setCurrentIndex(1 if self._dbm.active else 0)
@@ -770,18 +769,18 @@ class MainWindow(QMainWindow):
         self._plugins.activate_all()
 
     def _setup_docks(self) -> None:
-        groups_dock = QDockWidget(tr("Groups"), self)
+        groups_dock = QDockWidget(tr("GROUPS"), self)
         groups_dock.setObjectName("groupsDock")
         groups_dock.setWidget(self._group_tree)
         groups_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
-        groups_dock.setMinimumWidth(140)
+        groups_dock.setMinimumWidth(160)
         groups_dock.setMaximumWidth(280)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, groups_dock)
 
         self._groups_dock = groups_dock
-        self.resizeDocks([groups_dock], [170], Qt.Orientation.Horizontal)
+        self.resizeDocks([groups_dock], [180], Qt.Orientation.Horizontal)
 
     def _build_menus(self) -> None:
         def act(
@@ -915,12 +914,12 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar(tr("Main"))
         toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(20, 20))
+        toolbar.setIconSize(QSize(18, 18))
         self.addToolBar(toolbar)
         self._main_toolbar = toolbar
 
         def add_icon(name: str, tip: str, slot: object) -> None:
-            button = icon_tool_button(name, tip, toolbar, size=20)
+            button = icon_tool_button(name, tip, toolbar, size=18)
             button.clicked.connect(slot)
             toolbar.addWidget(button)
 

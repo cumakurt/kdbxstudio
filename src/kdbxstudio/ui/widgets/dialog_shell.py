@@ -34,18 +34,18 @@ class DialogShell(QDialog):
         self.resize(width, 200)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 16)
-        root.setSpacing(16)
+        root.setContentsMargins(28, 24, 28, 20)
+        root.setSpacing(20)
 
         header = QHBoxLayout()
-        header.setSpacing(12)
+        header.setSpacing(14)
         self._icon_label = QLabel()
         self._icon_label.setPixmap(icon(icon_name, size=28, brand=True).pixmap(28, 28))
         self._icon_label.setFixedSize(32, 32)
         header.addWidget(self._icon_label, 0, Qt.AlignmentFlag.AlignTop)
 
         titles = QVBoxLayout()
-        titles.setSpacing(2)
+        titles.setSpacing(4)
         self._title_label = QLabel(title)
         self._title_label.setObjectName("dialogTitle")
         titles.addWidget(self._title_label)
@@ -58,7 +58,7 @@ class DialogShell(QDialog):
         root.addLayout(header)
 
         self.body = QVBoxLayout()
-        self.body.setSpacing(12)
+        self.body.setSpacing(14)
         root.addLayout(self.body, 1)
 
         self.button_box = QDialogButtonBox(

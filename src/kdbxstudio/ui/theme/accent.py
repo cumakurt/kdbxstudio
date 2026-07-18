@@ -1,8 +1,4 @@
-"""Studio accent overlay for user-selectable brand colors.
-
-Accent applies only to Studio Dark / Studio Light (including System → Studio).
-Community palettes keep their baked-in brand colors.
-"""
+"""Studio accent overlay for user-selectable brand colors."""
 
 from __future__ import annotations
 
@@ -39,19 +35,17 @@ ACCENT_CHOICES: tuple[AccentId, ...] = (
     AccentId.RED,
 )
 
-# dark_primary, dark_hover, light_primary, light_hover, on_dark, on_light
 _ACCENT_COLORS: dict[AccentId, tuple[str, str, str, str, str, str]] = {
-    AccentId.TEAL: ("#3D9A9C", "#5CB3B5", "#1A5C5E", "#0F3D3E", "#0A1F20", "#FFFFFF"),
-    AccentId.BLUE: ("#5B8DEF", "#7AA3F5", "#2563EB", "#1D4ED8", "#0A1628", "#FFFFFF"),
-    AccentId.PURPLE: ("#A78BFA", "#C4B5FD", "#7C3AED", "#6D28D9", "#1A1028", "#FFFFFF"),
-    AccentId.GREEN: ("#34D399", "#6EE7B7", "#059669", "#047857", "#0A1F18", "#FFFFFF"),
-    AccentId.ORANGE: ("#FB923C", "#FDBA74", "#EA580C", "#C2410C", "#1F1208", "#FFFFFF"),
-    AccentId.RED: ("#F87171", "#FCA5A5", "#DC2626", "#B91C1C", "#1F0A0A", "#FFFFFF"),
+    AccentId.TEAL: ("#14B8A6", "#2DD4BF", "#0D9488", "#0F766E", "#042F2E", "#FFFFFF"),
+    AccentId.BLUE: ("#3B82F6", "#60A5FA", "#2563EB", "#1D4ED8", "#1E3A5F", "#FFFFFF"),
+    AccentId.PURPLE: ("#8B5CF6", "#A78BFA", "#7C3AED", "#6D28D9", "#2E1065", "#FFFFFF"),
+    AccentId.GREEN: ("#10B981", "#34D399", "#059669", "#047857", "#022C22", "#FFFFFF"),
+    AccentId.ORANGE: ("#F59E0B", "#FBBF24", "#D97706", "#B45309", "#431407", "#FFFFFF"),
+    AccentId.RED: ("#EF4444", "#F87171", "#DC2626", "#B91C1C", "#450A0A", "#FFFFFF"),
 }
 
 VALID_ACCENT_IDS: frozenset[str] = frozenset(a.value for a in ACCENT_CHOICES)
 
-# Kept for callers that still branch on Studio vs community appearance.
 STUDIO_MODES: frozenset[ThemeMode] = frozenset({ThemeMode.DARK, ThemeMode.LIGHT})
 
 
@@ -70,17 +64,11 @@ def accent_label(accent: AccentId) -> str:
 
 
 def accent_swatch(accent: AccentId, *, dark: bool = True) -> str:
-    """Return the primary hex used for settings swatches."""
     dark_p, _, light_p, _, _, _ = _ACCENT_COLORS[accent]
     return dark_p if dark else light_p
 
 
 def apply_accent(tokens: ThemeTokens, accent: AccentId | str | None) -> ThemeTokens:
-    """Overlay brand primary/hover/focus for the active palette.
-
-    Surfaces stay theme-specific; accent always retints interactive brand colors
-    so View → Accent / Settings swatches produce a visible change on every theme.
-    """
     aid = parse_accent(accent)
     dark_p, dark_h, light_p, light_h, on_dark, on_light = _ACCENT_COLORS[aid]
     if tokens.is_dark:
@@ -90,6 +78,8 @@ def apply_accent(tokens: ThemeTokens, accent: AccentId | str | None) -> ThemeTok
             brand_primary_hover=dark_h,
             brand_on_primary=on_dark,
             focus_ring=dark_p,
+            border_focus=dark_p,
+            text_info=dark_p,
         )
     return replace(
         tokens,
@@ -97,4 +87,6 @@ def apply_accent(tokens: ThemeTokens, accent: AccentId | str | None) -> ThemeTok
         brand_primary_hover=light_h,
         brand_on_primary=on_light,
         focus_ring=light_p,
+        border_focus=light_p,
+        text_info=light_p,
     )

@@ -25,14 +25,12 @@ class GroupTreeWidget(QTreeWidget):
         self.setIconSize(QSize(18, 18))
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setAlternatingRowColors(True)
-        # Accept entry drops only — do not rearrange groups in the tree.
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.itemSelectionChanged.connect(self._on_selection)
 
     def select_at(self, pos: QPoint) -> bool:
-        """Select the group item under *pos*."""
         item = self.itemAt(pos)
         if item is None:
             return False
@@ -102,8 +100,6 @@ class GroupTreeWidget(QTreeWidget):
         return str(value) if value else None
 
     def select_uuid(self, group_uuid: str) -> bool:
-        """Select a group by UUID if present in the tree."""
-
         def walk(item: QTreeWidgetItem) -> bool:
             value = item.data(0, Qt.ItemDataRole.UserRole)
             if str(value) == group_uuid:

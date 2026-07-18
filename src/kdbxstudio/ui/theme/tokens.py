@@ -1,7 +1,6 @@
 """Design tokens for built-in theme styles.
 
-Includes Studio (brand) light/dark plus widely used community palettes:
-Nord, Dracula, Tokyo Night, Catppuccin, Solarized, One Dark, Gruvbox.
+Includes Studio (brand) light/dark plus widely used community palettes.
 """
 
 from __future__ import annotations
@@ -11,11 +10,9 @@ from enum import StrEnum
 
 
 class ThemeMode(StrEnum):
-    """Persisted theme preference (includes SYSTEM + named styles)."""
-
     SYSTEM = "system"
-    DARK = "dark"  # Studio Dark (default brand)
-    LIGHT = "light"  # Studio Light
+    DARK = "dark"
+    LIGHT = "light"
     NORD = "nord"
     DRACULA = "dracula"
     TOKYO_NIGHT = "tokyo-night"
@@ -29,7 +26,6 @@ class ThemeMode(StrEnum):
     CUSTOM = "custom"
 
 
-# Human-readable English labels (also used as i18n keys via tr()).
 THEME_LABELS: dict[ThemeMode, str] = {
     ThemeMode.SYSTEM: "System",
     ThemeMode.DARK: "Studio Dark",
@@ -51,7 +47,7 @@ THEME_LABELS: dict[ThemeMode, str] = {
 @dataclass(frozen=True)
 class ThemeTokens:
     mode: ThemeMode
-    appearance: str  # "light" | "dark" — semantic brightness for SYSTEM resolve
+    appearance: str
     brand_primary: str
     brand_primary_hover: str
     brand_accent: str
@@ -60,15 +56,21 @@ class ThemeTokens:
     surface_panel: str
     surface_elevated: str
     surface_sunken: str
+    surface_overlay: str
     border_subtle: str
     border_strong: str
+    border_focus: str
     text_primary: str
     text_secondary: str
     text_muted: str
+    text_disabled: str
     text_danger: str
     text_warning: str
     text_success: str
+    text_info: str
     focus_ring: str
+    shadow_sm: str
+    shadow_md: str
 
     @property
     def is_dark(self) -> bool:
@@ -86,16 +88,34 @@ def _dark(
     surface_panel: str,
     surface_elevated: str,
     surface_sunken: str,
+    surface_overlay: str = "",
     border_subtle: str,
     border_strong: str,
+    border_focus: str = "",
     text_primary: str,
     text_secondary: str,
     text_muted: str,
+    text_disabled: str = "",
     text_danger: str,
     text_warning: str,
     text_success: str,
+    text_info: str = "",
     focus_ring: str | None = None,
+    shadow_sm: str = "",
+    shadow_md: str = "",
 ) -> ThemeTokens:
+    if not surface_overlay:
+        surface_overlay = _blend(surface_elevated, 0.7)
+    if not border_focus:
+        border_focus = brand_primary
+    if not text_disabled:
+        text_disabled = _blend(text_primary, 0.3)
+    if not text_info:
+        text_info = brand_primary
+    if not shadow_sm:
+        shadow_sm = "0 1px 3px rgba(0,0,0,0.28)"
+    if not shadow_md:
+        shadow_md = "0 8px 24px rgba(0,0,0,0.40)"
     return ThemeTokens(
         mode=mode,
         appearance="dark",
@@ -107,15 +127,21 @@ def _dark(
         surface_panel=surface_panel,
         surface_elevated=surface_elevated,
         surface_sunken=surface_sunken,
+        surface_overlay=surface_overlay,
         border_subtle=border_subtle,
         border_strong=border_strong,
+        border_focus=border_focus,
         text_primary=text_primary,
         text_secondary=text_secondary,
         text_muted=text_muted,
+        text_disabled=text_disabled,
         text_danger=text_danger,
         text_warning=text_warning,
         text_success=text_success,
+        text_info=text_info,
         focus_ring=focus_ring or brand_primary,
+        shadow_sm=shadow_sm,
+        shadow_md=shadow_md,
     )
 
 
@@ -130,16 +156,34 @@ def _light(
     surface_panel: str,
     surface_elevated: str,
     surface_sunken: str,
+    surface_overlay: str = "",
     border_subtle: str,
     border_strong: str,
+    border_focus: str = "",
     text_primary: str,
     text_secondary: str,
     text_muted: str,
+    text_disabled: str = "",
     text_danger: str,
     text_warning: str,
     text_success: str,
+    text_info: str = "",
     focus_ring: str | None = None,
+    shadow_sm: str = "",
+    shadow_md: str = "",
 ) -> ThemeTokens:
+    if not surface_overlay:
+        surface_overlay = _blend(surface_elevated, 0.85)
+    if not border_focus:
+        border_focus = brand_primary
+    if not text_disabled:
+        text_disabled = _blend(text_primary, 0.35)
+    if not text_info:
+        text_info = brand_primary
+    if not shadow_sm:
+        shadow_sm = "0 1px 3px rgba(0,0,0,0.06)"
+    if not shadow_md:
+        shadow_md = "0 8px 24px rgba(0,0,0,0.10)"
     return ThemeTokens(
         mode=mode,
         appearance="light",
@@ -151,67 +195,90 @@ def _light(
         surface_panel=surface_panel,
         surface_elevated=surface_elevated,
         surface_sunken=surface_sunken,
+        surface_overlay=surface_overlay,
         border_subtle=border_subtle,
         border_strong=border_strong,
+        border_focus=border_focus,
         text_primary=text_primary,
         text_secondary=text_secondary,
         text_muted=text_muted,
+        text_disabled=text_disabled,
         text_danger=text_danger,
         text_warning=text_warning,
         text_success=text_success,
+        text_info=text_info,
         focus_ring=focus_ring or brand_primary,
+        shadow_sm=shadow_sm,
+        shadow_md=shadow_md,
     )
+
+
+def _blend(hex_color: str, factor: float) -> str:
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = h[0] * 2 + h[1] * 2 + h[2] * 2
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r = int(r + (255 - r) * factor)
+    g = int(g + (255 - g) * factor)
+    b = int(b + (255 - b) * factor)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 # ── Brand defaults ──────────────────────────────────────────────────────────
 
 STUDIO_LIGHT = _light(
     ThemeMode.LIGHT,
-    brand_primary="#1A5C5E",
-    brand_primary_hover="#0F3D3E",
-    brand_accent="#C9A227",
+    brand_primary="#2563EB",
+    brand_primary_hover="#1D4ED8",
+    brand_accent="#7C3AED",
     brand_on_primary="#FFFFFF",
-    surface_app="#E8EEEE",
+    surface_app="#F8FAFC",
     surface_panel="#FFFFFF",
-    surface_elevated="#F2F6F6",
-    surface_sunken="#DCE4E4",
-    border_subtle="#C2CECE",
-    border_strong="#8FA3A3",
-    text_primary="#142222",
-    text_secondary="#4A5C5C",
-    text_muted="#7A8C8C",
-    text_danger="#B42318",
-    text_warning="#B54708",
-    text_success="#027A48",
+    surface_elevated="#F1F5F9",
+    surface_sunken="#F1F5F9",
+    border_subtle="#E2E8F0",
+    border_strong="#CBD5E1",
+    text_primary="#0F172A",
+    text_secondary="#475569",
+    text_muted="#94A3B8",
+    text_danger="#DC2626",
+    text_warning="#D97706",
+    text_success="#059669",
+    focus_ring="#2563EB",
 )
 
 STUDIO_DARK = _dark(
     ThemeMode.DARK,
-    brand_primary="#3D9A9C",
-    brand_primary_hover="#5CB3B5",
-    brand_accent="#E8C547",
-    brand_on_primary="#0A1F20",
-    surface_app="#0B1212",
-    surface_panel="#152020",
-    surface_elevated="#1E2C2C",
-    surface_sunken="#080E0E",
-    border_subtle="#2A3A3A",
-    border_strong="#455858",
-    text_primary="#E8F0F0",
-    text_secondary="#9BB0B0",
-    text_muted="#6A8080",
-    text_danger="#F97066",
-    text_warning="#FDB022",
-    text_success="#32D583",
+    brand_primary="#60A5FA",
+    brand_primary_hover="#93C5FD",
+    brand_accent="#A78BFA",
+    brand_on_primary="#0F172A",
+    surface_app="#0F1117",
+    surface_panel="#161B22",
+    surface_elevated="#1C2128",
+    surface_sunken="#0D1117",
+    surface_overlay="#1C2128E0",
+    border_subtle="#21262D",
+    border_strong="#30363D",
+    border_focus="#60A5FA",
+    text_primary="#E6EDF3",
+    text_secondary="#8B949E",
+    text_muted="#6E7681",
+    text_disabled="#484F58",
+    text_danger="#F85149",
+    text_warning="#D29922",
+    text_success="#3FB950",
+    text_info="#58A6FF",
+    focus_ring="#60A5FA",
 )
 
-# ── Community palettes (official / well-known hex values) ───────────────────
+# ── Community palettes ──────────────────────────────────────────────────────
 
 NORD = _dark(
     ThemeMode.NORD,
     brand_primary="#88C0D0",
     brand_primary_hover="#8FBCBB",
-    brand_accent="#EBCB8B",
+    brand_accent="#B48EAD",
     brand_on_primary="#2E3440",
     surface_app="#2E3440",
     surface_panel="#3B4252",
@@ -273,12 +340,12 @@ CATPPUCCIN_MOCHA = _dark(
     brand_primary_hover="#B4BEFE",
     brand_accent="#CBA6F7",
     brand_on_primary="#1E1E2E",
-    surface_app="#1E1E2E",
-    surface_panel="#181825",
+    surface_app="#11111B",
+    surface_panel="#1E1E2E",
     surface_elevated="#313244",
-    surface_sunken="#11111B",
-    border_subtle="#45475A",
-    border_strong="#585B70",
+    surface_sunken="#181825",
+    border_subtle="#313244",
+    border_strong="#45475A",
     text_primary="#CDD6F4",
     text_secondary="#A6ADC8",
     text_muted="#6C7086",
@@ -293,12 +360,12 @@ CATPPUCCIN_LATTE = _light(
     brand_primary_hover="#1A56D6",
     brand_accent="#8839EF",
     brand_on_primary="#FFFFFF",
-    surface_app="#E6E9EF",
+    surface_app="#EFF1F5",
     surface_panel="#FFFFFF",
-    surface_elevated="#F5F6FA",
-    surface_sunken="#DCE0E8",
+    surface_elevated="#FFFFFF",
+    surface_sunken="#E6E9EF",
     border_subtle="#CCD0DA",
-    border_strong="#9CA0B0",
+    border_strong="#BCC0CC",
     text_primary="#4C4F69",
     text_secondary="#5C5F77",
     text_muted="#8C8FA1",
@@ -351,7 +418,7 @@ GRUVBOX_DARK = _dark(
     ThemeMode.GRUVBOX_DARK,
     brand_primary="#83A598",
     brand_primary_hover="#8EC07C",
-    brand_accent="#FABD2F",
+    brand_accent="#D3869B",
     brand_on_primary="#282828",
     surface_app="#1D2021",
     surface_panel="#282828",
@@ -363,7 +430,7 @@ GRUVBOX_DARK = _dark(
     text_secondary="#D5C4A1",
     text_muted="#928374",
     text_danger="#FB4934",
-    text_warning="#FE8019",
+    text_warning="#FABD2F",
     text_success="#B8BB26",
 )
 
@@ -407,7 +474,6 @@ HIGH_CONTRAST_LIGHT = _light(
     text_success="#006600",
 )
 
-# Backward-compatible aliases
 LIGHT = STUDIO_LIGHT
 DARK = STUDIO_DARK
 
@@ -426,7 +492,6 @@ THEME_REGISTRY: dict[ThemeMode, ThemeTokens] = {
     ThemeMode.HIGH_CONTRAST_LIGHT: HIGH_CONTRAST_LIGHT,
 }
 
-# Order shown in Settings / View → Theme menus
 THEME_CHOICES: tuple[ThemeMode, ...] = (
     ThemeMode.SYSTEM,
     ThemeMode.DARK,
@@ -462,7 +527,6 @@ def theme_label(mode: ThemeMode) -> str:
 
 
 def tokens_for(mode: ThemeMode) -> ThemeTokens:
-    """Return tokens for a concrete (non-SYSTEM) theme."""
     if mode == ThemeMode.SYSTEM:
         return STUDIO_DARK
     if mode == ThemeMode.CUSTOM:

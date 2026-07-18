@@ -55,9 +55,9 @@ class ToastHost(QWidget):
     def _reposition(self) -> None:
         host = self._host
         self.adjustSize()
-        w = min(self.sizeHint().width() + 24, max(120, host.width() - 48))
+        w = min(self.sizeHint().width() + 32, max(160, host.width() - 64))
         self.setFixedWidth(w)
         self.adjustSize()
         x = (host.width() - self.width()) // 2
-        y = host.height() - self.height() - 48
-        self.move(max(8, x), max(8, y))
+        y = host.height() - self.height() - 56
+        self.move(max(12, x), max(12, y))
