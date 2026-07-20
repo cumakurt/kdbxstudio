@@ -13,9 +13,7 @@ class PemInspectorWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._summary = QLabel(
-            "Select an entry to inspect certificates or SSH keys."
-        )
+        self._summary = QLabel("Select an entry to inspect certificates or SSH keys.")
         self._summary.setWordWrap(True)
         self._report = QTextEdit()
         self._report.setReadOnly(True)
@@ -24,9 +22,7 @@ class PemInspectorWidget(QWidget):
         layout.addWidget(self._report)
 
     def clear(self) -> None:
-        self._summary.setText(
-            "Select an entry to inspect certificates or SSH keys."
-        )
+        self._summary.setText("Select an entry to inspect certificates or SSH keys.")
         self._report.clear()
 
     def inspect_entry(self, entry: EntryView) -> None:

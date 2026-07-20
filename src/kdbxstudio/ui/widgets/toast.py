@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QEvent, QObject, QPropertyAnimation, Qt, QTimer
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from kdbxstudio.ui.theme.manager import set_widget_tone
@@ -30,12 +30,10 @@ class ToastHost(QWidget):
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self.hide)
-        self._anim = None
+        self._anim: QPropertyAnimation | None = None
         host.installEventFilter(self)
 
-    def eventFilter(self, watched, event):  # noqa: N802
-        from PySide6.QtCore import QEvent
-
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if watched is self._host and event.type() == QEvent.Type.Resize:
             self._reposition()
         return super().eventFilter(watched, event)

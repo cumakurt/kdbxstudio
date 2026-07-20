@@ -225,7 +225,12 @@ def _check_repository_files(
             url = f"https://raw.githubusercontent.com/{repo}/{branch}/{path}"
             try:
                 text = _http_text(url, timeout_s=timeout_s)
-            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+            except (
+                urllib.error.HTTPError,
+                urllib.error.URLError,
+                TimeoutError,
+                OSError,
+            ):
                 continue
             if path.endswith("__init__.py"):
                 latest = _version_from_init(text)
@@ -259,12 +264,19 @@ def check_github_release(
     ):
         try:
             info = checker(current, repo=repo, timeout_s=timeout_s)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            json.JSONDecodeError,
+            OSError,
+        ) as exc:
             errors.append(str(exc))
             continue
         if info is not None:
             return info
-    detail = "; ".join(errors) if errors else "no release, tag, or repository version found"
+    detail = (
+        "; ".join(errors) if errors else "no release, tag, or repository version found"
+    )
     raise RuntimeError(f"Update check failed: {detail}")
 
 

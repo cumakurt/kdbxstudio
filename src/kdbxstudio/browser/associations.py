@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from lxml import etree
+from pykeepass import PyKeePass
 
 from kdbxstudio.core.database import KdbxDatabase
 
@@ -10,7 +11,7 @@ BROWSER_KEY_PREFIX = "KPXC_BROWSER_"
 CREATED_PREFIX = "KPXC_BROWSER_CREATED_"  # KeePassXC uses "Created" with prefix helper
 
 
-def _meta_element(db: KdbxDatabase):
+def _meta_element(db: KdbxDatabase) -> tuple[etree._Element, PyKeePass]:
     kp = db._require_kp()  # noqa: SLF001
     root = kp.kdbx.body.payload.xml.getroot()
     meta = root.find("Meta")
@@ -19,7 +20,7 @@ def _meta_element(db: KdbxDatabase):
     return meta, kp
 
 
-def _custom_data(meta) -> etree._Element:
+def _custom_data(meta: etree._Element) -> etree._Element:
     cd = meta.find("CustomData")
     if cd is None:
         cd = etree.SubElement(meta, "CustomData")

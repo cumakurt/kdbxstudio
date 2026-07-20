@@ -16,6 +16,7 @@ class AutoTypeError(Exception):
 
 
 _DELAY_RE = re.compile(r"^\{DELAY(?:=(\d+))?\}$", re.IGNORECASE)
+_COMMAND_TIMEOUT_S = 10
 
 
 @dataclass(frozen=True)
@@ -129,28 +130,34 @@ def find_best_entry_for_window(
 
 def _type_xdotool(text: str) -> None:
     subprocess.run(
-        ["xdotool", "type", "--clearmodifiers", "--delay", "12", "--", text],
+        ["xdotool", "type", "--clearmodifiers", "--delay", "12", "--file", "-"],
+        input=text,
         check=True,
         capture_output=True,
         text=True,
+        timeout=_COMMAND_TIMEOUT_S,
     )
 
 
 def _type_ydotool(text: str) -> None:
     subprocess.run(
-        ["ydotool", "type", "--", text],
+        ["ydotool", "stdin"],
+        input=text,
         check=True,
         capture_output=True,
         text=True,
+        timeout=_COMMAND_TIMEOUT_S,
     )
 
 
 def _type_wtype(text: str) -> None:
     subprocess.run(
-        ["wtype", "--", text],
+        ["wtype", "-"],
+        input=text,
         check=True,
         capture_output=True,
         text=True,
+        timeout=_COMMAND_TIMEOUT_S,
     )
 
 
@@ -160,6 +167,7 @@ def _key_xdotool(key: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        timeout=_COMMAND_TIMEOUT_S,
     )
 
 
@@ -173,6 +181,7 @@ def _key_ydotool(key: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        timeout=_COMMAND_TIMEOUT_S,
     )
 
 
@@ -184,6 +193,7 @@ def _key_wtype(key: str) -> None:
         check=True,
         capture_output=True,
         text=True,
+        timeout=_COMMAND_TIMEOUT_S,
     )
 
 
@@ -221,7 +231,8 @@ def expand_sequence(
                 if buf:
                     steps.append(("type", "".join(buf)))
                     buf.clear()
-                ms = delay_match.group(1) or "250"
+                raw_ms = (delay_match.group(1) or "250").lstrip("0") or "0"
+                ms = "60000" if len(raw_ms) > 5 else str(min(60_000, int(raw_ms)))
                 steps.append(("delay", ms))
                 i = end + 1
                 continue
@@ -258,10 +269,12 @@ def run_autotype_steps(
             "No Auto-Type backend found. Install xdotool (X11), "
             "ydotool, or wtype (Wayland)."
         )
+    if chosen not in {"xdotool", "ydotool", "wtype"}:
+        raise AutoTypeError(f"Unsupported Auto-Type backend: {chosen}")
     try:
         for op, value in steps:
             if op == "delay":
-                time.sleep(max(0, int(value)) / 1000.0)
+                time.sleep(min(60_000, max(0, int(value))) / 1000.0)
                 continue
             if op == "type":
                 if not value:
@@ -285,6 +298,10 @@ def run_autotype_steps(
             f"Auto-Type backend '{chosen}' failed "
             f"(exit {exc.returncode}). Secrets were not included in this message."
         ) from None
+    except subprocess.TimeoutExpired:
+        raise AutoTypeError(
+            f"Auto-Type backend '{chosen}' timed out. Secrets were not logged."
+        ) from None
     except OSError as exc:
         raise AutoTypeError(f"Auto-Type backend error: {exc}") from None
     return chosen
@@ -301,7 +318,7 @@ def auto_type(
 ) -> str:
     """Perform Auto-Type. Returns backend name used."""
     if initial_delay_ms > 0:
-        time.sleep(initial_delay_ms / 1000.0)
+        time.sleep(min(initial_delay_ms, 60_000) / 1000.0)
     steps = expand_sequence(
         sequence, username=username, password=password, totp=totp, url=url
     )

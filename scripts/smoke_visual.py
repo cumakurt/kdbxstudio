@@ -7,6 +7,7 @@ README-ready copies go to ``assets/screenshots/`` (committed).
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import time
@@ -20,6 +21,9 @@ OUT = ROOT / "artifacts" / "visual"
 README_SHOTS = ROOT / "assets" / "screenshots"
 SAMPLE = OUT / "sample.kdbx"
 PASSWORD = "demo-pass-123"
+UPDATE_README_SHOTS = os.environ.get(
+    "KDBXSTUDIO_UPDATE_README_SHOTS", "1"
+).strip().lower() not in {"0", "false", "no"}
 
 # Stable names referenced from README.md — regenerate all of these.
 README_EXPORT = {
@@ -219,7 +223,7 @@ def grab(widget, name: str) -> Path:
     ok = pix.save(str(path), "PNG")
     assert ok, f"Failed to save {path}"
     print(f"saved {path} ({pix.width()}x{pix.height()})")
-    if name in README_EXPORT:
+    if UPDATE_README_SHOTS and name in README_EXPORT:
         README_SHOTS.mkdir(parents=True, exist_ok=True)
         dest = README_SHOTS / README_EXPORT[name]
         shutil.copy2(path, dest)
@@ -240,14 +244,13 @@ def _select_group(window, name: str) -> str:
 
 def main() -> int:
     # Wipe previous README shots so every file is freshly written.
-    if README_SHOTS.is_dir():
+    if UPDATE_README_SHOTS and README_SHOTS.is_dir():
         for old in README_SHOTS.glob("*.png"):
             old.unlink()
 
     build_sample_db(SAMPLE)
 
     import json
-    import os
     import tempfile
 
     from kdbxstudio.i18n import set_language, tr
@@ -332,6 +335,16 @@ def main() -> int:
     assert window._entry_list.model().rowCount() >= 3
     # 02 — Workspace: colorful groups + site favicons + entry detail
     grab(window, "02_workspace_open")
+
+    # Dev-only responsive coverage at tablet and minimum supported widths.
+    window.resize(900, 700)
+    app.processEvents()
+    grab(window, "02c_workspace_tablet")
+    window.resize(640, 700)
+    app.processEvents()
+    grab(window, "02d_workspace_compact")
+    window.resize(1400, 900)
+    app.processEvents()
 
     # Dev-only variety shot (not in README)
     _select_group(window, "SSH Keys")
@@ -446,15 +459,28 @@ def main() -> int:
     grab(gen, "06_password_generator")
     gen.close()
 
-    _downscale_readme_shots()
-    missing = [n for n in README_EXPORT.values() if not (README_SHOTS / n).is_file()]
-    assert not missing, f"missing README screenshots: {missing}"
+    # Dev-only settings shot verifies the long preference form remains usable.
+    from kdbxstudio.ui.dialogs.security_settings_dialog import SecuritySettingsDialog
+
+    settings_dialog = SecuritySettingsDialog(window._settings, window)
+    settings_dialog.resize(520, 600)
+    settings_dialog.show()
+    app.processEvents()
+    grab(settings_dialog, "07_security_settings_compact")
+    settings_dialog.close()
+
+    if UPDATE_README_SHOTS:
+        _downscale_readme_shots()
+        missing = [
+            n for n in README_EXPORT.values() if not (README_SHOTS / n).is_file()
+        ]
+        assert not missing, f"missing README screenshots: {missing}"
 
     print(
         f"OK sample={SAMPLE} entries={len(entries)} "
         f"findings={len(report.findings)} "
         f"weak={report.weak_passwords} empty={report.empty_passwords} "
-        f"readme_shots={sorted(p.name for p in README_SHOTS.glob('*.png'))}"
+        f"readme_shots_updated={UPDATE_README_SHOTS}"
     )
     QTimer.singleShot(50, app.quit)
     return app.exec()

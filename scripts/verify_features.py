@@ -18,9 +18,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-OTP_URI = (
-    "otpauth://totp/Verify:user?secret=JBSWY3DPEHPK3PXP&issuer=Verify&period=30"
-)
+OTP_URI = "otpauth://totp/Verify:user?secret=JBSWY3DPEHPK3PXP&issuer=Verify&period=30"
 PASSWORD = "Verify#Master99!"
 
 
@@ -153,10 +151,14 @@ def verify_core(tmp: Path) -> None:
     assert snap.total_entries >= 6
     _ok("audit + HIBP mock + security dashboard")
 
-    csv_path = export_entries_csv(tmp / "out.csv", mgr.all_entries(include_recycle_bin=False))
+    csv_path = export_entries_csv(
+        tmp / "out.csv", mgr.all_entries(include_recycle_bin=False)
+    )
     assert "GitHub" in csv_path.read_text(encoding="utf-8")
     assert stat.S_IMODE(csv_path.stat().st_mode) == 0o600
-    sheet = write_emergency_html(tmp / "sheet.html", mgr.all_entries(include_recycle_bin=False)[:3])
+    sheet = write_emergency_html(
+        tmp / "sheet.html", mgr.all_entries(include_recycle_bin=False)[:3]
+    )
     assert stat.S_IMODE(sheet.stat().st_mode) == 0o600
     _ok("CSV + emergency sheet 0600")
 
@@ -185,7 +187,9 @@ def verify_core(tmp: Path) -> None:
     steps = expand_sequence("{USERNAME}{TAB}{PASSWORD}", username="a", password="b")
     assert ("type", "a") in steps and ("key", "Tab") in steps
     blocks = inspect_pem_text(
-        "-----BEGIN OPENSSH PRIVATE KEY-----\ncHJpdmF0ZQ==\n-----END OPENSSH PRIVATE KEY-----\n"
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "cHJpdmF0ZQ==\n"
+        "-----END OPENSSH PRIVATE KEY-----\n"
     )
     assert blocks and blocks[0].kind == "private_key"
     _ok("generator + autotype expand + PEM")
@@ -331,7 +335,11 @@ def verify_gui(tmp: Path) -> None:
     _ok("search UI")
 
     store = {"v": ""}
-    guard = ClipboardGuard(lambda t: store.__setitem__("v", t), lambda: store.__setitem__("v", ""), timeout_ms=0)
+    guard = ClipboardGuard(
+        lambda t: store.__setitem__("v", t),
+        lambda: store.__setitem__("v", ""),
+        timeout_ms=0,
+    )
     guard.copy("secret")
     assert store["v"] == "secret"
     guard.cancel()
@@ -435,7 +443,9 @@ def verify_browser(tmp: Path) -> None:
 
     totp_resp = enc("get-totp", {"uuid": entry.uuid})
     body = json.loads(
-        crypto.decrypt_json(totp_resp["message"], totp_resp["nonce"], host_pk, client_sk)
+        crypto.decrypt_json(
+            totp_resp["message"], totp_resp["nonce"], host_pk, client_sk
+        )
     )
     assert body.get("totp")
     _ok("browser get-totp after associate")

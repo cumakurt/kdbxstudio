@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from kdbxstudio.ui.theme.manager import current_tokens
@@ -47,7 +47,7 @@ class CountdownRing(QWidget):
             return QColor(tokens.text_success)
         return QColor(tokens.brand_primary)
 
-    def paintEvent(self, _event) -> None:  # noqa: N802
+    def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         tokens = current_tokens()

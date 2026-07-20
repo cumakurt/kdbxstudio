@@ -15,9 +15,7 @@ _PEM_BLOCK = re.compile(
 )
 
 # ASN.1 UTCTime YYMMDDHHMMSSZ / GeneralizedTime YYYYMMDDHHMMSSZ
-_ASN1_TIME = re.compile(
-    rb"(?:(?P<utc>\d{12}Z)|(?P<gen>\d{14}Z))"
-)
+_ASN1_TIME = re.compile(rb"(?:(?P<utc>\d{12}Z)|(?P<gen>\d{14}Z))")
 
 
 @dataclass(frozen=True)

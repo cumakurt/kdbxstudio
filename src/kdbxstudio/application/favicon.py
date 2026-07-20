@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from urllib.parse import urlparse
 
-from kdbxstudio.core.paths import ensure_private_dir
+from kdbxstudio.core.paths import atomic_write_private, ensure_private_dir
 
 _CACHE_DIR: Path | None = None
 _FAVICON_HIT: dict[str, Path | None] = {}
@@ -23,7 +23,9 @@ _PREFETCH_CAP = 40
 def cache_dir() -> Path:
     global _CACHE_DIR
     if _CACHE_DIR is None:
-        _CACHE_DIR = ensure_private_dir(Path.home() / ".cache" / "kdbxstudio" / "favicons")
+        _CACHE_DIR = ensure_private_dir(
+            Path.home() / ".cache" / "kdbxstudio" / "favicons"
+        )
     return _CACHE_DIR
 
 
@@ -104,7 +106,7 @@ def fetch_favicon(
     if not data or len(data) > max_bytes:
         _FAVICON_HIT[host] = None
         return None
-    dest.write_bytes(data)
+    atomic_write_private(dest, data)
     _FAVICON_HIT[host] = dest
     return dest
 

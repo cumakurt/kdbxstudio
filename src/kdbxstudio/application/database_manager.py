@@ -57,7 +57,6 @@ class DatabaseManager:
         make_active: bool = True,
     ) -> str:
         path = Path(path).resolve()
-        session_id = str(path)
         db = KdbxDatabase()
         db.open(path, password=password, keyfile=keyfile)
         return self.adopt(db, path, make_active=make_active)
@@ -90,7 +89,6 @@ class DatabaseManager:
         make_active: bool = True,
     ) -> str:
         path = Path(path).resolve()
-        session_id = str(path)
         db = KdbxDatabase()
         db.create(path, password=password, keyfile=keyfile)
         return self.adopt(db, path, make_active=make_active)
@@ -182,9 +180,7 @@ class DatabaseManager:
         self._invalidate(session_id or self._active_id)
         self._notify()
 
-    def ensure_group_path(
-        self, path: str, session_id: str | None = None
-    ) -> str:
+    def ensure_group_path(self, path: str, session_id: str | None = None) -> str:
         uuid = self._get(session_id).ensure_group_path(path)
         self._invalidate(session_id or self._active_id)
         self._notify()
@@ -346,9 +342,7 @@ class DatabaseManager:
     ) -> bytes:
         return self._get(session_id).get_attachment_data(entry_uuid, attachment_id)
 
-    def attachment_count(
-        self, entry_uuid: str, session_id: str | None = None
-    ) -> int:
+    def attachment_count(self, entry_uuid: str, session_id: str | None = None) -> int:
         return self._get(session_id).attachment_count(entry_uuid)
 
     def add_attachment(
@@ -358,9 +352,7 @@ class DatabaseManager:
         data: bytes,
         session_id: str | None = None,
     ) -> AttachmentView:
-        attachment = self._get(session_id).add_attachment(
-            entry_uuid, filename, data
-        )
+        attachment = self._get(session_id).add_attachment(entry_uuid, filename, data)
         self._invalidate(session_id or self._active_id)
         self._notify()
         return attachment

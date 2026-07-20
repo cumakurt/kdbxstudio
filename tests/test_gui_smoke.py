@@ -17,6 +17,16 @@ def test_main_window_constructs(qtbot) -> None:
     assert window._stack.currentWidget() is window._empty
 
 
+def test_main_window_uses_vertical_workspace_on_compact_width(qtbot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.resize(640, 700)
+    window.show()
+    qtbot.wait(10)
+    assert window._workspace_splitter.orientation() == Qt.Orientation.Vertical
+    assert window._entry_detail._scroll.widgetResizable()
+
+
 def test_command_palette_opens_with_fade(qtbot) -> None:
     called = {"ok": False}
 

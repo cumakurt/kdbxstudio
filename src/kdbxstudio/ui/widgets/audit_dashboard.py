@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -60,9 +60,7 @@ class AuditDashboardWidget(QWidget):
         self._tree.setRootIsDecorated(False)
         self._tree.setAlternatingRowColors(True)
         self._tree.setSortingEnabled(True)
-        self._tree.setSelectionMode(
-            QAbstractItemView.SelectionMode.SingleSelection
-        )
+        self._tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._tree.setUniformRowHeights(True)
         header = self._tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
@@ -145,13 +143,9 @@ class AuditDashboardWidget(QWidget):
         if report.expired > 0 or report.expiring_soon > 0:
             parts = []
             if report.expired > 0:
-                parts.append(
-                    trf("<b>{n}</b> expired", n=report.expired)
-                )
+                parts.append(trf("<b>{n}</b> expired", n=report.expired))
             if report.expiring_soon > 0:
-                parts.append(
-                    trf("<b>{n}</b> expiring soon", n=report.expiring_soon)
-                )
+                parts.append(trf("<b>{n}</b> expiring soon", n=report.expiring_soon))
             self._expiry_warning.setText(
                 tr("⚠ {parts} entry/entries need attention").format(
                     parts=tr(" and ").join(parts)
@@ -169,17 +163,11 @@ class AuditDashboardWidget(QWidget):
             ),
         ]
         if report.entries_with_url > 0:
-            stats_lines.append(
-                trf("🌐 {n} with URLs", n=report.entries_with_url)
-            )
+            stats_lines.append(trf("🌐 {n} with URLs", n=report.entries_with_url))
         if report.entries_with_otp > 0:
-            stats_lines.append(
-                trf("🔑 {n} with TOTP", n=report.entries_with_otp)
-            )
+            stats_lines.append(trf("🔑 {n} with TOTP", n=report.entries_with_otp))
         if report.entries_with_tags > 0:
-            stats_lines.append(
-                trf("🏷 {n} with tags", n=report.entries_with_tags)
-            )
+            stats_lines.append(trf("🏷 {n} with tags", n=report.entries_with_tags))
         if report.entries_with_attachments > 0:
             stats_lines.append(
                 trf(
@@ -219,9 +207,7 @@ class AuditDashboardWidget(QWidget):
             key=lambda f: severity_order.get(f.severity, 3),
         )
         for finding in sorted_findings:
-            item = QTreeWidgetItem(
-                [tr(finding.severity), finding.message]
-            )
+            item = QTreeWidgetItem([tr(finding.severity), finding.message])
             if finding.entry_uuid:
                 item.setData(0, int(Qt.ItemDataRole.UserRole), finding.entry_uuid)
             item.setToolTip(1, finding.message)
@@ -266,7 +252,7 @@ class AuditDashboardWidget(QWidget):
         if uuid:
             self.finding_activated.emit(str(uuid))
 
-    def _show_tree_menu(self, pos) -> None:
+    def _show_tree_menu(self, pos: QPoint) -> None:
         item = self._tree.itemAt(pos)
         if item is not None:
             self._tree.setCurrentItem(item)
@@ -277,9 +263,7 @@ class AuditDashboardWidget(QWidget):
             uuid = item.data(0, int(Qt.ItemDataRole.UserRole))
         open_entry.setEnabled(bool(uuid))
         if uuid:
-            open_entry.triggered.connect(
-                lambda: self.finding_activated.emit(str(uuid))
-            )
+            open_entry.triggered.connect(lambda: self.finding_activated.emit(str(uuid)))
         menu.addSeparator()
         menu.addAction(tr("Refresh audit"), self.refresh_requested.emit)
         menu.exec(self._tree.mapToGlobal(pos))

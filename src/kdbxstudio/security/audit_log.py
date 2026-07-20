@@ -9,7 +9,11 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-from kdbxstudio.core.paths import default_data_dir, ensure_private_dir
+from kdbxstudio.core.paths import (
+    atomic_write_private,
+    default_data_dir,
+    ensure_private_dir,
+)
 
 _lock = threading.Lock()
 _MAX_LINES = 2_000
@@ -33,7 +37,11 @@ def log_security_event(event: str, **fields: object) -> None:
     path = audit_log_path()
     with _lock:
         try:
-            with path.open("a", encoding="utf-8") as handle:
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(path, flags, stat.S_IRUSR | stat.S_IWUSR)
+            with os.fdopen(fd, "a", encoding="utf-8") as handle:
                 handle.write(line)
             os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
             _trim_if_needed(path)
@@ -48,8 +56,4 @@ def _trim_if_needed(path: Path) -> None:
         return
     if len(raw) <= _MAX_LINES:
         return
-    path.write_text("\n".join(raw[-_MAX_LINES:]) + "\n", encoding="utf-8")
-    try:
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:
-        pass
+    atomic_write_private(path, "\n".join(raw[-_MAX_LINES:]) + "\n")

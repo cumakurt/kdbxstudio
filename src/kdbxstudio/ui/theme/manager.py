@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette, QScreen, QTextCharFormat
 from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QGuiApplication,
+    QPalette,
+    QScreen,
+    QTextCharFormat,
+)
 from PySide6.QtWidgets import QApplication, QWidget
 
 from kdbxstudio.ui.theme.accent import AccentId, apply_accent, parse_accent
@@ -13,7 +20,7 @@ from kdbxstudio.ui.theme.geometry import (
     normalize_menu_size,
     type_scale_for_body,
 )
-from kdbxstudio.ui.theme.scale import UiScale, detect_ui_scale, ui_scale_from_percent
+from kdbxstudio.ui.theme.scale import UiScale, ui_scale_from_percent
 from kdbxstudio.ui.theme.styles import build_stylesheet
 from kdbxstudio.ui.theme.tokens import (
     ThemeMode,
@@ -210,9 +217,7 @@ def apply_theme(
     menu = normalize_menu_size(
         menu_size if menu_size is not None else _current_menu_size
     )
-    ui_scale = (
-        scale if scale is not None else ui_scale_from_percent(scale_pct)
-    )
+    ui_scale = scale if scale is not None else ui_scale_from_percent(scale_pct)
     if (
         not force
         and _theme_applied

@@ -7,9 +7,11 @@ import struct
 from pathlib import Path
 from uuid import UUID
 
+from kdbxstudio.application.browser_bridge import match_logins_for_url
 from kdbxstudio.browser import associations, crypto
 from kdbxstudio.browser.host import _read_native, _write_native
 from kdbxstudio.browser.protocol import (
+    MAX_CLIENT_SESSIONS,
     BrowserProtocol,
     ClientSession,
     ProtocolContext,
@@ -32,6 +34,14 @@ def test_crypto_roundtrip_and_nonce_increment() -> None:
     assert crypto.increment_nonce(bumped) != bumped
 
 
+def test_crypto_rejects_malformed_nonce() -> None:
+    try:
+        crypto.increment_nonce(crypto.b64encode(b"short"))
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+
+
 def test_normalize_uuid_hex() -> None:
     dashed = "12345678-1234-5678-1234-567812345678"
     hexed = dashed.replace("-", "")
@@ -51,9 +61,9 @@ def test_database_hash_matches_keepassxc_shape(tmp_path: Path) -> None:
     db.close()
 
 
-def _make_protocol(tmp_path: Path, *, assoc_id: str = "firefox") -> tuple[
-    BrowserProtocol, KdbxDatabase, EntryView
-]:
+def _make_protocol(
+    tmp_path: Path, *, assoc_id: str = "firefox"
+) -> tuple[BrowserProtocol, KdbxDatabase, EntryView]:
     db = KdbxDatabase()
     path = tmp_path / "browser.kdbx"
     db.create(path, password="secret")
@@ -75,6 +85,22 @@ def _make_protocol(tmp_path: Path, *, assoc_id: str = "firefox") -> tuple[
     def list_groups():
         return db.list_groups()
 
+    def add_entry(
+        group_uuid: str,
+        title: str,
+        username: str = "",
+        password: str = "",
+        url: str = "",
+        **_kwargs: object,
+    ) -> EntryView:
+        return db.add_entry(
+            group_uuid,
+            title=title,
+            username=username,
+            password=password,
+            url=url,
+        )
+
     protocol = BrowserProtocol(
         ProtocolContext(
             get_database=get_database,
@@ -83,13 +109,7 @@ def _make_protocol(tmp_path: Path, *, assoc_id: str = "firefox") -> tuple[
             prompt_associate=lambda _label: assoc_id,
             lock_database=lambda: None,
             ensure_group_path=db.ensure_group_path,
-            add_entry=lambda group_uuid, title, username="", password="", url="", **_k: db.add_entry(
-                group_uuid,
-                title=title,
-                username=username,
-                password=password,
-                url=url,
-            ),
+            add_entry=add_entry,
             update_entry=lambda uuid, **kwargs: db.update_entry(uuid, **kwargs),
             get_entry=db.get_entry,
         )
@@ -114,7 +134,6 @@ def test_protocol_associate_and_get_logins(tmp_path: Path) -> None:
     assert cpk.get("success") == crypto.TRUE_STR
     assert "publicKey" in cpk
     assert "nonce" in cpk
-    host_pk = cpk["publicKey"]
     session = protocol.sessions[client_id]
 
     # associate
@@ -282,7 +301,9 @@ def test_keys_ok_fails_closed_without_keys(tmp_path: Path) -> None:
 
 def test_sensitive_actions_require_association(tmp_path: Path) -> None:
     protocol, db, entry = _make_protocol(tmp_path)
-    db.update_entry(entry.uuid, otp="otpauth://totp/Test?secret=JBSWY3DPEHPK3PXP&issuer=Test")
+    db.update_entry(
+        entry.uuid, otp="otpauth://totp/Test?secret=JBSWY3DPEHPK3PXP&issuer=Test"
+    )
     client_pk, client_sk = crypto.generate_keypair()
     client_id = "unassociated"
     host_pk, session = _handshake(protocol, client_sk, client_pk, client_id)
@@ -399,6 +420,92 @@ def test_get_logins_rejects_empty_keys_without_id(tmp_path: Path) -> None:
     db.close()
 
 
+def test_url_matching_never_broadens_subdomain_credentials() -> None:
+    entry = EntryView(
+        uuid="1",
+        title="Admin",
+        username="admin",
+        password="secret",
+        url="https://admin.example.com/login",
+        notes="",
+        group_path="Root",
+    )
+    assert match_logins_for_url([entry], "https://example.com") == []
+    assert match_logins_for_url([entry], "https://admin.example.com") == [entry]
+    parent = EntryView(
+        uuid="2",
+        title="Parent",
+        username="user",
+        password="secret",
+        url="https://example.com",
+        notes="",
+        group_path="Root",
+    )
+    assert match_logins_for_url([parent], "https://app.example.com") == [parent]
+
+
+def test_read_only_context_denies_browser_mutations(tmp_path: Path) -> None:
+    protocol, db, _entry = _make_protocol(tmp_path)
+    client_pk, client_sk = crypto.generate_keypair()
+    client_id = "read-only"
+    host_pk, _session = _handshake(protocol, client_sk, client_pk, client_id)
+    assert "message" in _encrypted_handle(
+        protocol,
+        action="associate",
+        payload={"key": client_pk, "idKey": client_pk},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    protocol.context.is_read_only = lambda: True
+
+    set_login = _encrypted_handle(
+        protocol,
+        action="set-login",
+        payload={"url": "https://example.com", "login": "u", "password": "p"},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    create_group = _encrypted_handle(
+        protocol,
+        action="create-new-group",
+        payload={"groupName": "Root/Denied"},
+        client_id=client_id,
+        client_sk=client_sk,
+        host_pk=host_pk,
+    )
+    assert set_login.get("errorCode") == "6"
+    assert create_group.get("errorCode") == "6"
+    db.close()
+
+
+def test_handshake_rejects_invalid_keys_and_bounds_sessions(tmp_path: Path) -> None:
+    protocol, db, _entry = _make_protocol(tmp_path)
+    bad = protocol.handle(
+        {
+            "action": "change-public-keys",
+            "publicKey": "not-base64",
+            "nonce": "also-invalid",
+            "clientID": "bad",
+        }
+    )
+    assert bad.get("errorCode") == "3"
+    client_pk, _client_sk = crypto.generate_keypair()
+    for index in range(MAX_CLIENT_SESSIONS + 5):
+        response = protocol.handle(
+            {
+                "action": "change-public-keys",
+                "publicKey": client_pk,
+                "nonce": crypto.random_nonce_b64(),
+                "clientID": f"client-{index}",
+            }
+        )
+        assert response.get("success") == crypto.TRUE_STR
+    assert len(protocol.sessions) == MAX_CLIENT_SESSIONS
+    db.close()
+
+
 def test_native_messaging_framing(monkeypatch) -> None:
     payload = {"action": "change-public-keys", "success": "true"}
     encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -438,3 +545,37 @@ def test_native_messaging_framing(monkeypatch) -> None:
     _write_native(payload)
     assert stdout_buf.written[:4] == struct.pack("<I", len(encoded))
     assert stdout_buf.written[4:] == encoded
+
+
+def test_native_messaging_handles_partial_reads_and_non_object(monkeypatch) -> None:
+    payload = {"action": "ping"}
+    encoded = json.dumps(payload).encode("utf-8")
+    framed = struct.pack("<I", len(encoded)) + encoded
+
+    class _PartialBuf:
+        def __init__(self, data: bytes) -> None:
+            self._data = data
+            self._pos = 0
+
+        def read(self, n: int) -> bytes:
+            n = min(n, 2)
+            chunk = self._data[self._pos : self._pos + n]
+            self._pos += len(chunk)
+            return chunk
+
+    class _Stdio:
+        def __init__(self, data: bytes) -> None:
+            self.buffer = _PartialBuf(data)
+
+    import sys
+
+    monkeypatch.setattr(sys, "stdin", _Stdio(framed))
+    assert _read_native() == payload
+
+    array = json.dumps(["not", "an", "object"]).encode("utf-8")
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        _Stdio(struct.pack("<I", len(array)) + array),
+    )
+    assert _read_native() is None

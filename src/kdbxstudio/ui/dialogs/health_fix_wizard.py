@@ -7,17 +7,18 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 from kdbxstudio.application.audit_engine import AuditFinding
 from kdbxstudio.i18n import tr, trf
-from kdbxstudio.ui.theme.manager import set_widget_tone
 from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 from kdbxstudio.ui.widgets.status_chip import StatusChip
 
-_PASSWORD_KINDS = frozenset({
-    "empty_password",
-    "weak_password",
-    "low_entropy",
-    "pwned_password",
-    "duplicate_password",
-})
+_PASSWORD_KINDS = frozenset(
+    {
+        "empty_password",
+        "weak_password",
+        "low_entropy",
+        "pwned_password",
+        "duplicate_password",
+    }
+)
 
 
 class HealthFixWizardDialog(DialogShell):

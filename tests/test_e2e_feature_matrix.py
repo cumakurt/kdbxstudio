@@ -46,9 +46,7 @@ from kdbxstudio.security.store import (
     save_settings,
 )
 
-OTP_URI = (
-    "otpauth://totp/Demo:user?secret=JBSWY3DPEHPK3PXP&issuer=Demo&period=30"
-)
+OTP_URI = "otpauth://totp/Demo:user?secret=JBSWY3DPEHPK3PXP&issuer=Demo&period=30"
 SAMPLE_PASSWORD = "Master#Pass99!"
 
 
@@ -237,8 +235,7 @@ def test_e2e_sample_database_feature_matrix(tmp_path: Path) -> None:
         for h in search.search(EntryFilter(duplicates_only=True))
     )
     assert any(
-        h.entry.title == "Weak VPN"
-        for h in search.search(EntryFilter(weak_only=True))
+        h.entry.title == "Weak VPN" for h in search.search(EntryFilter(weak_only=True))
     )
 
     # --- Audit before recycle mutations (incl. HIBP mock) ---
@@ -350,9 +347,12 @@ def test_e2e_sample_database_feature_matrix(tmp_path: Path) -> None:
     result = merge_databases(merge_dst, merge_src)
     assert result.added == 1
     merged = next(e for e in merge_dst.list_entries() if e.title == "Merged")
-    assert merge_dst.get_attachment_data(
-        merged.uuid, merge_dst.list_attachments(merged.uuid)[0].id
-    ) == b"\x00\x01"
+    assert (
+        merge_dst.get_attachment_data(
+            merged.uuid, merge_dst.list_attachments(merged.uuid)[0].id
+        )
+        == b"\x00\x01"
+    )
 
     # --- Emergency sheet ---
     sheet = render_emergency_html(
@@ -408,11 +408,15 @@ def test_e2e_sample_database_feature_matrix(tmp_path: Path) -> None:
     )
     plugins = PluginManager()
     names = plugins.discover(builtin, allow_unverified=True)
-    assert set(names) >= {
-        "search-boost",
-        "duplicate-highlight",
-        "audit-notify",
-    } or len(names) >= 3
+    assert (
+        set(names)
+        >= {
+            "search-boost",
+            "duplicate-highlight",
+            "audit-notify",
+        }
+        or len(names) >= 3
+    )
     plugins.activate_all()
     assert all(p.active for p in plugins.list_plugins())
     plugins.deactivate(names[0])
@@ -479,6 +483,27 @@ def test_e2e_clipboard_and_autolock_qt(qtbot) -> None:  # type: ignore[no-untype
     lock.stop()
 
 
+def test_clipboard_timeout_preserves_newer_user_content(qtbot) -> None:  # type: ignore[no-untyped-def]
+    store = {"value": ""}
+    clears: list[bool] = []
+
+    def clear() -> None:
+        clears.append(True)
+        store["value"] = ""
+
+    guard = ClipboardGuard(
+        lambda text: store.__setitem__("value", text),
+        clear,
+        timeout_ms=30,
+        clipboard_getter=lambda: store["value"],
+    )
+    guard.copy("vault-secret")
+    store["value"] = "new user clipboard"
+    qtbot.wait(80)
+    assert store["value"] == "new user clipboard"
+    assert clears == []
+
+
 def test_e2e_gui_main_window_with_sample(qtbot, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     """MainWindow opens a sample DB and refreshes workspace widgets."""
     from kdbxstudio.ui.main_window import MainWindow
@@ -509,6 +534,9 @@ def test_e2e_gui_main_window_with_sample(qtbot, tmp_path: Path) -> None:  # type
     window._dbm.open(db_path, password=SAMPLE_PASSWORD)
     # Listener refreshes UI on open.
     assert window._dbm.active is not None
+    with patch("kdbxstudio.ui.main_window.prefetch_favicons") as prefetch:
+        window._prefetch_entry_favicons(["https://private.example"])
+    prefetch.assert_not_called()
     entries = window._dbm.all_entries()
     assert any(e.title == "GUI Entry" for e in entries)
     window._dbm.close_all()

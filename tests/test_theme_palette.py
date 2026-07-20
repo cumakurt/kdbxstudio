@@ -123,8 +123,14 @@ def test_palette_score() -> None:
 def test_build_palette_maps_surfaces() -> None:
     tokens = tokens_for(ThemeMode.LIGHT)
     palette = build_palette(tokens)
-    assert palette.color(QPalette.ColorRole.Window).name().lower() == tokens.surface_app.lower()
-    assert palette.color(QPalette.ColorRole.Text).name().lower() == tokens.text_primary.lower()
+    assert (
+        palette.color(QPalette.ColorRole.Window).name().lower()
+        == tokens.surface_app.lower()
+    )
+    assert (
+        palette.color(QPalette.ColorRole.Text).name().lower()
+        == tokens.text_primary.lower()
+    )
     assert (
         palette.color(QPalette.ColorRole.Highlight).name().lower()
         == tokens.brand_primary.lower()

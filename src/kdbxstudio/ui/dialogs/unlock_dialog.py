@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QPropertyAnimation
+from PySide6.QtGui import QAction, QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialogButtonBox,
@@ -55,7 +56,7 @@ class UnlockDialog(DialogShell):
         )
         self._path = path
         self._create_mode = create_mode
-        self._anim = None
+        self._anim: QPropertyAnimation | None = None
         scale = current_ui_scale()
         self.setMinimumWidth(scale.px(460))
 
@@ -118,7 +119,7 @@ class UnlockDialog(DialogShell):
         self._confirm.returnPressed.connect(self._accept)
         self._password.setFocus()
 
-    def showEvent(self, event) -> None:  # noqa: N802
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._anim = fade_in(self)
 
@@ -139,9 +140,7 @@ class UnlockDialog(DialogShell):
         return Path(text) if text else None
 
     def _toggle_password(self, checked: bool) -> None:
-        mode = (
-            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
-        )
+        mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         self._password.setEchoMode(mode)
         self._confirm.setEchoMode(mode)
 
@@ -175,9 +174,7 @@ class UnlockDialog(DialogShell):
 
     def _accept(self) -> None:
         if not self._path_edit.text().strip():
-            QMessageBox.warning(
-                self, tr("Missing path"), tr("Choose a database path.")
-            )
+            QMessageBox.warning(self, tr("Missing path"), tr("Choose a database path."))
             return
         if self._create_mode:
             if not self._password.text() and not self._keyfile.text().strip():

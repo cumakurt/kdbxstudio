@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from html import escape
+
+from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -14,8 +16,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-from html import escape
 
 from kdbxstudio.application.history_diff import diff_history
 from kdbxstudio.core.database import HistoryView
@@ -92,16 +92,14 @@ class HistoryWidget(QWidget):
         if 0 <= row < len(self._items):
             self.restore_requested.emit(self._items[row].index)
 
-    def _show_list_menu(self, pos) -> None:
+    def _show_list_menu(self, pos: QPoint) -> None:
         item = self._list.itemAt(pos)
         if item is not None:
             self._list.setCurrentItem(item)
         row = self._list.currentRow()
         has_item = 0 <= row < len(self._items)
         menu = QMenu(self)
-        restore = menu.addAction(
-            tr("Restore selected revision"), self._emit_restore
-        )
+        restore = menu.addAction(tr("Restore selected revision"), self._emit_restore)
         restore.setEnabled(has_item)
         reveal = menu.addAction(
             tr("Reveal secrets")

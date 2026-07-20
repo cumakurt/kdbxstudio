@@ -98,7 +98,7 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 - Dockable **Groups** tree with **colorful category icons** auto-assigned from group names (Internet, Windows, Linux, Cloud, SSH, Docker, …)
 - **Security Dashboard** (Tools → Security Dashboard…) with Security Score, KPI cards, charts, recommendations, findings, Fix next, and open-entry actions
 - Fast entry list (`QTableView` model) + detail split view (resizable)
-- Entry list icons: **original site favicons** for known URLs (cached + auto-prefetch), otherwise colorful category badges
+- Entry list icons: **optional site favicons** for known URLs (locally cached), otherwise colorful category badges
 - Entry tabs: **Entry**, **TOTP**, **History** (with field diff), **Attachments**, **Certificates / SSH**
 - **Expiry countdown** — visual indicator showing days until entry expires
 - Welcome dashboard when no vault is open (Open / Create / Command Palette)
@@ -118,7 +118,7 @@ Dev captures go to `artifacts/visual/` (gitignored). README copies are written t
 - **Multi-select delete** — select one or many entries (`Ctrl`/`Shift`+click, `Ctrl+A`); `Delete` → Recycle Bin, `Shift+Delete` → permanent
 - **Contextual icons**: URL / title / PEM / template type → colorful login, email, API, SSH, bank, Wi‑Fi, Linux, Windows, …
 - Field-leading icons; action icons for Show / Copy / Generate / Save
-- **Site favicons** for entry URLs (Google s2, local cache under `~/.cache/kdbxstudio/favicons/`)
+- Optional **site favicons** for entry URLs (disabled by default for privacy; enabling sends domains to Google s2; local cache under `~/.cache/kdbxstudio/favicons/`)
 - **Markdown / JSON** notes preview (valid HTML with `<ul>` lists)
 - **Secret templates**: Login, API Key, SSH, Certificate, Secure Note, Bank Card
 - **Password generator** with entropy estimate, secure clipboard copy, and presets

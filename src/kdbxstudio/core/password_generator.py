@@ -29,48 +29,72 @@ PRESETS: list[PasswordPreset] = [
         name="Strong",
         description="20 chars, mixed case + digits + symbols",
         options=GeneratorOptions(
-            length=20, uppercase=True, lowercase=True,
-            digits=True, symbols=True, exclude_ambiguous=True,
+            length=20,
+            uppercase=True,
+            lowercase=True,
+            digits=True,
+            symbols=True,
+            exclude_ambiguous=True,
         ),
     ),
     PasswordPreset(
         name="PIN",
         description="6-digit numeric PIN",
         options=GeneratorOptions(
-            length=6, uppercase=False, lowercase=False,
-            digits=True, symbols=False, exclude_ambiguous=False,
+            length=6,
+            uppercase=False,
+            lowercase=False,
+            digits=True,
+            symbols=False,
+            exclude_ambiguous=False,
         ),
     ),
     PasswordPreset(
         name="Memorable",
         description="16 chars, letters + digits (no symbols)",
         options=GeneratorOptions(
-            length=16, uppercase=True, lowercase=True,
-            digits=True, symbols=False, exclude_ambiguous=True,
+            length=16,
+            uppercase=True,
+            lowercase=True,
+            digits=True,
+            symbols=False,
+            exclude_ambiguous=True,
         ),
     ),
     PasswordPreset(
         name="Complex",
         description="24 chars, all character classes",
         options=GeneratorOptions(
-            length=24, uppercase=True, lowercase=True,
-            digits=True, symbols=True, exclude_ambiguous=False,
+            length=24,
+            uppercase=True,
+            lowercase=True,
+            digits=True,
+            symbols=True,
+            exclude_ambiguous=False,
         ),
     ),
     PasswordPreset(
         name="Long alphanumeric",
         description="32 chars, lowercase + digits only",
         options=GeneratorOptions(
-            length=32, uppercase=False, lowercase=True,
-            digits=True, symbols=False, exclude_ambiguous=True,
+            length=32,
+            uppercase=False,
+            lowercase=True,
+            digits=True,
+            symbols=False,
+            exclude_ambiguous=True,
         ),
     ),
     PasswordPreset(
         name="Short",
         description="8 chars, mixed (quick password)",
         options=GeneratorOptions(
-            length=8, uppercase=True, lowercase=True,
-            digits=True, symbols=False, exclude_ambiguous=True,
+            length=8,
+            uppercase=True,
+            lowercase=True,
+            digits=True,
+            symbols=False,
+            exclude_ambiguous=True,
         ),
     ),
 ]
@@ -139,9 +163,7 @@ def generate_password(options: GeneratorOptions | None = None) -> str:
     if opts.symbols:
         sym = "!@#$%^&*()-_=+[]{};:,.<>?/\\~"
         classes.append(
-            "".join(
-                c for c in sym if not opts.exclude_ambiguous or c not in _AMBIGUOUS
-            )
+            "".join(c for c in sym if not opts.exclude_ambiguous or c not in _AMBIGUOUS)
         )
     for class_chars in classes:
         if class_chars:

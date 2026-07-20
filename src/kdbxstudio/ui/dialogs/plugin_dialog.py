@@ -18,9 +18,7 @@ from kdbxstudio.ui.widgets.dialog_shell import DialogShell
 
 
 class PluginDialog(DialogShell):
-    def __init__(
-        self, manager: PluginManager, parent: QWidget | None = None
-    ) -> None:
+    def __init__(self, manager: PluginManager, parent: QWidget | None = None) -> None:
         super().__init__(
             parent,
             title=tr("Plugins"),

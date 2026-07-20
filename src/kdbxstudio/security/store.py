@@ -4,16 +4,43 @@ from __future__ import annotations
 
 import json
 import os
-import stat
-import tempfile
 from pathlib import Path
 
-from kdbxstudio.core.paths import ensure_private_dir
+from kdbxstudio.core.paths import atomic_write_private, ensure_private_dir
 from kdbxstudio.i18n import normalize_language
 from kdbxstudio.security.settings import SecuritySettings
 
-_SETTINGS_VERSION = 6
+_SETTINGS_VERSION = 7
 _MAX_RECENT = 12
+_MAX_TIMER_MS = 2_147_000_000
+
+
+def _parse_bool(raw: object, default: bool) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, int) and raw in (0, 1):
+        return bool(raw)
+    if isinstance(raw, str):
+        normalized = raw.strip().lower()
+        if normalized in {"true", "yes", "1", "on"}:
+            return True
+        if normalized in {"false", "no", "0", "off"}:
+            return False
+    return default
+
+
+def _parse_int(
+    raw: object,
+    default: int,
+    *,
+    minimum: int = 0,
+    maximum: int = _MAX_TIMER_MS,
+) -> int:
+    try:
+        value = int(raw)  # type: ignore[call-overload]
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return max(minimum, min(maximum, value))
 
 
 def _parse_sha_allowlist(raw: object) -> tuple[str, ...]:
@@ -44,20 +71,16 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     raw = _read_json(target)
     if not raw:
         return SecuritySettings()
-    try:
-        raw_clipboard = int(
-            raw.get("clipboard_timeout_ms", SecuritySettings.clipboard_timeout_ms)
-        )
-        # 0 disables auto-clear; otherwise enforce a sane minimum.
-        clipboard_ms = 0 if raw_clipboard <= 0 else max(1000, raw_clipboard)
-    except (TypeError, ValueError):
-        clipboard_ms = SecuritySettings.clipboard_timeout_ms
-    try:
-        autolock_ms = max(0, int(
-            raw.get("auto_lock_timeout_ms", SecuritySettings.auto_lock_timeout_ms)
-        ))
-    except (TypeError, ValueError):
-        autolock_ms = SecuritySettings.auto_lock_timeout_ms
+    raw_clipboard = _parse_int(
+        raw.get("clipboard_timeout_ms"),
+        SecuritySettings.clipboard_timeout_ms,
+    )
+    # 0 disables auto-clear; otherwise enforce a sane minimum.
+    clipboard_ms = 0 if raw_clipboard <= 0 else max(1000, raw_clipboard)
+    autolock_ms = _parse_int(
+        raw.get("auto_lock_timeout_ms"),
+        SecuritySettings.auto_lock_timeout_ms,
+    )
     theme = str(raw.get("theme", SecuritySettings.theme))
     from kdbxstudio.ui.theme.accent import VALID_ACCENT_IDS, parse_accent
     from kdbxstudio.ui.theme.tokens import VALID_THEME_IDS, parse_theme
@@ -85,9 +108,7 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     window_resolution = normalize_window_resolution(
         raw.get("window_resolution", SecuritySettings.window_resolution)
     )
-    language = normalize_language(
-        str(raw.get("language", SecuritySettings.language))
-    )
+    language = normalize_language(str(raw.get("language", SecuritySettings.language)))
     custom_theme_path = str(
         raw.get("custom_theme_path", SecuritySettings.custom_theme_path)
     )
@@ -100,21 +121,22 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
     return SecuritySettings(
         clipboard_timeout_ms=clipboard_ms,
         auto_lock_timeout_ms=autolock_ms,
-        auto_lock_enabled=bool(
-            raw.get("auto_lock_enabled", SecuritySettings.auto_lock_enabled)
+        auto_lock_enabled=_parse_bool(
+            raw.get("auto_lock_enabled"), SecuritySettings.auto_lock_enabled
         ),
-        clear_clipboard_on_lock=bool(
+        clear_clipboard_on_lock=_parse_bool(
             raw.get(
                 "clear_clipboard_on_lock",
                 SecuritySettings.clear_clipboard_on_lock,
-            )
+            ),
+            SecuritySettings.clear_clipboard_on_lock,
         ),
-        minimize_on_lock=bool(
-            raw.get("minimize_on_lock", SecuritySettings.minimize_on_lock)
+        minimize_on_lock=_parse_bool(
+            raw.get("minimize_on_lock"), SecuritySettings.minimize_on_lock
         ),
         theme=theme,
         accent=accent,
-        read_only=bool(raw.get("read_only", SecuritySettings.read_only)),
+        read_only=_parse_bool(raw.get("read_only"), SecuritySettings.read_only),
         window_geometry=str(raw.get("window_geometry", "")),
         window_state=str(raw.get("window_state", "")),
         ui_density=ui_density,
@@ -122,51 +144,58 @@ def load_settings(path: Path | None = None) -> SecuritySettings:
         font_size=font_size,
         menu_size=menu_size,
         window_resolution=window_resolution,
-        hibp_enabled=bool(raw.get("hibp_enabled", SecuritySettings.hibp_enabled)),
+        hibp_enabled=_parse_bool(
+            raw.get("hibp_enabled"), SecuritySettings.hibp_enabled
+        ),
+        favicon_downloads_enabled=_parse_bool(
+            raw.get("favicon_downloads_enabled"),
+            SecuritySettings.favicon_downloads_enabled,
+        ),
         autotype_sequence=str(
             raw.get("autotype_sequence", SecuritySettings.autotype_sequence)
         ),
-        autotype_match_window=bool(
+        autotype_match_window=_parse_bool(
             raw.get(
                 "autotype_match_window",
                 SecuritySettings.autotype_match_window,
-            )
-        ),
-        autotype_initial_delay_ms=max(
-            0,
-            int(
-                raw.get(
-                    "autotype_initial_delay_ms",
-                    SecuritySettings.autotype_initial_delay_ms,
-                )
             ),
+            SecuritySettings.autotype_match_window,
         ),
-        watch_database_files=bool(
+        autotype_initial_delay_ms=_parse_int(
+            raw.get("autotype_initial_delay_ms"),
+            SecuritySettings.autotype_initial_delay_ms,
+            maximum=60_000,
+        ),
+        watch_database_files=_parse_bool(
             raw.get(
                 "watch_database_files",
                 SecuritySettings.watch_database_files,
-            )
+            ),
+            SecuritySettings.watch_database_files,
         ),
-        browser_integration_enabled=bool(
+        browser_integration_enabled=_parse_bool(
             raw.get(
                 "browser_integration_enabled",
                 SecuritySettings.browser_integration_enabled,
-            )
+            ),
+            SecuritySettings.browser_integration_enabled,
         ),
         plugin_sha256_allowlist=_parse_sha_allowlist(
             raw.get("plugin_sha256_allowlist", [])
         ),
-        check_updates_on_start=bool(
+        check_updates_on_start=_parse_bool(
             raw.get(
                 "check_updates_on_start",
                 SecuritySettings.check_updates_on_start,
-            )
+            ),
+            SecuritySettings.check_updates_on_start,
         ),
-        start_minimized_to_tray=bool(
+        start_minimized_to_tray=_parse_bool(
             raw.get(
                 "start_minimized_to_tray",
                 SecuritySettings.start_minimized_to_tray,
-            )
+            ),
+            SecuritySettings.start_minimized_to_tray,
         ),
         language=language,
         custom_theme_path=custom_theme_path,
@@ -208,6 +237,7 @@ def save_settings(
         "menu_size": settings.menu_size,
         "window_resolution": settings.window_resolution,
         "hibp_enabled": settings.hibp_enabled,
+        "favicon_downloads_enabled": settings.favicon_downloads_enabled,
         "autotype_sequence": settings.autotype_sequence,
         "autotype_match_window": settings.autotype_match_window,
         "autotype_initial_delay_ms": max(0, settings.autotype_initial_delay_ms),
@@ -222,23 +252,7 @@ def save_settings(
         "recent_databases": recent_paths[:_MAX_RECENT],
     }
     data = json.dumps(payload, indent=2) + "\n"
-    fd, tmp_path = tempfile.mkstemp(
-        dir=target.parent, suffix=".tmp", prefix="settings."
-    )
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
-        os.chmod(tmp_path, stat.S_IRUSR | stat.S_IWUSR)
-        os.replace(tmp_path, target)
-    except BaseException:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-    return target
+    return atomic_write_private(target, data)
 
 
 def load_recent_databases(path: Path | None = None) -> list[Path]:

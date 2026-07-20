@@ -25,6 +25,7 @@ class SecuritySettings:
     menu_size: str = "medium"  # small | medium | large
     window_resolution: str = "auto"  # auto | 1024x640 | 1280x800 | …
     hibp_enabled: bool = False
+    favicon_downloads_enabled: bool = False
     autotype_sequence: str = "{USERNAME}{TAB}{PASSWORD}{ENTER}"
     autotype_match_window: bool = True
     autotype_initial_delay_ms: int = 500

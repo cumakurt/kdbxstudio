@@ -18,9 +18,7 @@ class DuplicateHighlightPlugin:
     def _on_audit(self, report: object, **_: object) -> int:
         findings = getattr(report, "findings", ())
         count = sum(
-            1
-            for f in findings
-            if getattr(f, "kind", "") == "duplicate_password"
+            1 for f in findings if getattr(f, "kind", "") == "duplicate_password"
         )
         # Caller may not have context; return count for emit consumers.
         return count
@@ -33,9 +31,7 @@ class DuplicateHighlightPlugin:
             context.set("duplicate_highlight.count", count)
             return count
 
-        context.register_hook(
-            "audit.completed", _wrapped, owner=self.meta.name
-        )
+        context.register_hook("audit.completed", _wrapped, owner=self.meta.name)
         context.set("duplicate_highlight.count", 0)
 
     def deactivate(self, context: PluginContext) -> None:

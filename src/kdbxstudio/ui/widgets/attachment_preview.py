@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt, Signal
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QPoint, Qt, Signal
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtPdf import QPdfDocument
 from PySide6.QtPdfWidgets import QPdfView
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from kdbxstudio.core.database import AttachmentView
+from kdbxstudio.core.paths import atomic_write_private
 from kdbxstudio.i18n import tr
 from kdbxstudio.ui.widgets.empty_state import EmptyStateWidget
 
@@ -110,9 +111,7 @@ class AttachmentPreviewWidget(QWidget):
         self._attachments = attachments
         self._list.clear()
         for item in attachments:
-            self._list.addItem(
-                QListWidgetItem(f"{item.filename} ({item.size} bytes)")
-            )
+            self._list.addItem(QListWidgetItem(f"{item.filename} ({item.size} bytes)"))
         if attachments:
             self._list.setCurrentRow(0)
         else:
@@ -156,7 +155,7 @@ class AttachmentPreviewWidget(QWidget):
         if 0 <= row < len(self._attachments):
             self.delete_requested.emit(self._attachments[row].id)
 
-    def _show_list_menu(self, pos) -> None:
+    def _show_list_menu(self, pos: QPoint) -> None:
         item = self._list.itemAt(pos)
         if item is not None:
             self._list.setCurrentItem(item)
@@ -176,13 +175,11 @@ class AttachmentPreviewWidget(QWidget):
             return
         item = self._attachments[row]
         safe_name = Path(item.filename).name or "attachment"
-        path, _ = QFileDialog.getSaveFileName(
-            self, tr("Save attachment"), safe_name
-        )
+        path, _ = QFileDialog.getSaveFileName(self, tr("Save attachment"), safe_name)
         if not path:
             return
         try:
-            Path(path).write_bytes(self._payload(item))
+            atomic_write_private(path, self._payload(item))
         except OSError as exc:
             QMessageBox.critical(self, tr("Save failed"), str(exc))
             return

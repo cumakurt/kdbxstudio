@@ -6,6 +6,8 @@ import json
 import re
 from html import escape
 
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QLabel,
     QTabWidget,
@@ -66,7 +68,8 @@ class NotesPreviewWidget(QWidget):
         super().__init__(parent)
         self._editor = QTextEdit()
         self._md_preview = QTextBrowser()
-        self._md_preview.setOpenExternalLinks(True)
+        self._md_preview.setOpenExternalLinks(False)
+        self._md_preview.anchorClicked.connect(self._open_safe_link)
         self._json_preview = QTextBrowser()
         self._json_status = QLabel("")
 
@@ -95,6 +98,15 @@ class NotesPreviewWidget(QWidget):
         layout.addWidget(tabs)
         self._tabs = tabs
         self._preview_tabs = preview_tabs
+
+    @staticmethod
+    def _open_safe_link(url: QUrl) -> None:
+        """Open only explicit web/mail links from untrusted vault notes."""
+        scheme = url.scheme().lower()
+        if scheme in {"http", "https"} and url.host():
+            QDesktopServices.openUrl(url)
+        elif scheme == "mailto":
+            QDesktopServices.openUrl(url)
 
     def setPlainText(self, text: str) -> None:  # noqa: N802
         self._editor.setPlainText(text)

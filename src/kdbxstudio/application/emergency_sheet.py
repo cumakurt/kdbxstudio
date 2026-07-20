@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import html
-import os
-import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
 from kdbxstudio.core.database import EntryView
+from kdbxstudio.core.paths import atomic_write_private
 
 
 def render_emergency_html(
@@ -77,12 +76,9 @@ def write_emergency_html(
 ) -> Path:
     """Write an emergency sheet and restrict permissions to the owner (0600)."""
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
+    return atomic_write_private(
+        target,
         render_emergency_html(
             entries, title=title, include_passwords=include_passwords
         ),
-        encoding="utf-8",
     )
-    os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
-    return target

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from enum import StrEnum
 from functools import lru_cache
 
@@ -524,7 +525,7 @@ def _paint_recycle(p: QPainter, c: QColor) -> None:
     p.drawPath(path)
 
 
-_PAINTERS: dict[GroupKind, object] = {
+_PAINTERS: dict[GroupKind, Callable[[QPainter, QColor], None]] = {
     GroupKind.HOME: _paint_home,
     GroupKind.FOLDER: _paint_folder,
     GroupKind.INTERNET: _paint_internet,

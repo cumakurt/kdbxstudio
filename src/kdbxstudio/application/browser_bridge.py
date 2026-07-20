@@ -62,9 +62,10 @@ def match_logins_for_url(entries: list[EntryView], url: str) -> list[EntryView]:
         entry_host = url_host(entry.url)
         if not entry_host:
             continue
-        if entry_host == host or host.endswith("." + entry_host) or entry_host.endswith(
-            "." + host
-        ):
+        # A credential scoped to ``accounts.example.com`` must not be offered
+        # to the broader ``example.com`` origin.  The current page may be an
+        # exact match or a subdomain of the stored entry, never the reverse.
+        if entry_host == host or host.endswith("." + entry_host):
             hits.append(entry)
     return hits
 
@@ -157,9 +158,7 @@ class BrowserBridgeServer:
                 try:
                     request = json.loads(line.decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError):
-                    conn.sendall(
-                        b'{"success":false,"error":"invalid json"}\n'
-                    )
+                    conn.sendall(b'{"success":false,"error":"invalid json"}\n')
                     continue
                 action = str(request.get("action") or "")
                 if action == "ping":

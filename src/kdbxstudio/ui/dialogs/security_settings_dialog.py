@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QWidget,
 )
@@ -58,7 +62,7 @@ class _AccentSwatch(QWidget):
         self.setProperty("selected", "true" if selected else "false")
         self._apply_style()
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.accent)
         super().mousePressEvent(event)
@@ -102,10 +106,23 @@ class SecuritySettingsDialog(DialogShell):
         self._minimize_on_lock = QCheckBox(tr("Minimize window on lock"))
         self._minimize_on_lock.setChecked(settings.minimize_on_lock)
 
-        self._hibp = QCheckBox(
-            tr("Check passwords against Have I Been Pwned (k-anonymity)")
+        self._hibp = QCheckBox(tr("Check passwords with HIBP"))
+        self._hibp.setToolTip(
+            tr("Uses the Have I Been Pwned k-anonymity password service")
         )
         self._hibp.setChecked(settings.hibp_enabled)
+
+        self._favicons = QCheckBox(tr("Download site icons automatically"))
+        self._favicons.setToolTip(
+            tr("Privacy: sends entry URL domains to Google for favicon lookup")
+        )
+        self._favicons.setChecked(settings.favicon_downloads_enabled)
+        favicon_hint = QLabel(tr("Privacy: enabled lookups send URL domains to Google"))
+        favicon_hint.setObjectName("dialogSubtitle")
+        favicon_hint.setWordWrap(True)
+        favicon_hint.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
 
         self._updates = QCheckBox(tr("Check for updates on startup"))
         self._updates.setChecked(settings.check_updates_on_start)
@@ -200,7 +217,9 @@ class SecuritySettingsDialog(DialogShell):
             accent_row.addWidget(swatch)
             self._swatches.append(swatch)
         accent_row.addStretch(1)
-        accent_hint = QLabel(tr("Tints buttons, selection, and focus across all themes"))
+        accent_hint = QLabel(
+            tr("Tints buttons, selection, and focus across all themes")
+        )
         accent_hint.setObjectName("dialogSubtitle")
 
         self._read_only = QCheckBox(tr("Open databases in read-only mode"))
@@ -238,6 +257,8 @@ class SecuritySettingsDialog(DialogShell):
         form.addRow("", self._clear_on_lock)
         form.addRow("", self._minimize_on_lock)
         form.addRow("", self._hibp)
+        form.addRow("", self._favicons)
+        form.addRow("", favicon_hint)
         form.addRow("", self._updates)
         form.addRow("", self._tray)
         form.addRow(tr("Theme"), self._theme)
@@ -273,7 +294,15 @@ class SecuritySettingsDialog(DialogShell):
             ),
         )
 
-        self.body.addLayout(form)
+        form_host = QWidget()
+        form_host.setLayout(form)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(form_host)
+        self.body.addWidget(scroll)
+        self.resize(560, 700)
         self.set_primary_text(tr("Save"))
 
     def _select_accent(self, accent: AccentId) -> None:
@@ -327,6 +356,7 @@ class SecuritySettingsDialog(DialogShell):
             menu_size=str(self._menu_size.currentData() or "medium"),
             window_resolution=str(self._window_resolution.currentData() or "auto"),
             hibp_enabled=self._hibp.isChecked(),
+            favicon_downloads_enabled=self._favicons.isChecked(),
             autotype_sequence=self._autotype.text().strip()
             or SecuritySettings.autotype_sequence,
             autotype_match_window=self._autotype_match.isChecked(),

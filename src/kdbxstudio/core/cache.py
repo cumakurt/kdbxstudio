@@ -38,9 +38,7 @@ class Cache(Generic[K, V]):
 
     def set(self, key: K, value: V, ttl: float | None = None) -> None:
         effective_ttl = self._default_ttl if ttl is None else ttl
-        expires_at = (
-            None if effective_ttl is None else time.monotonic() + effective_ttl
-        )
+        expires_at = None if effective_ttl is None else time.monotonic() + effective_ttl
         with self._lock:
             self._store[key] = _CacheEntry(value=value, expires_at=expires_at)
 

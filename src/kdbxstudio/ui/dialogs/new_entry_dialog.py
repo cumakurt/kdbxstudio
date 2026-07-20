@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QPropertyAnimation
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDateEdit,
@@ -57,7 +58,7 @@ class NewEntryDialog(DialogShell):
             width=520,
         )
         self._clipboard_guard = clipboard_guard
-        self._anim = None
+        self._anim: QPropertyAnimation | None = None
         self.resize(520, 560)
 
         self._title = QLineEdit()
@@ -133,16 +134,14 @@ class NewEntryDialog(DialogShell):
         self.button_box.accepted.connect(self._accept)
         self._title.setFocus()
 
-    def showEvent(self, event) -> None:  # noqa: N802
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         polish_calendar_popup(self._expiry_date)
         self._anim = fade_in(self)
 
     def entry_data(self) -> NewEntryData:
         tags = tuple(
-            part.strip()
-            for part in self._tags.text().split(",")
-            if part.strip()
+            part.strip() for part in self._tags.text().split(",") if part.strip()
         )
         return NewEntryData(
             title=self._title.text().strip(),
@@ -174,17 +173,11 @@ class NewEntryDialog(DialogShell):
             self._expiry_date.setReadOnly(False)
 
     def _toggle_password(self, checked: bool) -> None:
-        mode = (
-            QLineEdit.EchoMode.Normal
-            if checked
-            else QLineEdit.EchoMode.Password
-        )
+        mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         self._password.setEchoMode(mode)
 
     def _generate_password(self) -> None:
-        dialog = PasswordGeneratorDialog(
-            self, clipboard_guard=self._clipboard_guard
-        )
+        dialog = PasswordGeneratorDialog(self, clipboard_guard=self._clipboard_guard)
         if dialog.exec() == PasswordGeneratorDialog.DialogCode.Accepted:
             self._password.setText(dialog.password())
 

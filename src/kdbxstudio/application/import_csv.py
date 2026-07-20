@@ -102,9 +102,7 @@ def import_entries_csv(
                 skipped += 1
                 continue
             group_path = _field(normalized, "group")
-            group_uuid = (
-                database.ensure_group_path(group_path) if group_path else root
-            )
+            group_uuid = database.ensure_group_path(group_path) if group_path else root
             custom = _parse_custom(_field(normalized, "custom_properties"))
             tags = _parse_tags(_field(normalized, "tags"))
             expires_raw = _field(normalized, "expires").lower()

@@ -9,10 +9,11 @@ import urllib.request
 from collections import OrderedDict
 from pathlib import Path
 
-from kdbxstudio.core.paths import ensure_private_dir
+from kdbxstudio.core.paths import atomic_write_private, ensure_private_dir
 
 _MAX_CACHE_ENTRIES = 200
 _FLUSH_EVERY = 8
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 # Process-local prefix cache (avoids re-reading JSON on every lookup).
 _memory_cache: OrderedDict[str, dict[str, int]] | None = None
@@ -49,7 +50,7 @@ def _save_cache(cache: OrderedDict[str, dict[str, int]]) -> None:
     # Bound size (LRU: oldest keys first in OrderedDict).
     while len(cache) > _MAX_CACHE_ENTRIES:
         cache.popitem(last=False)
-    path.write_text(json.dumps(dict(cache)), encoding="utf-8")
+    atomic_write_private(path, json.dumps(dict(cache)))
 
 
 def _get_memory_cache() -> OrderedDict[str, dict[str, int]]:
@@ -94,9 +95,12 @@ def fetch_range(prefix5: str, *, timeout_s: float = 8.0) -> dict[str, int]:
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
+            raw = resp.read(_MAX_RESPONSE_BYTES + 1)
     except urllib.error.URLError as exc:
         raise HibpError(f"HIBP request failed: {exc}") from exc
+    if len(raw) > _MAX_RESPONSE_BYTES:
+        raise HibpError("HIBP response exceeded the 2 MiB safety limit")
+    body = raw.decode("utf-8", errors="replace")
     mapping: dict[str, int] = {}
     for line in body.splitlines():
         if ":" not in line:

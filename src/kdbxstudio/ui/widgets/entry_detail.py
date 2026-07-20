@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -215,6 +216,7 @@ class EntryDetailWidget(QWidget):
 
         form = QFormLayout()
         form.setSpacing(10)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.addRow(tr("Title"), title_row)
         form.addRow(tr("Username"), self._username)
         form.addRow(tr("Password"), pwd_row)
@@ -234,11 +236,21 @@ class EntryDetailWidget(QWidget):
         save_btn.setIconSize(QSize(14, 14))
         save_btn.clicked.connect(self._emit_save)
 
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setSpacing(12)
+        content_layout.addLayout(form)
+        content_layout.addWidget(save_btn)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(content)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
-        layout.addLayout(form)
-        layout.addWidget(save_btn)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(scroll)
+        self._scroll = scroll
         self.set_enabled(False)
         self._apply_kind_icons(EntryKind.GENERIC)
 
@@ -383,6 +395,8 @@ class EntryDetailWidget(QWidget):
     def _clear_tag_chips(self) -> None:
         while self._tag_chips.count():
             item = self._tag_chips.takeAt(0)
+            if item is None:
+                break
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
@@ -531,9 +545,7 @@ class EntryDetailWidget(QWidget):
         if not self._entry_uuid:
             return
         tags = tuple(
-            part.strip()
-            for part in self._tags.text().split(",")
-            if part.strip()
+            part.strip() for part in self._tags.text().split(",") if part.strip()
         )
         expiry_iso = ""
         if self._has_expiry.isChecked():

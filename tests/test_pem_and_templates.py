@@ -13,11 +13,7 @@ def test_list_templates() -> None:
 
 def test_inspect_pem_certificate() -> None:
     # Minimal fake PEM (not a real cert) — base64 of "hello"
-    pem = (
-        "-----BEGIN CERTIFICATE-----\n"
-        "aGVsbG8=\n"
-        "-----END CERTIFICATE-----\n"
-    )
+    pem = "-----BEGIN CERTIFICATE-----\naGVsbG8=\n-----END CERTIFICATE-----\n"
     blocks = inspect_pem_text(pem)
     assert len(blocks) == 1
     assert blocks[0].kind == "certificate"

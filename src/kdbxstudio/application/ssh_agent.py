@@ -13,6 +13,9 @@ class SshAgentError(Exception):
     """Raised when ssh-add cannot be run."""
 
 
+_COMMAND_TIMEOUT_S = 15
+
+
 def agent_available() -> bool:
     return bool(shutil.which("ssh-add") and os.environ.get("SSH_AUTH_SOCK"))
 
@@ -48,13 +51,17 @@ def add_private_key(pem_text: str, *, lifetime_seconds: int | None = None) -> st
         cmd.extend(["-t", str(lifetime_seconds)])
     # Prefer stdin to avoid leaving the key on disk.
     cmd.append("-")
-    proc = subprocess.run(
-        cmd,
-        input=pem,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            input=pem,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_COMMAND_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        raise SshAgentError("ssh-add timed out") from None
     if proc.returncode == 0:
         return (proc.stdout or proc.stderr or "Identity added.").strip()
 
@@ -69,7 +76,16 @@ def add_private_key(pem_text: str, *, lifetime_seconds: int | None = None) -> st
         if lifetime_seconds is not None and lifetime_seconds > 0:
             file_cmd.extend(["-t", str(lifetime_seconds)])
         file_cmd.append(str(path))
-        proc = subprocess.run(file_cmd, capture_output=True, text=True, check=False)
+        try:
+            proc = subprocess.run(
+                file_cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=_COMMAND_TIMEOUT_S,
+            )
+        except subprocess.TimeoutExpired:
+            raise SshAgentError("ssh-add timed out") from None
         if proc.returncode != 0:
             detail = proc.stderr.strip() or proc.stdout.strip() or "ssh-add failed"
             raise SshAgentError(detail)

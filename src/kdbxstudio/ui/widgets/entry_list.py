@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from PySide6.QtCore import (
     QAbstractTableModel,
     QMimeData,
     QModelIndex,
+    QPersistentModelIndex,
     QPoint,
     QSize,
     Qt,
@@ -34,6 +37,7 @@ from kdbxstudio.ui.theme.manager import current_tokens
 ENTRY_MIME = "application/x-kdbxstudio-entry"
 
 _TONE_ROLE = Qt.ItemDataRole.UserRole + 1
+_INVALID_INDEX = QModelIndex()
 
 
 def _row_height() -> int:
@@ -66,7 +70,12 @@ def _tone_brush(tone: str | None) -> QBrush | None:
 class _SeverityDelegate(QStyledItemDelegate):
     """Paint a left accent bar for severity-toned rows."""
 
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:  # noqa: N802
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:  # noqa: N802
         super().paint(painter, option, index)
         if index.column() != 0:
             return
@@ -83,7 +92,9 @@ class _SeverityDelegate(QStyledItemDelegate):
         else:
             color = QColor(tokens.brand_primary)
         painter.save()
-        painter.fillRect(option.rect.x(), option.rect.y(), 3, option.rect.height(), color)
+        painter.fillRect(
+            option.rect.x(), option.rect.y(), 3, option.rect.height(), color
+        )
         painter.restore()
 
 
@@ -111,17 +122,26 @@ class EntryTableModel(QAbstractTableModel):
                 [Qt.ItemDataRole.BackgroundRole, _TONE_ROLE],
             )
 
-    def rowCount(self, parent: QModelIndex | None = None) -> int:  # noqa: N802
-        if parent is not None and parent.isValid():
+    def rowCount(  # noqa: N802
+        self, parent: QModelIndex | QPersistentModelIndex = _INVALID_INDEX
+    ) -> int:
+        if parent.isValid():
             return 0
         return len(self._entries)
 
-    def columnCount(self, parent: QModelIndex | None = None) -> int:  # noqa: N802
-        if parent is not None and parent.isValid():
+    def columnCount(  # noqa: N802
+        self, parent: QModelIndex | QPersistentModelIndex = _INVALID_INDEX
+    ) -> int:
+        if parent.isValid():
             return 0
         return len(self.COLUMNS)
 
-    def headerData(self, section: int, orientation, role: int = Qt.ItemDataRole.DisplayRole):  # noqa: N802
+    def headerData(
+        self,
+        section: int,
+        orientation: Qt.Orientation,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object | None:  # noqa: N802
         if (
             orientation == Qt.Orientation.Horizontal
             and role == Qt.ItemDataRole.DisplayRole
@@ -130,7 +150,11 @@ class EntryTableModel(QAbstractTableModel):
             return tr(self.COLUMNS[section])
         return None
 
-    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):  # noqa: N802
+    def data(  # noqa: N802
+        self,
+        index: QModelIndex | QPersistentModelIndex,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ) -> object | None:
         if not index.isValid():
             return None
         entry = self._entries[index.row()]
@@ -155,22 +179,16 @@ class EntryTableModel(QAbstractTableModel):
                 tip += f" [{', '.join(entry.tags)}]"
             if entry.url and cached_favicon(entry.url) is not None:
                 tip += " · favicon"
-            tone = entry_list_tone(
-                entry, audit_tone=self._audit_tones.get(entry.uuid)
-            )
+            tone = entry_list_tone(entry, audit_tone=self._audit_tones.get(entry.uuid))
             if tone:
                 tip += f" · {tone}"
             return tip
         if role == Qt.ItemDataRole.UserRole and col == 0:
             return entry.uuid
         if role == _TONE_ROLE:
-            return entry_list_tone(
-                entry, audit_tone=self._audit_tones.get(entry.uuid)
-            )
+            return entry_list_tone(entry, audit_tone=self._audit_tones.get(entry.uuid))
         if role == Qt.ItemDataRole.BackgroundRole:
-            tone = entry_list_tone(
-                entry, audit_tone=self._audit_tones.get(entry.uuid)
-            )
+            tone = entry_list_tone(entry, audit_tone=self._audit_tones.get(entry.uuid))
             return _tone_brush(tone)
         return None
 
@@ -183,7 +201,9 @@ class EntryTableModel(QAbstractTableModel):
         bottom = self.index(rows - 1, 0)
         self.dataChanged.emit(top, bottom, [Qt.ItemDataRole.DecorationRole])
 
-    def flags(self, index: QModelIndex):  # noqa: N802
+    def flags(  # noqa: N802
+        self, index: QModelIndex | QPersistentModelIndex
+    ) -> Qt.ItemFlag:
         if not index.isValid():
             return Qt.ItemFlag.NoItemFlags
         return (
@@ -192,7 +212,9 @@ class EntryTableModel(QAbstractTableModel):
             | Qt.ItemFlag.ItemIsDragEnabled
         )
 
-    def sort(self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder) -> None:  # noqa: N802
+    def sort(
+        self, column: int, order: Qt.SortOrder = Qt.SortOrder.AscendingOrder
+    ) -> None:  # noqa: N802
         if column < 0 or column >= len(self.COLUMNS):
             return
         self._sort_column = column
@@ -225,7 +247,7 @@ class EntryTableModel(QAbstractTableModel):
     def mimeTypes(self) -> list[str]:  # noqa: N802
         return [ENTRY_MIME]
 
-    def mimeData(self, indexes: list[QModelIndex]) -> QMimeData:  # noqa: N802
+    def mimeData(self, indexes: Sequence[QModelIndex]) -> QMimeData:  # noqa: N802
         data = QMimeData()
         for index in indexes:
             if index.column() != 0:
@@ -263,7 +285,9 @@ class EntryListWidget(QTableView):
         header.setStretchLastSection(True)
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionsClickable(True)
-        header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        header.setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
         header.setHighlightSections(False)
         header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         header.customContextMenuRequested.connect(self._header_context_menu)
@@ -313,6 +337,14 @@ class EntryListWidget(QTableView):
     def refresh_icons(self) -> None:
         self._model.refresh_icons()
 
+    def retranslate_headers(self) -> None:
+        """Notify the view that translated model header labels changed."""
+        self._model.headerDataChanged.emit(
+            Qt.Orientation.Horizontal,
+            0,
+            len(self.COLUMNS) - 1,
+        )
+
     def selected_entry_uuid(self) -> str | None:
         uuids = self.selected_entry_uuids()
         return uuids[0] if uuids else None
@@ -351,7 +383,7 @@ class EntryListWidget(QTableView):
             menu.addAction(action)
         menu.exec(header.mapToGlobal(pos))
 
-    def _on_selection(self, *_args) -> None:
+    def _on_selection(self, *_args: object) -> None:
         uuid = self.selected_entry_uuid()
         if uuid:
             self.entry_selected.emit(uuid)

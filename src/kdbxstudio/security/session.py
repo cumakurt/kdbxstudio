@@ -18,10 +18,13 @@ class ClipboardGuard(QObject):
         clipboard_clear: Callable[[], None],
         timeout_ms: int = 15_000,
         parent: QObject | None = None,
+        clipboard_getter: Callable[[], str] | None = None,
     ) -> None:
         super().__init__(parent)
         self._set = clipboard_setter
         self._clear = clipboard_clear
+        self._get = clipboard_getter
+        self._copied_text: str | None = None
         self._timeout_ms = timeout_ms
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -29,6 +32,7 @@ class ClipboardGuard(QObject):
 
     def copy(self, text: str, timeout_ms: int | None = None) -> None:
         self._set(text)
+        self._copied_text = text
         self._timer.stop()
         effective = timeout_ms if timeout_ms is not None else self._timeout_ms
         if effective > 0:
@@ -40,10 +44,15 @@ class ClipboardGuard(QObject):
     def cancel(self) -> None:
         """Stop the clear timer and wipe the clipboard immediately."""
         self._timer.stop()
+        self._copied_text = None
         self._clear()
         self.cleared.emit()
 
     def _on_timeout(self) -> None:
+        if self._get is not None and self._get() != self._copied_text:
+            self._copied_text = None
+            return
+        self._copied_text = None
         self._clear()
         self.cleared.emit()
 

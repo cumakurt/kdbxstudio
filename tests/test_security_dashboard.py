@@ -88,11 +88,7 @@ def test_certificate_not_after_heuristic() -> None:
 
     der = b"\x30\x82" + b"\x00" * 20 + b"20200101000000Z" + b"20301231235959Z"
     body = base64.b64encode(der).decode("ascii")
-    pem = (
-        "-----BEGIN CERTIFICATE-----\n"
-        + body
-        + "\n-----END CERTIFICATE-----\n"
-    )
+    pem = "-----BEGIN CERTIFICATE-----\n" + body + "\n-----END CERTIFICATE-----\n"
     blocks = inspect_pem_text(pem)
     assert blocks[0].kind == "certificate"
     assert "2030" in blocks[0].not_after or blocks[0].not_after == ""

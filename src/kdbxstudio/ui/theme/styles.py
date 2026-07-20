@@ -57,7 +57,8 @@ def build_stylesheet(
     return f"""
 /* ── Base ─────────────────────────────────────────────────────────────── */
 * {{
-  font-family: "Inter", "SF Pro Text", "Noto Sans", "DejaVu Sans", "Cantarell", system-ui, sans-serif;
+  font-family: "Inter", "SF Pro Text", "Noto Sans", "DejaVu Sans",
+    "Cantarell", system-ui, sans-serif;
   font-size: {body}px;
   outline: none;
 }}
@@ -151,7 +152,8 @@ QMenu {{
 }}
 
 QMenu::item {{
-  padding: {px(menu.item_pad_y)} {px(SPACING.md)} {px(menu.item_pad_y)} {px(menu.item_pad_x + 4)};
+  padding: {px(menu.item_pad_y)} {px(SPACING.md)} {px(menu.item_pad_y)}
+    {px(menu.item_pad_x + 4)};
   border-radius: {px(r_sm)};
   min-height: {px(menu.item_min_height)};
   margin: {px(1)} {px(SPACING.xxs)};

@@ -7,10 +7,11 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QEventLoop, QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 from kdbxstudio.browser.protocol import BrowserProtocol, ProtocolContext
+from kdbxstudio.core.paths import default_data_dir, ensure_private_dir
 
 NATIVEMSG_MAX_LENGTH = 1024 * 1024
 
@@ -21,7 +22,7 @@ def keepassxc_browser_socket_path() -> str:
     if not runtime:
         runtime = str(Path.home() / ".cache")
     sub = Path(runtime) / "app" / "org.keepassxc.KeePassXC"
-    sub.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(sub)
     socket_path = sub / "org.keepassxc.KeePassXC.BrowserServer"
     # Legacy symlink for older proxies
     legacy = Path(runtime) / "org.keepassxc.KeePassXC.BrowserServer"
@@ -35,10 +36,7 @@ def keepassxc_browser_socket_path() -> str:
 
 
 def kdbxstudio_browser_socket_path() -> str:
-    from kdbxstudio.core.paths import default_data_dir
-
-    root = default_data_dir()
-    root.mkdir(parents=True, exist_ok=True)
+    root = ensure_private_dir(default_data_dir())
     return str(root / "browser.sock")
 
 
@@ -48,13 +46,18 @@ class BrowserLocalServer(QObject):
     associate_requested = Signal(str)  # database label
     status_message = Signal(str)
 
-    def __init__(self, context_factory: Callable[[], ProtocolContext], parent=None) -> None:
+    def __init__(
+        self,
+        context_factory: Callable[[], ProtocolContext],
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self._context_factory = context_factory
         self._protocol: BrowserProtocol | None = None
         self._servers: list[QLocalServer] = []
         self._associate_result: str | None = None
-        self._associate_loop = None
+        self._associate_loop: QEventLoop | None = None
+        self._buffers: dict[QLocalSocket, bytearray] = {}
 
     @property
     def running(self) -> bool:
@@ -83,6 +86,7 @@ class BrowserLocalServer(QObject):
             if path:
                 QLocalServer.removeServer(path)
         self._servers.clear()
+        self._buffers.clear()
         self._protocol = None
 
     def refresh_context(self) -> None:
@@ -96,8 +100,6 @@ class BrowserLocalServer(QObject):
 
     def prompt_associate_blocking(self, db_label: str) -> str | None:
         """Ask the UI for an association name (must be called on GUI thread)."""
-        from PySide6.QtCore import QEventLoop
-
         self._associate_result = None
         self.associate_requested.emit(db_label)
         loop = QEventLoop()
@@ -112,20 +114,30 @@ class BrowserLocalServer(QObject):
                 socket = server.nextPendingConnection()
                 if socket is None:
                     continue
+                self._buffers[socket] = bytearray()
                 socket.setReadBufferSize(NATIVEMSG_MAX_LENGTH)
                 socket.readyRead.connect(lambda s=socket: self._on_ready(s))
+                socket.disconnected.connect(lambda s=socket: self._buffers.pop(s, None))
                 socket.disconnected.connect(socket.deleteLater)
 
     def _on_ready(self, socket: QLocalSocket) -> None:
-        raw = bytes(socket.readAll())
+        raw = bytes(socket.readAll().data())
         if not raw:
             return
-        try:
-            request = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            socket.write(b'{"action":"","errorCode":"13","error":"Empty message received"}')
+        buffer = self._buffers.setdefault(socket, bytearray())
+        buffer.extend(raw)
+        if len(buffer) > NATIVEMSG_MAX_LENGTH:
+            socket.write(b'{"action":"","errorCode":"13","error":"Message too large"}')
             socket.flush()
+            socket.disconnectFromServer()
             return
+        try:
+            request = json.loads(bytes(buffer).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            # Local sockets may split one JSON object across several readyRead
+            # signals.  Keep buffering until it is complete or reaches the cap.
+            return
+        buffer.clear()
         if self._protocol is None:
             self._protocol = BrowserProtocol(self._context_factory())
         # Ensure context is fresh (unlocked DB may have changed).

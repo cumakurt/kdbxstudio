@@ -82,11 +82,7 @@ class GroupTreeWidget(QTreeWidget):
                     self.addTopLevelItem(item)
 
             self.expandAll()
-            target = (
-                select_uuid
-                if select_uuid and select_uuid in items
-                else root_uuid
-            )
+            target = select_uuid if select_uuid and select_uuid in items else root_uuid
             if target in items:
                 self.setCurrentItem(items[target])
         finally:

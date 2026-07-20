@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import stat
+import tempfile
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +16,7 @@ from pykeepass.exceptions import CredentialsError
 from pykeepass.group import Group
 
 from kdbxstudio.core.crypto import SecureString
+from kdbxstudio.core.paths import fsync_parent_directory
 
 
 class DatabaseError(Exception):
@@ -143,11 +148,27 @@ class KdbxDatabase:
         self.close()
         path = Path(path)
         keyfile_path = Path(keyfile) if keyfile else None
-        create_database(
-            str(path),
-            password=password,
-            keyfile=str(keyfile_path) if keyfile_path else None,
-        )
+        try:
+            staging_dir = Path(
+                tempfile.mkdtemp(prefix=".kdbxstudio-create-", dir=path.parent)
+            )
+        except OSError as exc:
+            raise DatabaseError(f"Failed to create database: {exc}") from exc
+        staged = staging_dir / path.name
+        try:
+            create_database(
+                str(staged),
+                password=password,
+                keyfile=str(keyfile_path) if keyfile_path else None,
+            )
+            os.chmod(staged, stat.S_IRUSR | stat.S_IWUSR)
+            os.replace(staged, path)
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            fsync_parent_directory(path)
+        except Exception as exc:
+            raise DatabaseError(f"Failed to create database: {exc}") from exc
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
         self.open(path, password=password, keyfile=keyfile_path)
 
     def open(
@@ -177,19 +198,46 @@ class KdbxDatabase:
         self._invalidate_indexes()
 
     def save(self, path: Path | str | None = None) -> None:
-        """Save the database to disk."""
+        """Atomically save the database to an owner-only file."""
         kp = self._require_kp()
-        if path is not None:
-            self._path = Path(path)
-            kp.filename = str(self._path)
-        if self._path is None:
+        target = Path(path) if path is not None else self._path
+        if target is None:
             raise DatabaseError("No path set for save")
         if self._password is not None:
             kp.password = self._password.get()
+        fd = -1
+        tmp_path: Path | None = None
         try:
-            kp.save()
+            fd, raw_tmp = tempfile.mkstemp(
+                dir=target.parent,
+                prefix=f".{target.name}.",
+                suffix=".tmp",
+            )
+            tmp_path = Path(raw_tmp)
+            os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
+            with os.fdopen(fd, "w+b") as handle:
+                fd = -1
+                kp.save(handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_path, target)
+            os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+            fsync_parent_directory(target)
         except Exception as exc:
             raise DatabaseError(f"Failed to save database: {exc}") from exc
+        finally:
+            if fd >= 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+        self._path = target
+        kp.filename = str(target)
         self._dirty = False
 
     def close(self) -> None:
@@ -571,9 +619,7 @@ class KdbxDatabase:
 
     def database_info(self) -> DatabaseInfo:
         kp = self._require_kp()
-        recycle_count = sum(
-            1 for entry in kp.entries if self._is_in_recycle_bin(entry)
-        )
+        recycle_count = sum(1 for entry in kp.entries if self._is_in_recycle_bin(entry))
         version = "unknown"
         try:
             version = f"{kp.version[0]}.{kp.version[1]}"
@@ -792,9 +838,7 @@ class KdbxDatabase:
         include_secrets: bool = True,
     ) -> EntryView:
         group = entry.group
-        props = {
-            str(k): str(v) for k, v in dict(entry.custom_properties or {}).items()
-        }
+        props = {str(k): str(v) for k, v in dict(entry.custom_properties or {}).items()}
         tags_raw = getattr(entry, "tags", None) or []
         tags = tuple(str(t).strip() for t in tags_raw if str(t).strip())
         expiry = ""
@@ -829,9 +873,7 @@ class KdbxDatabase:
                 self._group_path(group, path_cache) if group is not None else ""
             ),
             custom_properties=props,
-            in_recycle_bin=self._is_in_recycle_bin(
-                entry, recycle_uuid=recycle_uuid
-            ),
+            in_recycle_bin=self._is_in_recycle_bin(entry, recycle_uuid=recycle_uuid),
             otp=otp,
             expires=expires,
             expiry_time=expiry,

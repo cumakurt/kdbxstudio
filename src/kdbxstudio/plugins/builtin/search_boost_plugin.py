@@ -14,9 +14,7 @@ class SearchBoostPlugin:
     )
 
     def activate(self, context: PluginContext) -> None:
-        context.register_hook(
-            "search.rank", self._boost, owner=self.meta.name
-        )
+        context.register_hook("search.rank", self._boost, owner=self.meta.name)
         context.set("search_boost.enabled", True)
 
     def deactivate(self, context: PluginContext) -> None:

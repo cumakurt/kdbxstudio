@@ -206,8 +206,7 @@ class SearchEngine:
         entries = self._apply_filters(entries, filt)
         if not filt.query.strip():
             return [
-                SearchHit(entry=e, score=0, matched_fields=())
-                for e in entries[:limit]
+                SearchHit(entry=e, score=0, matched_fields=()) for e in entries[:limit]
             ]
 
         index = self._ensure_index(sid)
@@ -303,11 +302,7 @@ class SearchEngine:
 
         tag_q = filt.tag_contains.strip().lower()
         if tag_q:
-            result = [
-                e
-                for e in result
-                if any(tag_q in t.lower() for t in e.tags)
-            ]
+            result = [e for e in result if any(tag_q in t.lower() for t in e.tags)]
 
         if filt.has_url is True:
             result = [e for e in result if bool((e.url or "").strip())]
@@ -331,11 +326,7 @@ class SearchEngine:
             result = [e for e in result if not (e.password or "")]
 
         if filt.weak_only:
-            result = [
-                e
-                for e in result
-                if e.password and len(e.password) < 8
-            ]
+            result = [e for e in result if e.password and len(e.password) < 8]
 
         if filt.expired_only:
             from kdbxstudio.application.expiry import is_expired
@@ -352,9 +343,7 @@ class SearchEngine:
 
         if filt.min_password_length is not None:
             result = [
-                e
-                for e in result
-                if len(e.password or "") >= filt.min_password_length
+                e for e in result if len(e.password or "") >= filt.min_password_length
             ]
 
         if filt.duplicates_only:
@@ -362,9 +351,7 @@ class SearchEngine:
             for entry in result:
                 if entry.password:
                     counts[entry.password] += 1
-            result = [
-                e for e in result if e.password and counts[e.password] > 1
-            ]
+            result = [e for e in result if e.password and counts[e.password] > 1]
 
         return result
 

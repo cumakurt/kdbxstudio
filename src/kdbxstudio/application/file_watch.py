@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal
@@ -19,7 +20,7 @@ class DatabaseFileWatcher(QObject):
         self._pending: dict[str, QTimer] = {}
         self._ignored: set[str] = set()
 
-    def set_paths(self, paths: list[Path | str]) -> None:
+    def set_paths(self, paths: Iterable[Path | str]) -> None:
         current = set(self._watcher.files())
         wanted = {str(Path(p).resolve()) for p in paths if p}
         for path in current - wanted:

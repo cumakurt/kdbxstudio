@@ -75,7 +75,7 @@ class PluginMarketplaceDialog(DialogShell):
         self.button_box.accepted.connect(self.accept)
 
         for plugin in self._catalog:
-            item = QListWidgetItem(f"{plugin.name} — {plugin.summary}")
+            item = QListWidgetItem(f"{plugin.name} — {plugin.description}")
             item.setData(Qt.ItemDataRole.UserRole, plugin.id)
             self._list.addItem(item)
         if self._catalog:

@@ -8,9 +8,7 @@ from kdbxstudio.core.totp import current_totp
 
 
 def test_totp_from_uri() -> None:
-    uri = (
-        "otpauth://totp/Example:user?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=30"
-    )
+    uri = "otpauth://totp/Example:user?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=30"
     status = current_totp(uri)
     assert status.valid is True
     assert len(status.code) == 6

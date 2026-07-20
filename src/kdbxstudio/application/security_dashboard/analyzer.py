@@ -140,15 +140,19 @@ class SecurityDashboardAnalyzer:
         entries = self._dbm.all_entries(
             session_id, include_recycle_bin=include_recycle_bin
         )
-        return self._analyze(entries, report)
+        return self._analyze(entries, report, session_id=session_id)
 
     def _analyze(
-        self, entries: list[EntryView], report: AuditReport
+        self,
+        entries: list[EntryView],
+        report: AuditReport,
+        *,
+        session_id: str | None = None,
     ) -> DashboardSnapshot:
         now = datetime.now(UTC)
-        strength = Counter()
-        age = Counter()
-        length = Counter()
+        strength: Counter[str] = Counter()
+        age: Counter[str] = Counter()
+        length: Counter[str] = Counter()
         categories: Counter[str] = Counter()
         tags: Counter[str] = Counter()
         entropy_values: list[float] = []
@@ -286,9 +290,7 @@ class SecurityDashboardAnalyzer:
                 if block.kind == "certificate":
                     cert_total += 1
                     detail = block.not_after or ""
-                    cert_entries.append(
-                        EntryRef(entry.uuid, entry.title, detail)
-                    )
+                    cert_entries.append(EntryRef(entry.uuid, entry.title, detail))
                     na = _parse_iso(block.not_after)
                     if na is not None:
                         if na <= now:
@@ -309,7 +311,7 @@ class SecurityDashboardAnalyzer:
                     if block.encrypted:
                         ssh_encrypted += 1
 
-        for _uuid, filename, size in self._dbm.attachment_stats():
+        for _uuid, filename, size in self._dbm.attachment_stats(session_id):
             attachment_total += 1
             attachment_total_bytes += int(size or 0)
             att_types[_attachment_ext(filename)] += 1
@@ -341,7 +343,7 @@ class SecurityDashboardAnalyzer:
             if len(g) >= AuditEngine.REUSED_USERNAME_THRESHOLD
         )
 
-        risk = Counter()
+        risk: Counter[str] = Counter()
         for finding in report.findings:
             risk[_risk_level(finding)] += 1
 
@@ -390,8 +392,7 @@ class SecurityDashboardAnalyzer:
         )
 
         top_tags = tuple(
-            NamedCount(name=name, count=count)
-            for name, count in tags.most_common(12)
+            NamedCount(name=name, count=count) for name, count in tags.most_common(12)
         )
         att_type_counts = tuple(
             NamedCount(name=name, count=count)

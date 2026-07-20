@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
-    QHBoxLayout,
+    QGridLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPushButton,
     QToolButton,
@@ -87,16 +89,62 @@ class FilterBarWidget(QWidget):
         clear_btn.setProperty("cssClass", "ghost")
         clear_btn.clicked.connect(self.clear)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-        layout.addWidget(QLabel(tr("Filter")))
-        layout.addWidget(self._group, stretch=1)
-        layout.addWidget(self._tag)
-        for chip in self._chips:
-            layout.addWidget(chip)
-        layout.addWidget(apply_btn)
-        layout.addWidget(clear_btn)
+        self._label = QLabel(tr("Filter"))
+        self._apply_btn = apply_btn
+        self._clear_btn = clear_btn
+        self._layout = QGridLayout(self)
+        self._layout.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setHorizontalSpacing(6)
+        self._layout.setVerticalSpacing(4)
+        self._layout_mode = ""
+        self._relayout(1200)
+
+    def _relayout(self, width: int) -> None:
+        mode = "wide" if width >= 1050 else "medium" if width >= 700 else "compact"
+        if mode == self._layout_mode:
+            return
+        self._layout_mode = mode
+        while self._layout.count():
+            self._layout.takeAt(0)
+        for column in range(16):
+            self._layout.setColumnStretch(column, 0)
+
+        if mode == "wide":
+            widgets = (
+                self._label,
+                self._group,
+                self._tag,
+                *self._chips,
+                self._apply_btn,
+                self._clear_btn,
+            )
+            for column, widget in enumerate(widgets):
+                self._layout.addWidget(widget, 0, column)
+            self._layout.setColumnStretch(1, 1)
+        elif mode == "medium":
+            self._layout.addWidget(self._label, 0, 0)
+            self._layout.addWidget(self._group, 0, 1, 1, 4)
+            self._layout.addWidget(self._tag, 0, 5, 1, 2)
+            self._layout.addWidget(self._apply_btn, 0, 7)
+            self._layout.addWidget(self._clear_btn, 0, 8)
+            for column, chip in enumerate(self._chips):
+                self._layout.addWidget(chip, 1, column + 1)
+            self._layout.setColumnStretch(1, 1)
+        else:
+            self._layout.addWidget(self._label, 0, 0)
+            self._layout.addWidget(self._group, 0, 1, 1, 4)
+            self._layout.addWidget(self._tag, 1, 0, 1, 3)
+            self._layout.addWidget(self._apply_btn, 1, 3)
+            self._layout.addWidget(self._clear_btn, 1, 4)
+            for index, chip in enumerate(self._chips):
+                self._layout.addWidget(chip, 2 + index // 4, index % 4)
+            self._layout.setColumnStretch(1, 1)
+        self.updateGeometry()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        self._relayout(event.size().width())
+        super().resizeEvent(event)
 
     def clear(self) -> None:
         self._group.blockSignals(True)

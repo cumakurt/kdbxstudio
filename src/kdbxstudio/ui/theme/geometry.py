@@ -155,17 +155,21 @@ def menu_metrics(menu_size: str) -> MenuMetrics:
 
 
 def clamp_font_size(value: object) -> int:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return 13
     try:
-        size = int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+        size = int(value)
+    except (TypeError, ValueError, OverflowError):
         return 13
     return max(8, min(18, size))
 
 
 def clamp_ui_scale_percent(value: object) -> int:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return 100
     try:
-        pct = int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
+        pct = int(value)
+    except (TypeError, ValueError, OverflowError):
         return 100
     if pct in VALID_UI_SCALE_PERCENTS:
         return pct

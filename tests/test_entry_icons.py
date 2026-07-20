@@ -29,9 +29,7 @@ def test_detect_api_from_custom_type() -> None:
 
 def test_detect_ssh_from_pem() -> None:
     notes = (
-        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
-        "abc\n"
-        "-----END OPENSSH PRIVATE KEY-----"
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
     )
     kind = detect_entry_kind(title="Server", notes=notes)
     assert kind is EntryKind.SSH

@@ -37,7 +37,9 @@ class EmptyStateWidget(QWidget):
         layout.addWidget(self._hint)
         self.set_content(title, hint, icon_name=icon_name)
 
-    def set_content(self, title: str, hint: str = "", *, icon_name: str | None = None) -> None:
+    def set_content(
+        self, title: str, hint: str = "", *, icon_name: str | None = None
+    ) -> None:
         if icon_name:
             self._icon.setPixmap(icon(icon_name, size=40, brand=True).pixmap(40, 40))
         self._title.setText(title)

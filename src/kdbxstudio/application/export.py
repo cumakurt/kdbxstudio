@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import csv
-import os
-import stat
+import io
 from pathlib import Path
 
 from kdbxstudio.core.database import EntryView
+from kdbxstudio.core.paths import atomic_write_private
 
 
 def export_entries_csv(path: Path | str, entries: list[EntryView]) -> Path:
     """Write entries to a CSV file (passwords included — handle carefully)."""
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8", newline="") as handle:
+    handle = io.StringIO(newline="")
+    try:
         writer = csv.DictWriter(
             handle,
             fieldnames=[
@@ -51,5 +51,6 @@ def export_entries_csv(path: Path | str, entries: list[EntryView]) -> Path:
                     "custom_properties": custom,
                 }
             )
-    os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
-    return target
+        return atomic_write_private(target, handle.getvalue())
+    finally:
+        handle.close()

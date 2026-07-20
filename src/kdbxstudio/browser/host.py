@@ -13,13 +13,22 @@ import struct
 import sys
 from pathlib import Path
 
+NATIVEMSG_MAX_LENGTH = 1024 * 1024
+
 
 def _socket_candidates() -> list[str]:
     runtime = os.environ.get("XDG_RUNTIME_DIR") or str(Path.home() / ".cache")
     xdg_data = os.environ.get("XDG_DATA_HOME")
-    data = Path(xdg_data) / "kdbxstudio" if xdg_data else Path.home() / ".local/share/kdbxstudio"
+    data = (
+        Path(xdg_data) / "kdbxstudio"
+        if xdg_data
+        else Path.home() / ".local/share/kdbxstudio"
+    )
     return [
-        str(Path(runtime) / "app/org.keepassxc.KeePassXC/org.keepassxc.KeePassXC.BrowserServer"),
+        str(
+            Path(runtime)
+            / "app/org.keepassxc.KeePassXC/org.keepassxc.KeePassXC.BrowserServer"
+        ),
         str(Path(runtime) / "org.keepassxc.KeePassXC.BrowserServer"),
         str(data / "browser.sock"),
     ]
@@ -51,17 +60,31 @@ def _is_socket(path: str) -> bool:
         return False
 
 
+def _read_exact(length: int) -> bytes | None:
+    chunks = bytearray()
+    while len(chunks) < length:
+        chunk = sys.stdin.buffer.read(length - len(chunks))
+        if not chunk:
+            return None
+        chunks.extend(chunk)
+    return bytes(chunks)
+
+
 def _read_native() -> dict | None:
-    raw_len = sys.stdin.buffer.read(4)
-    if not raw_len or len(raw_len) < 4:
+    raw_len = _read_exact(4)
+    if raw_len is None:
         return None
     length = struct.unpack("<I", raw_len)[0]
-    if length <= 0 or length > 1024 * 1024:
+    if length <= 0 or length > NATIVEMSG_MAX_LENGTH:
         return None
-    data = sys.stdin.buffer.read(length)
-    if not data:
+    data = _read_exact(length)
+    if data is None:
         return None
-    return json.loads(data.decode("utf-8"))
+    try:
+        message = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return message if isinstance(message, dict) else None
 
 
 def _write_native(payload: dict) -> None:
@@ -80,6 +103,12 @@ def _roundtrip(request: dict) -> dict:
             if not part:
                 break
             chunks += part
+            if len(chunks) > NATIVEMSG_MAX_LENGTH:
+                return {
+                    "action": str(request.get("action") or ""),
+                    "errorCode": "5",
+                    "error": "Browser bridge response too large",
+                }
             # KeePassXC writes one JSON object per response; parse when valid.
             try:
                 return json.loads(chunks.decode("utf-8"))

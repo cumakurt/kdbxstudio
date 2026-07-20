@@ -2,21 +2,40 @@
 
 from __future__ import annotations
 
+import json
+import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from kdbxstudio.application.autotype import AutoTypeError, auto_type, expand_sequence
 from kdbxstudio.application.database_manager import DatabaseManager
 from kdbxstudio.application.expiry import is_expired, local_date_to_utc_end_of_day
+from kdbxstudio.application.export import export_entries_csv
 from kdbxstudio.application.import_csv import import_entries_csv
 from kdbxstudio.application.merge import merge_databases
 from kdbxstudio.application.plugin_manager import PluginError, PluginManager
 from kdbxstudio.application.search_engine import EntryFilter, SearchEngine
-from kdbxstudio.core.database import EntryView, KdbxDatabase
+from kdbxstudio.browser import install_host
+from kdbxstudio.core.database import DatabaseError, EntryView, KdbxDatabase
 from kdbxstudio.core.paths import resolve_regular_file
 from kdbxstudio.plugins.sdk import PluginContext, PluginMeta
 from kdbxstudio.security.settings import SecuritySettings
 from kdbxstudio.security.store import load_settings, save_settings
+
+
+def test_native_host_install_writes_private_files(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setattr(install_host.shutil, "which", lambda _name: None)
+
+    manifests = install_host.install()
+    launcher = tmp_path / "data" / "kdbxstudio" / "keepassxc-proxy.sh"
+    assert stat.S_IMODE(launcher.stat().st_mode) == 0o700
+    assert manifests
+    assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in manifests)
 
 
 def test_bitwarden_style_csv_aliases(tmp_path: Path) -> None:
@@ -110,6 +129,7 @@ def test_settings_round_trip_all_fields(tmp_path: Path) -> None:
         window_state="def",
         ui_density="comfortable",
         hibp_enabled=True,
+        favicon_downloads_enabled=True,
         autotype_sequence="{PASSWORD}{ENTER}",
         check_updates_on_start=False,
         start_minimized_to_tray=True,
@@ -285,6 +305,8 @@ def test_add_attachment_rejects_path_traversal_name(tmp_path: Path) -> None:
 
 def test_autotype_expand_still_works() -> None:
     assert expand_sequence("{TAB}", username="", password="") == [("key", "Tab")]
+    huge = expand_sequence("{DELAY=999999999999999}", username="", password="")
+    assert huge == [("delay", "60000")]
 
 
 def test_autotype_missing_backend_raises(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -296,3 +318,118 @@ def test_autotype_missing_backend_raises(monkeypatch) -> None:  # type: ignore[n
         raise AssertionError("expected AutoTypeError")
     except AutoTypeError:
         pass
+
+
+@pytest.mark.parametrize(
+    ("function_name", "expected_command"),
+    [
+        (
+            "_type_xdotool",
+            ["xdotool", "type", "--clearmodifiers", "--delay", "12", "--file", "-"],
+        ),
+        ("_type_ydotool", ["ydotool", "stdin"]),
+        ("_type_wtype", ["wtype", "-"]),
+    ],
+)
+def test_autotype_secrets_are_passed_via_stdin(
+    function_name: str, expected_command: list[str]
+) -> None:
+    import kdbxstudio.application.autotype as mod
+
+    secret = "not-visible-in-process-list"
+    with patch.object(mod.subprocess, "run") as run:
+        getattr(mod, function_name)(secret)
+    assert run.call_args.args[0] == expected_command
+    assert secret not in run.call_args.args[0]
+    assert run.call_args.kwargs["input"] == secret
+
+
+def test_database_create_and_save_are_owner_only(tmp_path: Path) -> None:
+    path = tmp_path / "private.kdbx"
+    db = KdbxDatabase()
+    db.create(path, password="secret")
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    db.add_entry(db.root_group_uuid(), title="A", password="p")
+    db.save()
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_failed_database_save_keeps_original_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "atomic.kdbx"
+    db = KdbxDatabase()
+    db.create(path, password="secret")
+    original = path.read_bytes()
+    db.add_entry(db.root_group_uuid(), title="Unsaved", password="p")
+
+    def fail_after_partial_write(handle) -> None:  # type: ignore[no-untyped-def]
+        handle.write(b"partial")
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(db._require_kp(), "save", fail_after_partial_write)  # noqa: SLF001
+    with pytest.raises(DatabaseError):
+        db.save()
+    assert path.read_bytes() == original
+    assert db.is_dirty is True
+
+
+def test_plaintext_export_replaces_symlink_without_touching_target(
+    tmp_path: Path,
+) -> None:
+    victim = tmp_path / "victim.txt"
+    victim.write_text("keep", encoding="utf-8")
+    destination = tmp_path / "export.csv"
+    destination.symlink_to(victim)
+    entry = EntryView(
+        uuid="1",
+        title="Login",
+        username="user",
+        password="secret",
+        url="https://example.com",
+        notes="",
+        group_path="Root",
+    )
+    export_entries_csv(destination, [entry])
+    assert victim.read_text(encoding="utf-8") == "keep"
+    assert destination.is_symlink() is False
+    assert "secret" in destination.read_text(encoding="utf-8")
+    assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+
+
+def test_malformed_settings_use_safe_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps(
+            {
+                "auto_lock_enabled": "false",
+                "hibp_enabled": "not-a-bool",
+                "favicon_downloads_enabled": "not-a-bool",
+                "autotype_initial_delay_ms": "not-a-number",
+                "auto_lock_timeout_ms": 10**30,
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = load_settings(path)
+    assert loaded.auto_lock_enabled is False
+    assert loaded.hibp_enabled is SecuritySettings.hibp_enabled
+    assert (
+        loaded.favicon_downloads_enabled is SecuritySettings.favicon_downloads_enabled
+    )
+    assert (
+        loaded.autotype_initial_delay_ms == SecuritySettings.autotype_initial_delay_ms
+    )
+    assert loaded.auto_lock_timeout_ms <= 2_147_000_000
+
+
+def test_failed_reopen_preserves_existing_session(tmp_path: Path) -> None:
+    path = tmp_path / "reload.kdbx"
+    mgr = DatabaseManager()
+    session_id = mgr.create(path, password="secret")
+    entry = mgr.add_entry(mgr.root_group_uuid(), title="In memory", password="p")
+    path.write_bytes(b"corrupt external replacement")
+    with pytest.raises(DatabaseError):
+        mgr.open(path, password="secret")
+    assert mgr.active_id == session_id
+    assert mgr.get_entry(entry.uuid) is not None

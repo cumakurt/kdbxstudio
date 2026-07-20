@@ -50,8 +50,7 @@ TEMPLATES: tuple[EntryTemplate, ...] = (
         fields=(FieldSpec("username", "Comment / user"),),
         custom_defaults={"Type": "SSH Key"},
         notes_placeholder=(
-            "-----BEGIN OPENSSH PRIVATE KEY-----\n\n"
-            "-----END OPENSSH PRIVATE KEY-----\n"
+            "-----BEGIN OPENSSH PRIVATE KEY-----\n\n-----END OPENSSH PRIVATE KEY-----\n"
         ),
     ),
     EntryTemplate(

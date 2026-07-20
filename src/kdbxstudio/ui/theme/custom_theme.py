@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from kdbxstudio.ui.theme.tokens import ThemeMode, ThemeTokens
@@ -36,6 +37,8 @@ _optional_fields = {
     "shadow_md": "",
 }
 
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{5})?$")
+
 _custom_tokens: ThemeTokens | None = None
 
 
@@ -61,12 +64,15 @@ def load_custom_theme_json(path: Path | str) -> ThemeTokens:
         appearance = "dark"
     for key in _REQUIRED:
         value = str(data[key]).strip()
-        if not value.startswith("#") or len(value) not in (4, 7, 9):
+        if not _COLOR_RE.fullmatch(value):
             raise ValueError(f"Invalid color for {key}: {value}")
 
     opt_values = {}
     for key, default in _optional_fields.items():
         opt_values[key] = str(data.get(key, default) or default)
+        if key not in {"shadow_sm", "shadow_md"} and opt_values[key]:
+            if not _COLOR_RE.fullmatch(opt_values[key]):
+                raise ValueError(f"Invalid color for {key}: {opt_values[key]}")
 
     tokens = ThemeTokens(
         mode=ThemeMode.CUSTOM,

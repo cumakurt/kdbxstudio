@@ -10,7 +10,7 @@ from uuid import UUID
 
 from kdbxstudio.application.browser_bridge import match_logins_for_url
 from kdbxstudio.browser import associations, crypto
-from kdbxstudio.core.database import DatabaseError, EntryView, KdbxDatabase
+from kdbxstudio.core.database import EntryView, KdbxDatabase
 from kdbxstudio.core.password_generator import GeneratorOptions, generate_password
 from kdbxstudio.core.totp import current_totp
 
@@ -29,6 +29,7 @@ ERR_NO_URL = 14
 ERR_NO_LOGINS = 15
 ERR_NO_GROUPS = 16
 ERR_NO_UUID = 18
+MAX_CLIENT_SESSIONS = 64
 
 
 AssociatePrompt = Callable[[str], str | None]  # db_label -> association id or None
@@ -56,7 +57,14 @@ class ProtocolContext:
     add_entry: Callable[..., EntryView] | None = None
     update_entry: Callable[..., EntryView] | None = None
     get_entry: Callable[[str], EntryView | None] | None = None
+    is_read_only: Callable[[], bool] = lambda: False
     version: str = crypto.VERSION
+
+
+EncryptedHandler = Callable[
+    [dict[str, Any], ClientSession, KdbxDatabase, str],
+    dict[str, Any] | None,
+]
 
 
 @dataclass
@@ -117,7 +125,16 @@ class BrowserProtocol:
         client_id = str(request.get("clientID") or "")
         if not nonce or not client_pk or not client_id:
             return self._error("change-public-keys", ERR_CLIENT_PK)
+        try:
+            client_key_bytes = crypto.b64decode(client_pk)
+            incremented = crypto.increment_nonce(nonce)
+        except ValueError:
+            return self._error("change-public-keys", ERR_CLIENT_PK)
+        if len(client_key_bytes) != 32:
+            return self._error("change-public-keys", ERR_CLIENT_PK)
         host_pk, host_sk = crypto.generate_keypair()
+        if client_id not in self.sessions and len(self.sessions) >= MAX_CLIENT_SESSIONS:
+            self.sessions.pop(next(iter(self.sessions)))
         self.sessions[client_id] = ClientSession(
             client_public_key=client_pk,
             host_public_key=host_pk,
@@ -128,11 +145,16 @@ class BrowserProtocol:
             "action": "change-public-keys",
             "version": self.context.version,
             "publicKey": host_pk,
-            "nonce": crypto.increment_nonce(nonce),
+            "nonce": incremented,
             "success": crypto.TRUE_STR,
         }
 
-    def _encrypted_action(self, request: dict, session: ClientSession | None, handler) -> dict:
+    def _encrypted_action(
+        self,
+        request: dict,
+        session: ClientSession | None,
+        handler: EncryptedHandler,
+    ) -> dict:
         action = str(request.get("action") or "")
         if session is None or not session.host_secret_key:
             return self._error(action, ERR_CLIENT_PK)
@@ -149,6 +171,8 @@ class BrowserProtocol:
             )
             payload = json.loads(plain)
         except Exception:
+            return self._error(action, ERR_DECRYPT)
+        if not isinstance(payload, dict):
             return self._error(action, ERR_DECRYPT)
         db = self.context.get_database()
         if db is None:
@@ -171,6 +195,8 @@ class BrowserProtocol:
     def _associate(
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
+        if self.context.is_read_only():
+            raise _ProtocolError(ERR_DENIED)
         key = str(payload.get("key") or "")
         if not key or key != session.client_public_key:
             raise _ProtocolError(ERR_ASSOCIATION)
@@ -179,9 +205,12 @@ class BrowserProtocol:
         assoc_id = self.context.prompt_associate(label)
         if not assoc_id:
             raise _ProtocolError(ERR_DENIED)
-        associations.set_association_key(db, assoc_id.strip(), id_key)
+        assoc_id = assoc_id.strip()
+        if not assoc_id or len(assoc_id) > 128:
+            raise _ProtocolError(ERR_DENIED)
+        associations.set_association_key(db, assoc_id, id_key)
         session.associated = True
-        return {"hash": db_hash, "id": assoc_id.strip()}
+        return {"hash": db_hash, "id": assoc_id}
 
     def _test_associate(
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
@@ -234,6 +263,8 @@ class BrowserProtocol:
     ) -> dict:
         self._require_associated(session)
         url = str(payload.get("url") or "")
+        if not self._keys_ok(payload, db):
+            raise _ProtocolError(ERR_ASSOCIATION)
         hits = match_logins_for_url(self.context.get_entries(), url) if url else []
         return {"count": str(len(hits)), "hash": db_hash}
 
@@ -241,6 +272,8 @@ class BrowserProtocol:
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
         self._require_associated(session)
+        if self.context.is_read_only():
+            raise _ProtocolError(ERR_DENIED)
         if self.context.add_entry is None or self.context.update_entry is None:
             raise _ProtocolError(ERR_DENIED)
         url = str(payload.get("url") or "")
@@ -312,11 +345,11 @@ class BrowserProtocol:
         groups = self.context.list_groups()
         if not groups:
             raise _ProtocolError(ERR_NO_GROUPS)
-        by_parent: dict[str | None, list] = {}
+        by_parent: dict[str | None, list[Any]] = {}
         for g in groups:
             by_parent.setdefault(g.parent_uuid, []).append(g)
 
-        def build(node) -> dict:
+        def build(node: Any) -> dict[str, Any]:
             children = [build(c) for c in by_parent.get(node.uuid, [])]
             return {
                 "name": node.name or "Root",
@@ -340,6 +373,8 @@ class BrowserProtocol:
         self, payload: dict, session: ClientSession, db: KdbxDatabase, db_hash: str
     ) -> dict:
         self._require_associated(session)
+        if self.context.is_read_only():
+            raise _ProtocolError(ERR_DENIED)
         name = str(payload.get("groupName") or "").strip()
         if not name or self.context.ensure_group_path is None:
             raise _ProtocolError(ERR_DENIED)
@@ -354,9 +389,9 @@ class BrowserProtocol:
         raw_uuid = str(payload.get("uuid") or "")
         if not raw_uuid or self.context.get_entry is None:
             raise _ProtocolError(ERR_NO_UUID)
-        entry = self.context.get_entry(_normalize_uuid(raw_uuid)) or self.context.get_entry(
-            raw_uuid
-        )
+        entry = self.context.get_entry(
+            _normalize_uuid(raw_uuid)
+        ) or self.context.get_entry(raw_uuid)
         if entry is None or not entry.otp:
             raise _ProtocolError(ERR_NO_UUID)
         status = current_totp(entry.otp)

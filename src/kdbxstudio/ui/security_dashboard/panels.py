@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QListWidgetItem,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -67,7 +68,7 @@ class ScoreHeaderPanel(DashboardPanel):
         self._kpis[2].set_value(str(snapshot.risk_critical), tone="danger")
         coverage = 0
         if snapshot.total_entries:
-            coverage = int(100 * snapshot.otp_with / snapshot.total_entries)
+            coverage = round(100 * snapshot.otp_with / snapshot.total_entries)
         self._kpis[3].set_value(f"{coverage}%", tone=tone)
 
 
@@ -338,9 +339,7 @@ class SshPanel(DashboardPanel):
             center=str(snapshot.ssh_total),
         )
         enc_tone = (
-            "success"
-            if snapshot.ssh_encrypted == snapshot.ssh_total
-            else "warning"
+            "success" if snapshot.ssh_encrypted == snapshot.ssh_total else "warning"
         )
         self._enc.set_value(
             f"{snapshot.ssh_encrypted}/{snapshot.ssh_total}",
@@ -382,12 +381,12 @@ class FavoritesPanel(DashboardPanel):
         self._fav_refs: list[str] = []
         self._recent_refs: list[str] = []
 
-    def _on_fav(self, item) -> None:
+    def _on_fav(self, item: QListWidgetItem) -> None:
         row = self._fav.list_widget.row(item)
         if 0 <= row < len(self._fav_refs):
             self.entry_activated.emit(self._fav_refs[row])
 
-    def _on_recent(self, item) -> None:
+    def _on_recent(self, item: QListWidgetItem) -> None:
         row = self._recent.list_widget.row(item)
         if 0 <= row < len(self._recent_refs):
             self.entry_activated.emit(self._recent_refs[row])

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import tempfile
 from pathlib import Path
 
 
@@ -41,3 +42,62 @@ def resolve_regular_file(path: Path | str) -> Path | None:
     if resolved.is_symlink() or not resolved.is_file():
         return None
     return resolved
+
+
+def fsync_parent_directory(path: Path | str) -> None:
+    """Best-effort sync of a file's parent after an atomic rename."""
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    try:
+        fd = os.open(Path(path).parent, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def atomic_write_private(
+    path: Path | str,
+    data: str | bytes,
+    *,
+    encoding: str = "utf-8",
+) -> Path:
+    """Atomically replace *path* with an owner-only (0600) regular file.
+
+    The temporary file is created in the destination directory so ``os.replace``
+    is atomic.  Writing to a temporary file also avoids following a destination
+    symlink and prevents plaintext exports from briefly inheriting a permissive
+    process umask.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = data.encode(encoding) if isinstance(data, str) else data
+    fd, raw_tmp = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+    )
+    tmp_path = Path(raw_tmp)
+    try:
+        os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, target)
+        os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
+        fsync_parent_directory(target)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    return target

@@ -68,9 +68,7 @@ def merge_databases(
     Matching uses (title, username, url). Groups are created by path.
     """
     existing = {
-        _signature(e): e
-        for e in destination.list_entries()
-        if not e.in_recycle_bin
+        _signature(e): e for e in destination.list_entries() if not e.in_recycle_bin
     }
     added = 0
     skipped = 0

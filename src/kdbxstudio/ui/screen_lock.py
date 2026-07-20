@@ -57,7 +57,7 @@ class ScreenLockWatcher(QObject):
                     interface,
                     "ActiveChanged",
                     self,
-                    "_on_active_changed",
+                    b"_on_active_changed",
                 )
                 if not ok:
                     continue

@@ -10,9 +10,9 @@ import pytest
 
 from kdbxstudio.application import update_check
 from kdbxstudio.application.update_check import (
+    check_github_release,
     compare_versions,
     parse_version,
-    check_github_release,
 )
 
 
@@ -46,7 +46,9 @@ class _FakeResponse:
         return None
 
 
-def test_check_falls_back_to_repository_when_no_releases(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_falls_back_to_repository_when_no_releases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
 
     def fake_urlopen(req, timeout=8.0):  # noqa: ANN001

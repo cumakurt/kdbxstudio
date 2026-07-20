@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QPropertyAnimation
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -43,7 +45,7 @@ class PasswordGeneratorDialog(DialogShell):
             width=480,
         )
         self._clipboard_guard = clipboard_guard
-        self._anim = None
+        self._anim: QPropertyAnimation | None = None
 
         self._preset_combo = QComboBox()
         self._preset_combo.setAccessibleName(tr("Password preset"))
@@ -127,7 +129,7 @@ class PasswordGeneratorDialog(DialogShell):
         self.set_primary_text(tr("Use password"))
         self._regenerate()
 
-    def showEvent(self, event) -> None:  # noqa: N802
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._anim = fade_in(self)
 

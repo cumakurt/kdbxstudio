@@ -46,6 +46,7 @@ def test_plugin_manager_activate() -> None:
     mgr.activate(plugin.meta.name)
     infos = mgr.list_plugins()
     assert infos[0].active is True
+
     # Simulate audit hook
     class _Finding:
         kind = "duplicate_password"

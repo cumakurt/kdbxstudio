@@ -317,8 +317,7 @@ class AuditEngine:
                     AuditFinding(
                         kind="hibp_truncated",
                         message=(
-                            f"HIBP check limited to {hibp_limit} passwords "
-                            "this run"
+                            f"HIBP check limited to {hibp_limit} passwords this run"
                         ),
                         entry_uuid=None,
                         severity="info",

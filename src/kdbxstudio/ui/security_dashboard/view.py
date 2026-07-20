@@ -32,7 +32,7 @@ class SecurityDashboardView(QWidget):
         self.setObjectName("securityDashboard")
         self._vm = view_model
         self._hidden_panels: set[str] = set()
-        self._panel_by_id: dict[str, object] = {}
+        self._panel_by_id: dict[str, DashboardPanel] = {}
         register_default_panels()
 
         self._empty = QLabel(tr("No database open"))
@@ -100,7 +100,6 @@ class SecurityDashboardView(QWidget):
         self._scroll.setVisible(True)
         for panel in self._panels:
             panel.update_snapshot(snapshot)
-
 
     def set_hidden_panels(self, panel_ids: set[str] | list[str] | str) -> None:
         if isinstance(panel_ids, str):

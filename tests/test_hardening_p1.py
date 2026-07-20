@@ -17,9 +17,7 @@ def test_list_entries_can_omit_secrets(tmp_path: Path) -> None:
     mgr = DatabaseManager()
     mgr.create(tmp_path / "sec.kdbx", password="master")
     root = mgr.root_group_uuid()
-    entry = mgr.add_entry(
-        root, title="A", password="secret", notes="n"
-    )
+    entry = mgr.add_entry(root, title="A", password="secret", notes="n")
     mgr.update_entry(entry.uuid, otp="otpauth://totp/x?secret=JBSWY3DPEHPK3PXP")
     redacted = mgr.list_entries(include_secrets=False)
     assert redacted

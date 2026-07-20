@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QPropertyAnimation
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -29,7 +31,7 @@ class ChangeCredentialsDialog(DialogShell):
             icon_name="key",
             width=460,
         )
-        self._anim = None
+        self._anim: QPropertyAnimation | None = None
         self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         self._confirm = QLineEdit()
@@ -57,7 +59,7 @@ class ChangeCredentialsDialog(DialogShell):
         self.button_box.accepted.disconnect()
         self.button_box.accepted.connect(self._accept)
 
-    def showEvent(self, event) -> None:  # noqa: N802
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._anim = fade_in(self)
 
@@ -77,9 +79,7 @@ class ChangeCredentialsDialog(DialogShell):
         return self._clear_key.isChecked()
 
     def _toggle(self, checked: bool) -> None:
-        mode = (
-            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
-        )
+        mode = QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
         self._password.setEchoMode(mode)
         self._confirm.setEchoMode(mode)
 
@@ -97,7 +97,11 @@ class ChangeCredentialsDialog(DialogShell):
                 self, tr("Password mismatch"), tr("Passwords do not match.")
             )
             return
-        if not self._password.text() and not self._keyfile.text().strip() and not self._clear_key.isChecked():
+        if (
+            not self._password.text()
+            and not self._keyfile.text().strip()
+            and not self._clear_key.isChecked()
+        ):
             QMessageBox.warning(
                 self,
                 tr("Missing credentials"),

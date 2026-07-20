@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QFont, QPainter, QPen
+from PySide6.QtGui import QFont, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from kdbxstudio.ui.charts._paint import chart_colors, draw_panel_background
@@ -26,7 +26,7 @@ class GaugeWidget(QWidget):
             self._caption = caption
         self.update()
 
-    def paintEvent(self, _event) -> None:  # noqa: N802
+    def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         draw_panel_background(painter, self)
@@ -38,9 +38,12 @@ class GaugeWidget(QWidget):
         else:
             accent = colors["danger"]
 
-        side = min(self.width(), self.height()) - 24
+        # Reserve dedicated caption/label bands so text does not overlap the arc
+        # at the dashboard's minimum panel height.
+        side = min(self.width() - 24, self.height() - 64)
+        side = max(40, side)
         cx = self.width() / 2
-        cy = self.height() / 2 + 4
+        cy = self.height() / 2
         rect = QRectF(cx - side / 2, cy - side / 2, side, side)
 
         track = QPen(colors["border"])

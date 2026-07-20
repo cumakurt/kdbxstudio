@@ -18,7 +18,10 @@ def b64encode(data: bytes) -> str:
 
 
 def b64decode(text: str) -> bytes:
-    return base64.b64decode(text.encode("ascii"))
+    try:
+        return base64.b64decode(text.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, ValueError) as exc:
+        raise ValueError("invalid base64 data") from exc
 
 
 def generate_keypair() -> tuple[str, str]:
@@ -29,6 +32,8 @@ def generate_keypair() -> tuple[str, str]:
 
 def increment_nonce(nonce_b64: str) -> str:
     raw = bytearray(b64decode(nonce_b64))
+    if len(raw) != NONCE_SIZE:
+        raise ValueError(f"nonce must be {NONCE_SIZE} bytes")
     # sodium_increment: little-endian style increment
     for i in range(len(raw)):
         raw[i] = (raw[i] + 1) & 0xFF
@@ -37,7 +42,9 @@ def increment_nonce(nonce_b64: str) -> str:
     return b64encode(bytes(raw))
 
 
-def encrypt_json(plaintext: str, nonce_b64: str, their_pk_b64: str, our_sk_b64: str) -> str:
+def encrypt_json(
+    plaintext: str, nonce_b64: str, their_pk_b64: str, our_sk_b64: str
+) -> str:
     box = Box(PrivateKey(b64decode(our_sk_b64)), PublicKey(b64decode(their_pk_b64)))
     nonce = b64decode(nonce_b64)
     encrypted = box.encrypt(plaintext.encode("utf-8"), nonce)
@@ -46,7 +53,9 @@ def encrypt_json(plaintext: str, nonce_b64: str, their_pk_b64: str, our_sk_b64: 
     return b64encode(ciphertext)
 
 
-def decrypt_json(message_b64: str, nonce_b64: str, their_pk_b64: str, our_sk_b64: str) -> str:
+def decrypt_json(
+    message_b64: str, nonce_b64: str, their_pk_b64: str, our_sk_b64: str
+) -> str:
     box = Box(PrivateKey(b64decode(our_sk_b64)), PublicKey(b64decode(their_pk_b64)))
     nonce = b64decode(nonce_b64)
     plaintext = box.decrypt(b64decode(message_b64), nonce)

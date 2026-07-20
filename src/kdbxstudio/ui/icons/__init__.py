@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import lru_cache
 
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt
@@ -44,11 +45,12 @@ _FALLBACK_SP: dict[str, QStyle.StandardPixmap] = {
 }
 
 # Icon names that have custom painters (24×24 logical space).
-_PAINTERS: dict[str, object] = {}
+IconPainter = Callable[[QPainter, QColor], None]
+_PAINTERS: dict[str, IconPainter] = {}
 
 
-def _reg(name: str):
-    def deco(fn):
+def _reg(name: str) -> Callable[[IconPainter], IconPainter]:
+    def deco(fn: IconPainter) -> IconPainter:
         _PAINTERS[name] = fn
         return fn
 

@@ -8,6 +8,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from kdbxstudio.core.paths import atomic_write_private, ensure_private_dir
+
 # Official KeePassXC-Browser host name — required for the stock extension.
 HOST_NAME = "org.keepassxc.keepassxc_browser"
 
@@ -27,14 +29,13 @@ def _host_script_path() -> Path:
         return Path(which)
     xdg = os.environ.get("XDG_DATA_HOME")
     root = Path(xdg) / "kdbxstudio" if xdg else Path.home() / ".local/share/kdbxstudio"
-    root.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(root)
     launcher = root / "keepassxc-proxy.sh"
-    launcher.write_text(
-        "#!/bin/sh\n"
-        f'exec "{sys.executable}" -m kdbxstudio.browser.host "$@"\n',
-        encoding="utf-8",
+    atomic_write_private(
+        launcher,
+        f'#!/bin/sh\nexec "{sys.executable}" -m kdbxstudio.browser.host "$@"\n',
     )
-    launcher.chmod(0o755)
+    launcher.chmod(0o700)
     return launcher
 
 
@@ -66,7 +67,7 @@ def install(*, also_alias: bool = True) -> list[Path]:
     for directory in chrome_dirs:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{HOST_NAME}.json"
-        path.write_text(json.dumps(chrome_manifest, indent=2) + "\n", encoding="utf-8")
+        atomic_write_private(path, json.dumps(chrome_manifest, indent=2) + "\n")
         written.append(path)
 
     firefox_dir = Path.home() / ".mozilla/native-messaging-hosts"
@@ -79,7 +80,7 @@ def install(*, also_alias: bool = True) -> list[Path]:
         "allowed_extensions": FIREFOX_EXTENSION_IDS,
     }
     ff_path = firefox_dir / f"{HOST_NAME}.json"
-    ff_path.write_text(json.dumps(ff_manifest, indent=2) + "\n", encoding="utf-8")
+    atomic_write_private(ff_path, json.dumps(ff_manifest, indent=2) + "\n")
     written.append(ff_path)
 
     if also_alias:
@@ -88,12 +89,12 @@ def install(*, also_alias: bool = True) -> list[Path]:
         for directory in chrome_dirs:
             path = directory / f"{alias}.json"
             payload = {**chrome_manifest, "name": alias}
-            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            atomic_write_private(path, json.dumps(payload, indent=2) + "\n")
             written.append(path)
         alias_ff = firefox_dir / f"{alias}.json"
-        alias_ff.write_text(
+        atomic_write_private(
+            alias_ff,
             json.dumps({**ff_manifest, "name": alias}, indent=2) + "\n",
-            encoding="utf-8",
         )
         written.append(alias_ff)
     return written
@@ -108,7 +109,9 @@ def main() -> None:
     print("Next steps:")
     print("  1. Install the KeePassXC-Browser extension in Firefox/Chrome.")
     print("  2. Start KDBXStudio and unlock your database.")
-    print("  3. In the extension, click 'Connect' / 'Associate' and approve the dialog.")
+    print(
+        "  3. In the extension, click 'Connect' / 'Associate' and approve the dialog."
+    )
     print("  4. If KeePassXC is also installed, disable its browser integration")
     print("     or remove its conflicting NativeMessagingHosts JSON.")
 

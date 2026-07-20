@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import QPropertyAnimation
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -26,7 +28,7 @@ class TemplateDialog(DialogShell):
             icon_name="add",
             width=460,
         )
-        self._anim = None
+        self._anim: QPropertyAnimation | None = None
         self.resize(460, 400)
         self._templates = list_templates()
         self._combo = QComboBox()
@@ -55,7 +57,7 @@ class TemplateDialog(DialogShell):
         self.button_box.accepted.connect(self._accept)
         self._on_template_changed(0)
 
-    def showEvent(self, event) -> None:  # noqa: N802
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._anim = fade_in(self)
 

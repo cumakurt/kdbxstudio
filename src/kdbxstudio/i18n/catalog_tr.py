@@ -189,6 +189,17 @@ TR_CATALOG: dict[str, str] = {
     "Check passwords against Have I Been Pwned (k-anonymity)": (
         "Şifreleri Have I Been Pwned ile kontrol et (k-anonimlik)"
     ),
+    "Check passwords with HIBP": "Şifreleri HIBP ile kontrol et",
+    "Uses the Have I Been Pwned k-anonymity password service": (
+        "Have I Been Pwned k-anonimlik şifre hizmetini kullanır"
+    ),
+    "Download site icons automatically": "Site simgelerini otomatik indir",
+    "Privacy: sends entry URL domains to Google for favicon lookup": (
+        "Gizlilik: favicon araması için kayıt URL alan adlarını Google'a gönderir"
+    ),
+    "Privacy: enabled lookups send URL domains to Google": (
+        "Gizlilik: etkin aramalar URL alan adlarını Google'a gönderir"
+    ),
     "Check for updates on startup": "Başlangıçta güncellemeleri denetle",
     "Start minimized to tray": "Sistem tepsisine küçültülmüş başlat",
     "Open databases in read-only mode": "Veritabanlarını salt okunur aç",
@@ -211,7 +222,8 @@ TR_CATALOG: dict[str, str] = {
     "If KeePassXC is also installed, disable its browser integration "
     "to avoid conflicting manifests.": (
         "KeePassXC-Browser native messaging bildirimleri kuruldu:\n{paths}\n\n"
-        "KDBXStudio’da bir veritabanının kilidini açın, ardından eklentide Connect’e basın.\n"
+        "KDBXStudio’da bir veritabanının kilidini açın, ardından eklentide "
+        "Connect’e basın.\n"
         "KeePassXC de yüklüyse, çakışan bildirimleri önlemek için onun "
         "tarayıcı entegrasyonunu kapatın."
     ),
@@ -240,8 +252,7 @@ TR_CATALOG: dict[str, str] = {
         "Dil değişiklikleri yeniden başlatmadan sonra uygulanır."
     ),
     "Language changed": "Dil değiştirildi",
-    "Some remaining labels may need an application "
-    "restart to update.": (
+    "Some remaining labels may need an application restart to update.": (
         "Bazı etiketlerin güncellenmesi için uygulamanın yeniden "
         "başlatılması gerekebilir."
     ),
@@ -256,9 +267,7 @@ TR_CATALOG: dict[str, str] = {
     " and ": " ve ",
     "<b>{n}</b> expired": "<b>{n}</b> süresi dolmuş",
     "<b>{n}</b> expiring soon": "<b>{n}</b> yakında sona erecek",
-    "⚠ {parts} entry/entries need attention": (
-        "⚠ {parts} kayıt dikkat gerektiriyor"
-    ),
+    "⚠ {parts} entry/entries need attention": ("⚠ {parts} kayıt dikkat gerektiriyor"),
     "<b>{entries}</b> entries across <b>{groups}</b> groups": (
         "<b>{entries}</b> kayıt, <b>{groups}</b> grupta"
     ),
@@ -393,24 +402,15 @@ TR_CATALOG: dict[str, str] = {
     "URL Analysis": "URL Analizi",
     "Certificate Analysis": "Sertifika Analizi",
     "SSH Analysis": "SSH Analizi",
-    "Attachments": "Ekler",
     "Favorites": "Favoriler",
     "Database Health": "Veritabanı Sağlığı",
     "Risk Matrix": "Risk Matrisi",
     "Recommendations": "Öneriler",
-    "Findings": "Bulgular",
     "Excellent": "Mükemmel",
-    "Good": "İyi",
     "Needs Attention": "Dikkat Gerekli",
-    "Critical": "Kritik",
     "High": "Yüksek",
     "Medium": "Orta",
     "Low": "Düşük",
-    "Strong": "Güçlü",
-    "Fair": "Orta",
-    "Weak": "Zayıf",
-    "Very Weak": "Çok Zayıf",
-    "Empty": "Boş",
     "With OTP": "OTP var",
     "Without OTP": "OTP yok",
     "Critical without OTP": "Kritik kayıtlarda OTP yok",
@@ -425,7 +425,6 @@ TR_CATALOG: dict[str, str] = {
     "No favorites tagged": "Favori etiketi yok",
     "No recent access data": "Son erişim verisi yok",
     "No duplicate passwords detected.": "Yinelenen parola bulunamadı.",
-    "Groups": "Gruplar",
     "Entries": "Kayıtlar",
     "OTP": "OTP",
     "Certificates": "Sertifikalar",
@@ -433,12 +432,10 @@ TR_CATALOG: dict[str, str] = {
     "Average": "Ortalama",
     "Minimum": "Minimum",
     "Maximum": "Maksimum",
-    "Expired": "Süresi dolmuş",
     "Expiring soon": "Yakında dolacak",
     "Total": "Toplam",
     "Other": "Diğer",
     "Admin": "Admin",
-    "Root": "Root",
     "Reused": "Yeniden kullanılan",
     "OTP coverage": "OTP kapsamı",
     "Open entry": "Kaydı aç",
@@ -502,10 +499,8 @@ TR_CATALOG: dict[str, str] = {
     "Delete group failed": "Grup silme başarısız",
     "Properties": "Özellikler",
     "Restore revision": "Sürümü geri yükle",
-    "Restore this historical revision? "
-    "Current values are saved to history first.": (
-        "Bu geçmiş sürüm geri yüklensin mi? "
-        "Geçerli değerler önce geçmişe kaydedilir."
+    "Restore this historical revision? Current values are saved to history first.": (
+        "Bu geçmiş sürüm geri yüklensin mi? Geçerli değerler önce geçmişe kaydedilir."
     ),
     "Restore failed": "Geri yükleme başarısız",
     "Read-only mode": "Salt okunur mod",
@@ -532,8 +527,7 @@ TR_CATALOG: dict[str, str] = {
         "Kapatmadan önce bu veritabanı kaydedilsin mi?"
     ),
     "Export includes secrets": "Dışa aktarım gizli bilgiler içerir",
-    "The CSV file will contain passwords and OTP secrets "
-    "in plain text. Continue?": (
+    "The CSV file will contain passwords and OTP secrets in plain text. Continue?": (
         "CSV dosyası şifreleri ve OTP gizli anahtarlarını "
         "düz metin olarak içerecektir. Devam edilsin mi?"
     ),
@@ -543,8 +537,7 @@ TR_CATALOG: dict[str, str] = {
         "Otomatik yazma arka ucu bulunamadı. xdotool, ydotool veya wtype kurun."
     ),
     "Focus the target window, then confirm.\nDelay before typing (ms):": (
-        "Hedef pencereye odaklanın, ardından onaylayın.\n"
-        "Yazmadan önceki gecikme (ms):"
+        "Hedef pencereye odaklanın, ardından onaylayın.\nYazmadan önceki gecikme (ms):"
     ),
     "Auto-Type failed": "Otomatik yazma başarısız",
     "Auto-Type failed unexpectedly. Secrets were not shown in this dialog.": (
@@ -573,25 +566,15 @@ TR_CATALOG: dict[str, str] = {
     "Update available: {latest} (you have {current})": (
         "Güncelleme mevcut: {latest} (sizin sürümünüz: {current})"
     ),
-    "Installed version: {current}\n"
-    "GitHub version: {latest}\n"
-    "Source: {source}": (
-        "Yüklü sürüm: {current}\n"
-        "GitHub sürümü: {latest}\n"
-        "Kaynak: {source}"
+    "Installed version: {current}\nGitHub version: {latest}\nSource: {source}": (
+        "Yüklü sürüm: {current}\nGitHub sürümü: {latest}\nKaynak: {source}"
     ),
-    "A newer version is available on GitHub.\n\n"
-    "{detail}\n\nOpen the release page?": (
-        "GitHub’da daha yeni bir sürüm var.\n\n"
-        "{detail}\n\nSürüm sayfası açılsın mı?"
+    "A newer version is available on GitHub.\n\n{detail}\n\nOpen the release page?": (
+        "GitHub’da daha yeni bir sürüm var.\n\n{detail}\n\nSürüm sayfası açılsın mı?"
     ),
-    "KDBXStudio is up to date.\n\n{detail}": (
-        "KDBXStudio güncel.\n\n{detail}"
-    ),
-    "Your installed version is newer than the version on GitHub.\n\n"
-    "{detail}": (
-        "Yüklü sürümünüz GitHub’daki sürümden daha yeni.\n\n"
-        "{detail}"
+    "KDBXStudio is up to date.\n\n{detail}": ("KDBXStudio güncel.\n\n{detail}"),
+    "Your installed version is newer than the version on GitHub.\n\n{detail}": (
+        "Yüklü sürümünüz GitHub’daki sürümden daha yeni.\n\n{detail}"
     ),
     "KDBXStudio {version} is up to date": "KDBXStudio {version} güncel",
     "GitHub Release": "GitHub Release",
@@ -602,9 +585,7 @@ TR_CATALOG: dict[str, str] = {
         "GitHub ile karşılaştırmak için Araçlar → Güncellemeleri Denetle… kullanın."
     ),
     "SSH Agent": "SSH Agent",
-    "Could not extract private key PEM.": (
-        "Özel anahtar PEM’si çıkarılamadı."
-    ),
+    "Could not extract private key PEM.": ("Özel anahtar PEM’si çıkarılamadı."),
     "About KDBXStudio": "KDBXStudio Hakkında",
     # ── Command palette labels ────────────────────────────────────────
     "Command Palette": "Komut Paleti",
@@ -625,18 +606,14 @@ TR_CATALOG: dict[str, str] = {
     "warning": "uyarı",
     "info": "bilgi",
     "Healthy": "Sağlıklı",
-    "Critical": "Kritik",
     "Warning": "Uyarı",
     "Info": "Bilgi",
-    "Findings": "Bulgular",
     "Low entropy": "Düşük entropi",
     "entries": "kayıt",
     "entry": "kayıt",
     "Deleted": "Silindi",
     "Moved to Recycle Bin": "Çöp Kutusuna taşındı",
-    "Database no longer exists:\n{path}": (
-        "Veritabanı artık mevcut değil:\n{path}"
-    ),
+    "Database no longer exists:\n{path}": ("Veritabanı artık mevcut değil:\n{path}"),
     "Save {count} database(s) with unsaved changes before quitting?": (
         "Çıkmadan önce kaydedilmemiş değişikliği olan "
         "{count} veritabanı kaydedilsin mi?"
@@ -656,14 +633,14 @@ TR_CATALOG: dict[str, str] = {
     "Generated password applied to entry (save to keep)": (
         "Üretilen şifre kayda uygulandı (kalıcı olması için kaydedin)"
     ),
-    "Generated password copied to clipboard": (
-        "Üretilen şifre panoya kopyalandı"
-    ),
+    "Generated password copied to clipboard": ("Üretilen şifre panoya kopyalandı"),
     "Revision restored (save database to persist)": (
         "Sürüm geri yüklendi (kalıcı olması için veritabanını kaydedin)"
     ),
     "Health Fix Wizard": "Sağlık Düzeltme Sihirbazı",
-    "Walk through security findings one by one": "Güvenlik bulgularını tek tek gözden geçirin",
+    "Walk through security findings one by one": (
+        "Güvenlik bulgularını tek tek gözden geçirin"
+    ),
     "Finding {n} of {total}": "Bulgu {n} / {total}",
     "All findings reviewed": "Tüm bulgular gözden geçirildi",
     "No more actionable findings.": "Düzeltilecek başka bulgu yok.",
@@ -675,7 +652,9 @@ TR_CATALOG: dict[str, str] = {
     "Import theme JSON": "Tema JSON içe aktar",
     "Theme JSON (*.json)": "Tema JSON (*.json)",
     "Import theme": "Tema içe aktar",
-    "Custom theme loaded. Save settings to apply.": "Özel tema yüklendi. Uygulamak için ayarları kaydedin.",
+    "Custom theme loaded. Save settings to apply.": (
+        "Özel tema yüklendi. Uygulamak için ayarları kaydedin."
+    ),
     "High Contrast": "Yüksek Kontrast",
     "High Contrast Light": "Yüksek Kontrast Açık",
     "Custom": "Özel",

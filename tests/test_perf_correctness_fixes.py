@@ -6,14 +6,20 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from PySide6.QtWidgets import QLineEdit
 
 from kdbxstudio.application.audit_engine import AuditEngine
 from kdbxstudio.application.database_manager import DatabaseManager
 from kdbxstudio.application.expiry import EXPIRING_SOON_DAYS, is_expiring_soon
-from kdbxstudio.application.hibp import fetch_range, reset_hibp_cache_for_tests
+from kdbxstudio.application.hibp import (
+    HibpError,
+    fetch_range,
+    reset_hibp_cache_for_tests,
+)
 from kdbxstudio.application.merge import merge_databases
 from kdbxstudio.application.search_engine import EntryFilter, SearchEngine
+from kdbxstudio.application.security_dashboard import SecurityDashboardAnalyzer
 from kdbxstudio.core.database import EntryView, KdbxDatabase
 from kdbxstudio.ui.widgets.entry_detail import EntryDetailWidget
 from kdbxstudio.ui.widgets.filter_bar import FilterBarWidget
@@ -143,16 +149,16 @@ def test_search_expiring_soon_uses_shared_window(tmp_path: Path) -> None:
     assert titles == {"Soon"}
 
 
-def test_hibp_memory_cache_avoids_repeated_disk_load(tmp_path: Path, monkeypatch) -> None:
+def test_hibp_memory_cache_avoids_repeated_disk_load(
+    tmp_path: Path, monkeypatch
+) -> None:
     reset_hibp_cache_for_tests()
     cache_file = tmp_path / "prefix_cache.json"
-    monkeypatch.setattr(
-        "kdbxstudio.application.hibp._cache_path", lambda: cache_file
-    )
+    monkeypatch.setattr("kdbxstudio.application.hibp._cache_path", lambda: cache_file)
     body = "AABBCCDD11223344556677889900AABB:3\n"
 
     class _Resp:
-        def read(self) -> bytes:
+        def read(self, _size: int = -1) -> bytes:
             return body.encode()
 
         def __enter__(self):
@@ -166,6 +172,27 @@ def test_hibp_memory_cache_avoids_repeated_disk_load(tmp_path: Path, monkeypatch
         second = fetch_range("ABCDE")
     assert first == second
     assert mocked.call_count == 1
+
+
+def test_hibp_rejects_oversized_response(tmp_path: Path, monkeypatch) -> None:
+    reset_hibp_cache_for_tests()
+    monkeypatch.setattr(
+        "kdbxstudio.application.hibp._cache_path", lambda: tmp_path / "cache.json"
+    )
+
+    class _Resp:
+        def read(self, size: int = -1) -> bytes:
+            return b"X" * size
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    with patch("urllib.request.urlopen", return_value=_Resp()):
+        with pytest.raises(HibpError, match="safety limit"):
+            fetch_range("ABCDE")
 
 
 def test_password_show_resets_on_load_entry(qtbot) -> None:
@@ -223,3 +250,29 @@ def test_filter_bar_clear_emits_once(qtbot) -> None:
     bar.clear()
     assert len(emissions) == 1
     assert emissions[0].is_empty()
+
+
+def test_filter_bar_reflows_at_compact_width(qtbot) -> None:
+    bar = FilterBarWidget()
+    qtbot.addWidget(bar)
+    bar.resize(620, 180)
+    bar.show()
+    qtbot.wait(10)
+    assert bar._layout_mode == "compact"
+    assert bar._layout.rowCount() >= 4
+    assert all(chip.isVisible() for chip in bar._chips)
+
+
+def test_dashboard_attachment_stats_use_requested_session(tmp_path: Path) -> None:
+    mgr = DatabaseManager()
+    session_a = mgr.create(tmp_path / "a.kdbx", password="a")
+    entry_a = mgr.add_entry(mgr.root_group_uuid(), title="A")
+    mgr.add_attachment(entry_a.uuid, "a.txt", b"a")
+    session_b = mgr.create(tmp_path / "b.kdbx", password="b")
+    entry_b = mgr.add_entry(mgr.root_group_uuid(), title="B")
+    mgr.add_attachment(entry_b.uuid, "b.txt", b"b")
+    mgr.add_attachment(entry_b.uuid, "c.txt", b"c")
+    assert mgr.active_id == session_b
+
+    snapshot = SecurityDashboardAnalyzer(mgr).run(session_a)
+    assert snapshot.attachment_total == 1
