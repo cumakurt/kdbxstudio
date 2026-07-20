@@ -42,6 +42,28 @@ def test_stylesheet_has_pane_depth_hooks() -> None:
     assert "QSplitter::handle:horizontal" in css
 
 
+def test_stylesheet_soft_pane_background_separation() -> None:
+    tokens = tokens_for(ThemeMode.DARK)
+    css = build_stylesheet(tokens)
+    assert "QTreeWidget#groupTreePane" in css
+    assert "QDockWidget#groupsDock" in css
+    assert "QSplitter#workspaceSplitter::handle" in css
+    assert f"background-color: {tokens.surface_sunken}" in css
+    assert f"background-color: {tokens.surface_panel}" in css
+    assert f"background-color: {tokens.surface_elevated}" in css
+    # Groups pane uses the sunken surface so it reads softer than the list.
+    group_idx = css.index("QTreeWidget#groupTreePane")
+    group_block = css[group_idx : group_idx + 280]
+    assert tokens.surface_sunken in group_block
+    detail_idx = css.index("QTabWidget#entryDetailPane::pane")
+    detail_block = css[detail_idx : detail_idx + 220]
+    assert tokens.surface_elevated in detail_block
+    # Group items must not use QSS margins (they cause overlap when narrow).
+    item_idx = css.index("QTreeWidget#groupTreePane::item")
+    item_block = css[item_idx : item_idx + 200]
+    assert "margin: 0" in item_block
+
+
 def test_at_least_five_named_styles() -> None:
     named = [m for m in THEME_CHOICES if m != ThemeMode.SYSTEM]
     assert len(named) >= 5

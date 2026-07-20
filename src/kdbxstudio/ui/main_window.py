@@ -244,7 +244,6 @@ class MainWindow(QMainWindow):
         self._db_tabs.setObjectName("dbTabs")
         self._entry_list.setObjectName("entryListPane")
         self._group_tree.setObjectName("groupTreePane")
-        self._group_tree.setAlternatingRowColors(True)
 
         workspace = QWidget()
         workspace.setObjectName("workspaceRoot")
@@ -268,7 +267,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setObjectName("workspaceSplitter")
         splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(5)
+        splitter.setHandleWidth(6)
         splitter.addWidget(self._entry_list)
         splitter.addWidget(self._entry_tabs)
         splitter.setStretchFactor(0, 2)
@@ -570,6 +569,8 @@ class MainWindow(QMainWindow):
                 Qt.Orientation.Vertical if compact else Qt.Orientation.Horizontal
             )
             self._workspace_splitter.setOrientation(orientation)
+            # Only reset sizes when orientation flips so user drag ratios survive
+            # ordinary window resizes.
             if compact:
                 self._workspace_splitter.setSizes([220, 480])
             else:
@@ -818,12 +819,36 @@ class MainWindow(QMainWindow):
         groups_dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
-        groups_dock.setMinimumWidth(160)
-        groups_dock.setMaximumWidth(280)
+        groups_dock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetClosable
+            | QDockWidget.DockWidgetFeature.DockWidgetMovable
+            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+        )
+        groups_dock.setMinimumWidth(140)
+        # Soft ceiling — drag via QMainWindow::separator (must stay grabable in QSS).
+        groups_dock.setMaximumWidth(720)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, groups_dock)
 
         self._groups_dock = groups_dock
-        self.resizeDocks([groups_dock], [180], Qt.Orientation.Horizontal)
+        self._ensure_groups_dock_width(preferred=220)
+
+    def _ensure_groups_dock_width(self, *, preferred: int = 220) -> None:
+        """Restore a usable Groups width after a collapsed/broken layout state.
+
+        Does not override intentional user widths that are already comfortable.
+        """
+        dock = getattr(self, "_groups_dock", None)
+        if dock is None:
+            return
+        from kdbxstudio.ui.theme.manager import current_ui_scale
+
+        scale = current_ui_scale()
+        prefer = max(scale.px(preferred), dock.minimumWidth())
+        floor = max(dock.minimumWidth(), scale.px(160))
+        # Hidden docks report stale geometry — treat as needing a reset.
+        current = dock.width() if dock.isVisible() and dock.width() > 0 else 0
+        if current < floor:
+            self.resizeDocks([dock], [prefer], Qt.Orientation.Horizontal)
 
     def _build_menus(self) -> None:
         def act(
@@ -2332,6 +2357,7 @@ class MainWindow(QMainWindow):
             self.setWindowTitle(f"KDBXStudio {__version__}")
             return
         self._groups_dock.show()
+        self._ensure_groups_dock_width(preferred=220)
         self._update_responsive_layout(self.width())
         self._stack.setCurrentWidget(self._workspace_widget)
         name = self._dbm.display_name()
@@ -3263,6 +3289,9 @@ class MainWindow(QMainWindow):
                 self.restoreState(QByteArray(b64decode(self._settings.window_state)))
             except Exception:
                 pass
+            # Saved layouts may collapse the Groups dock below a usable width
+            # (especially after older builds zeroed QMainWindow::separator).
+            self._ensure_groups_dock_width(preferred=220)
 
     def _fit_to_screen(self, *, initial: bool = False) -> None:
         screen = self.screen() or QGuiApplication.primaryScreen()
@@ -3316,7 +3345,7 @@ class MainWindow(QMainWindow):
                 child.setFixedSize(icon + 10, icon + 10)
         if hasattr(self, "_groups_dock"):
             self._groups_dock.setMinimumWidth(scale.px(140))
-            self._groups_dock.setMaximumWidth(scale.px(280))
+            self._groups_dock.setMaximumWidth(scale.px(720))
         menu = self.menuBar()
         if menu is not None:
             menu.setNativeMenuBar(False)

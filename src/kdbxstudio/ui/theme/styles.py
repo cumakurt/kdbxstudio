@@ -73,9 +73,13 @@ QDialog {{
 }}
 
 QMainWindow::separator {{
-  background: transparent;
-  width: 0px;
-  height: 0px;
+  background: {t.border_subtle};
+  width: {px(6)};
+  height: {px(6)};
+}}
+
+QMainWindow::separator:hover {{
+  background: {t.brand_primary};
 }}
 
 QWidget {{
@@ -514,19 +518,24 @@ QTabWidget#dbTabs QTabBar::tab:selected {{
   font-weight: 600;
 }}
 
+QTabWidget#entryDetailPane {{
+  background-color: {t.surface_elevated};
+}}
+
 QTabWidget#entryDetailPane::pane {{
-  border: 1px solid {t.border_subtle};
-  border-left: none;
-  background-color: {t.surface_panel};
+  border: none;
+  border-left: 1px solid {t.border_subtle};
+  background-color: {t.surface_elevated};
   border-radius: 0;
 }}
 
 QTabWidget#entryDetailPane QTabBar::tab {{
+  background-color: {t.surface_elevated};
   border-bottom: 2px solid transparent;
 }}
 
 QTabWidget#entryDetailPane QTabBar::tab:selected {{
-  background-color: {t.surface_panel};
+  background-color: {t.surface_elevated};
   border-bottom: 2px solid {t.brand_primary};
 }}
 
@@ -538,8 +547,12 @@ QDockWidget {{
   border: none;
 }}
 
+QDockWidget#groupsDock {{
+  background-color: {t.surface_sunken};
+}}
+
 QDockWidget::title {{
-  background-color: {t.surface_panel};
+  background-color: {t.surface_sunken};
   border: none;
   border-bottom: 1px solid {t.border_subtle};
   padding: {px(SPACING.sm + 1)} {px(SPACING.md)};
@@ -550,13 +563,42 @@ QDockWidget::title {{
   letter-spacing: 0.5px;
 }}
 
+QDockWidget#groupsDock::title {{
+  background-color: {t.surface_sunken};
+}}
+
 /* ── Trees & Tables ───────────────────────────────────────────────────── */
 QTreeWidget#groupTreePane {{
   border: none;
+  border-right: 1px solid {t.border_subtle};
   border-radius: 0;
-  background-color: {t.surface_panel};
-  alternate-background-color: {t.surface_panel};
+  background-color: {t.surface_sunken};
+  alternate-background-color: {t.surface_sunken};
   show-decoration-selected: 1;
+  padding: {px(SPACING.xs)} 0;
+}}
+
+QTreeWidget#groupTreePane::item {{
+  min-height: {px(row)};
+  padding: {px(SPACING.xs)} {px(SPACING.sm)};
+  margin: 0;
+  border: none;
+  border-radius: {px(r_xs)};
+}}
+
+QTreeWidget#groupTreePane::item:hover {{
+  background-color: {t.surface_panel};
+}}
+
+QTreeWidget#groupTreePane::item:selected {{
+  background-color: {t.surface_elevated};
+  color: {t.text_primary};
+}}
+
+QTreeWidget#groupTreePane::item:selected:active {{
+  background-color: {t.surface_elevated};
+  color: {t.brand_primary};
+  border-left: 2px solid {t.brand_primary};
 }}
 
 QTreeWidget, QTableWidget, QListWidget,
@@ -660,7 +702,7 @@ QTreeWidget::item:selected:!active, QTableView::item:selected:!active {{
 
 /* ── Splitters ────────────────────────────────────────────────────────── */
 QSplitter::handle {{
-  background-color: {t.surface_sunken};
+  background-color: {t.border_subtle};
 }}
 
 QSplitter::handle:hover {{
@@ -668,21 +710,30 @@ QSplitter::handle:hover {{
 }}
 
 QSplitter::handle:horizontal {{
-  width: {px(SPACING.xxs)};
+  width: {px(SPACING.xxs + 1)};
   margin: 0;
 }}
 
 QSplitter::handle:vertical {{
-  height: {px(SPACING.xxs)};
+  height: {px(SPACING.xxs + 1)};
   margin: 0;
 }}
 
-QSplitter#workspaceSplitter::handle:horizontal {{
-  width: {px(1)};
+QSplitter#workspaceSplitter::handle {{
   background-color: {t.border_subtle};
 }}
 
-QSplitter#workspaceSplitter::handle:horizontal:hover {{
+QSplitter#workspaceSplitter::handle:horizontal {{
+  width: {px(SPACING.xxs + 1)};
+  background-color: {t.border_subtle};
+}}
+
+QSplitter#workspaceSplitter::handle:vertical {{
+  height: {px(SPACING.xxs + 1)};
+  background-color: {t.border_subtle};
+}}
+
+QSplitter#workspaceSplitter::handle:hover {{
   background-color: {t.brand_primary};
 }}
 
@@ -1094,7 +1145,17 @@ QTreeView::item:hover {{
   background-color: {t.surface_sunken};
 }}
 
-QTableView#entryListPane:focus,
+QTableView#entryListPane:focus {{
+  outline: none;
+  border: none;
+}}
+
+QTreeWidget#groupTreePane:focus {{
+  outline: none;
+  border: none;
+  border-right: 1px solid {t.border_subtle};
+}}
+
 QTreeView:focus,
 QListWidget:focus {{
   outline: none;

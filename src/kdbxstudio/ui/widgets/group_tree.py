@@ -22,9 +22,15 @@ class GroupTreeWidget(QTreeWidget):
         super().__init__(parent)
         self.setHeaderLabel(tr("Groups"))
         self.setUniformRowHeights(True)
-        self.setIconSize(QSize(18, 18))
+        self.setIconSize(QSize(20, 20))
+        self.setIndentation(18)
+        self.setRootIsDecorated(True)
+        self.setItemsExpandable(True)
+        self.setAnimated(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setAlternatingRowColors(True)
+        self.setAlternatingRowColors(False)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.setAcceptDrops(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DropOnly)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -61,7 +67,7 @@ class GroupTreeWidget(QTreeWidget):
                     group_icon_for_name(
                         group.name,
                         is_recycle_bin=group.is_recycle_bin,
-                        size=18,
+                        size=20,
                     ),
                 )
                 items[group.uuid] = item
